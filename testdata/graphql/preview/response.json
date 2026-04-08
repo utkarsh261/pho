@@ -1,0 +1,107 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "id": "PR_kwDOABCDEF142",
+        "number": 142,
+        "title": "Fix nil pointer dereference in auth middleware",
+        "body": "## Summary\n\nThis PR fixes a nil pointer dereference that occurred when the auth middleware received a request with a missing or expired context. The fix adds explicit nil checks before dereferencing the context value.\n\n## Changes\n\n- Added nil check for context value in `AuthMiddleware.ServeHTTP`\n- Updated error response to return 401 instead of 500 on missing auth\n- Added unit test covering the nil context case\n\n## Testing\n\nAll existing tests pass. New test added in `auth/middleware_test.go`.",
+        "state": "OPEN",
+        "isDraft": false,
+        "createdAt": "2026-04-02T10:00:00Z",
+        "updatedAt": "2026-04-08T15:30:00Z",
+        "additions": 12,
+        "deletions": 5,
+        "changedFiles": 3,
+        "author": {
+          "login": "alice"
+        },
+        "reviewDecision": "REVIEW_REQUIRED",
+        "reviews": {
+          "nodes": [
+            {
+              "author": {
+                "login": "carol"
+              },
+              "state": "APPROVED",
+              "submittedAt": "2026-04-08T11:45:00Z",
+              "avatarUrl": "https://avatars.githubusercontent.com/u/1002?v=4"
+            },
+            {
+              "author": {
+                "login": "bob"
+              },
+              "state": "COMMENTED",
+              "submittedAt": "2026-04-08T10:30:00Z",
+              "avatarUrl": "https://avatars.githubusercontent.com/u/1003?v=4"
+            },
+            {
+              "author": {
+                "login": "dave"
+              },
+              "state": "PENDING",
+              "submittedAt": null,
+              "avatarUrl": "https://avatars.githubusercontent.com/u/1004?v=4"
+            }
+          ]
+        },
+        "commits": {
+          "nodes": [
+            {
+              "commit": {
+                "oid": "abc123def456abc123def456abc123def456abc1",
+                "statusCheckRollup": {
+                  "state": "SUCCESS",
+                  "contexts": {
+                    "nodes": [
+                      {
+                        "__typename": "CheckRun",
+                        "name": "ci/unit-tests",
+                        "status": "COMPLETED",
+                        "conclusion": "SUCCESS",
+                        "detailsUrl": "https://github.com/myorg/myrepo/runs/12345"
+                      },
+                      {
+                        "__typename": "CheckRun",
+                        "name": "ci/lint",
+                        "status": "COMPLETED",
+                        "conclusion": "SUCCESS",
+                        "detailsUrl": "https://github.com/myorg/myrepo/runs/12346"
+                      },
+                      {
+                        "__typename": "CheckRun",
+                        "name": "ci/integration-tests",
+                        "status": "COMPLETED",
+                        "conclusion": "SUCCESS",
+                        "detailsUrl": "https://github.com/myorg/myrepo/runs/12347"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "files": {
+          "nodes": [
+            {
+              "path": "auth/middleware.go",
+              "additions": 8,
+              "deletions": 3
+            },
+            {
+              "path": "auth/middleware_test.go",
+              "additions": 3,
+              "deletions": 2
+            },
+            {
+              "path": "auth/errors.go",
+              "additions": 1,
+              "deletions": 0
+            }
+          ]
+        }
+      }
+    }
+  }
+}

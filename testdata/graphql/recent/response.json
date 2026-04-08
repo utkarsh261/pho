@@ -1,0 +1,60 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "id": "PR_kwDOABCDEF142",
+        "number": 142,
+        "title": "Fix nil pointer dereference in auth middleware",
+        "timelineItems": {
+          "nodes": [
+            {
+              "__typename": "PullRequestCommit",
+              "id": "PTC_kwDOABCDEF001",
+              "commit": {
+                "oid": "abc123def456abc123def456abc123def456abc1",
+                "messageHeadline": "fix: handle nil context in auth middleware",
+                "committedDate": "2026-04-08T09:15:00Z",
+                "author": {
+                  "user": {
+                    "login": "alice"
+                  }
+                }
+              }
+            },
+            {
+              "__typename": "IssueComment",
+              "id": "IC_kwDOABCDEF002",
+              "body": "Left a few inline comments about the error handling approach.",
+              "createdAt": "2026-04-08T10:30:00Z",
+              "author": {
+                "login": "bob"
+              }
+            },
+            {
+              "__typename": "PullRequestReview",
+              "id": "PRR_kwDOABCDEF003",
+              "state": "APPROVED",
+              "body": "LGTM, the fix looks correct. Nice work handling the edge case.",
+              "submittedAt": "2026-04-08T11:45:00Z",
+              "author": {
+                "login": "carol"
+              }
+            },
+            {
+              "__typename": "MergedEvent",
+              "id": "ME_kwDOABCDEF004",
+              "createdAt": "2026-04-08T14:00:00Z",
+              "actor": {
+                "login": "alice"
+              },
+              "commit": {
+                "oid": "merged123abc456merged123abc456merged123ab"
+              },
+              "mergeRefName": "main"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

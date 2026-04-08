@@ -1,0 +1,121 @@
+{
+  "data": {
+    "search": {
+      "issueCount": 2,
+      "pageInfo": {
+        "hasNextPage": false,
+        "endCursor": "cursor_inv_xyz"
+      },
+      "nodes": [
+        {
+          "__typename": "PullRequest",
+          "id": "PR_kwDOABCDEF142",
+          "number": 142,
+          "title": "Fix nil pointer dereference in auth middleware",
+          "state": "OPEN",
+          "isDraft": false,
+          "createdAt": "2026-04-02T10:00:00Z",
+          "updatedAt": "2026-04-08T15:30:00Z",
+          "headRefName": "fix/nil-pointer-auth",
+          "headRefOid": "abc123def456abc123def456abc123def456abc1",
+          "baseRefName": "main",
+          "additions": 12,
+          "deletions": 5,
+          "changedFiles": 3,
+          "comments": {
+            "totalCount": 2
+          },
+          "author": {
+            "login": "alice"
+          },
+          "assignees": {
+            "nodes": []
+          },
+          "reviewDecision": "REVIEW_REQUIRED",
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "bob"
+                }
+              }
+            ]
+          },
+          "latestOpinionatedReviews": {
+            "nodes": []
+          },
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "statusCheckRollup": {
+                    "state": "SUCCESS"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "__typename": "PullRequest",
+          "id": "PR_kwDOABCDEF138",
+          "number": 138,
+          "title": "Add pagination support to repository list endpoint",
+          "state": "OPEN",
+          "isDraft": false,
+          "createdAt": "2026-03-28T09:00:00Z",
+          "updatedAt": "2026-04-08T12:00:00Z",
+          "headRefName": "feature/repo-list-pagination",
+          "headRefOid": "def456abc789def456abc789def456abc789def4",
+          "baseRefName": "main",
+          "additions": 3,
+          "deletions": 1,
+          "changedFiles": 1,
+          "comments": {
+            "totalCount": 4
+          },
+          "author": {
+            "login": "bob"
+          },
+          "assignees": {
+            "nodes": [
+              {
+                "login": "testviewer"
+              }
+            ]
+          },
+          "reviewDecision": "APPROVED",
+          "reviewRequests": {
+            "nodes": []
+          },
+          "latestOpinionatedReviews": {
+            "nodes": [
+              {
+                "author": {
+                  "login": "carol"
+                },
+                "state": "APPROVED",
+                "submittedAt": "2026-04-07T18:00:00Z",
+                "commit": {
+                  "oid": "def456abc789def456abc789def456abc789def4"
+                }
+              }
+            ]
+          },
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "statusCheckRollup": {
+                    "state": "PENDING"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
