@@ -48,8 +48,6 @@ func New(cfg Config) *Service {
 	}
 }
 
-// Discover scans root and its direct child directories for Git repositories.
-// It returns only repos with parseable remote URLs.
 func (s *Service) Discover(ctx context.Context, root string) ([]domain.Repository, error) {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
@@ -109,20 +107,14 @@ func (s *Service) scan(ctx context.Context, root string) ([]candidate, error) {
 	var out []candidate
 	for _, dir := range entries {
 		repo, ok, err := repoFromPath(dir)
-		if err != nil {
-			return nil, err
-		}
-		if !ok {
-			continue
+		if err != nil || !ok {
+			continue // skip unreadable or non-GitHub repos
 		}
 		key := repo.FullName
 		if _, excluded := s.exclude[key]; excluded {
 			continue
 		}
-		activity, err := repoActivityAt(dir)
-		if err != nil {
-			return nil, err
-		}
+		activity, _ := repoActivityAt(dir) // best-effort
 		repo.LastScannedAt = time.Now().UTC()
 		if !activity.IsZero() {
 			a := activity.UTC()
@@ -363,6 +355,9 @@ func repoFromPath(dir string) (domain.Repository, bool, error) {
 	if err != nil {
 		return domain.Repository{}, false, err
 	}
+	if remote == "" {
+		return domain.Repository{}, false, nil // no remote — skip
+	}
 	host, owner, name, ok := parseRemoteURL(remote)
 	if !ok {
 		return domain.Repository{}, false, nil
@@ -458,7 +453,7 @@ func remoteURLFromGitDir(gitDir string) (string, error) {
 	if first != "" {
 		return first, nil
 	}
-	return "", fmt.Errorf("discovery: no remote url in %s", cfgPath)
+	return "", nil // no remote configured — caller will skip this repo
 }
 
 func parseGitSection(line string) (section, name string) {

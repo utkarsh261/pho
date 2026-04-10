@@ -236,10 +236,14 @@ func previewReviewers(conn model.ReviewConnection) []domain.PreviewReviewer {
 		if login == "" {
 			continue
 		}
+		avatar := ""
+		if node.Author != nil {
+			avatar = node.Author.AvatarURL
+		}
 		out = append(out, domain.PreviewReviewer{
 			Login:  login,
 			State:  node.State,
-			Avatar: node.AvatarURL,
+			Avatar: avatar,
 		})
 	}
 	return out

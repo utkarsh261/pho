@@ -65,7 +65,7 @@ func (c *Cache) Close() error {
 
 func (c *Cache) bootstrap(ctx context.Context) error {
 	pragmas := []string{
-		"PRAGMA journal_mode=WAL;",
+		"PRAGMA journal_mode=DELETE;",
 		"PRAGMA synchronous=NORMAL;",
 		"PRAGMA busy_timeout=5000;",
 	}

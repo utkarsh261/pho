@@ -12,9 +12,6 @@ type GitHubHostProfile struct {
 	SupportsHeadRefOID     bool   // PullRequest.headRefOid available (probe result)
 }
 
-// DefaultGraphQLURL returns the GraphQL endpoint for the given host.
-// For github.com it returns "https://api.github.com/graphql".
-// For any other host (GHE) it returns "https://<host>/api/graphql".
 func DefaultGraphQLURL(host string) string {
 	if host == "github.com" {
 		return "https://api.github.com/graphql"
@@ -22,9 +19,6 @@ func DefaultGraphQLURL(host string) string {
 	return "https://" + host + "/api/graphql"
 }
 
-// DefaultRESTURL returns the REST API base URL for the given host.
-// For github.com it returns "https://api.github.com".
-// For any other host (GHE) it returns "https://<host>/api/v3".
 func DefaultRESTURL(host string) string {
 	if host == "github.com" {
 		return "https://api.github.com"

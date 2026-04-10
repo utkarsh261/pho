@@ -179,7 +179,7 @@ func pullRequestPreviewSelection(profile githubpkg.GitHubHostProfile) string {
 		"changedFiles",
 		"reviewDecision",
 		"author { login }",
-		"reviews(first: 20) { nodes { author { login } state submittedAt avatarUrl body } }",
+		"reviews(first: 20) { nodes { author { login avatarUrl } state submittedAt body } }",
 		"files(first: 20) { nodes { path additions deletions } }",
 		"timelineItems(last: 1) { nodes { ... on PullRequestCommit { __typename id commit { oid messageHeadline committedDate author { user { login } } } } ... on IssueComment { __typename id body createdAt author { login } } ... on PullRequestReview { __typename id state body submittedAt author { login } } ... on MergedEvent { __typename id createdAt actor { login } commit { oid } mergeRefName } } }",
 		"repository { nameWithOwner }",
@@ -194,7 +194,7 @@ func pullRequestPreviewSelection(profile githubpkg.GitHubHostProfile) string {
 func rollupSelection(profile githubpkg.GitHubHostProfile, detailed bool) string {
 	rollupFields := []string{"state"}
 	if detailed {
-		rollupFields = append(rollupFields, "contexts(first: 20) { nodes { __typename name context status conclusion state detailsUrl } }")
+		rollupFields = append(rollupFields, "contexts(first: 20) { nodes { __typename ... on CheckRun { name status conclusion detailsUrl } ... on StatusContext { context state description targetUrl } } }")
 	}
 	rollup := "statusCheckRollup {\n          " + strings.Join(rollupFields, "\n          ") + "\n        }"
 	if profile.SupportsTopLevelRollup {

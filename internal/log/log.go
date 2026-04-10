@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -33,34 +34,41 @@ type Logger struct {
 	inner *slog.Logger
 }
 
-// New creates a Logger that writes to the given file path at the given level.
-// If path is empty, writes to stderr.
-// If the file cannot be opened, falls back to stderr without panicking.
+// New creates a Logger that writes JSON to the given file path at the given
+// level.  If the parent directory of the file does not exist, it is created
+// automatically.  If the file still cannot be opened, logs are silently
+// discarded — a TUI app must never dump raw log lines to stderr.
 // level must be one of: "debug", "info", "warn", "error". Defaults to "info".
 func New(path string, level string) *Logger {
-	var w io.Writer
-	var handler slog.Handler
-
 	lvl := parseLevel(level)
 
-	if path == "" {
-		w = os.Stderr
-		handler = slog.NewTextHandler(w, &slog.HandlerOptions{Level: lvl})
-	} else {
-		f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-		if err != nil {
-			// Fall back to stderr with a text handler so startup failures are
-			// still visible to the operator.
-			handler = slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: lvl})
-		} else {
-			handler = slog.NewJSONHandler(f, &slog.HandlerOptions{Level: lvl})
+	// Resolve tilde so MkdirAll works.
+	path = os.Expand(path, func(key string) string {
+		if key == "HOME" {
+			h, _ := os.UserHomeDir()
+			return h
 		}
+		return "$" + key
+	})
+
+	// Ensure parent directory exists.
+	if dir := filepath.Dir(path); dir != "" && dir != "." {
+		_ = os.MkdirAll(dir, 0o755)
 	}
 
+	if path == "" {
+		return NewNop()
+	}
+
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return NewNop()
+	}
+
+	handler := slog.NewJSONHandler(f, &slog.HandlerOptions{Level: lvl})
 	return &Logger{inner: slog.New(handler)}
 }
 
-// NewNop returns a logger that discards all output. Useful in tests.
 func NewNop() *Logger {
 	handler := slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError + 1})
 	return &Logger{inner: slog.New(handler)}

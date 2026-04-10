@@ -9,15 +9,18 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/utk/git-term/internal/domain"
 	githubpkg "github.com/utk/git-term/internal/github"
 	"github.com/utk/git-term/internal/github/model"
+	gitlog "github.com/utk/git-term/internal/log"
 )
 
 // Client implements github.GitHubClient over GitHub GraphQL.
 type Client struct {
 	httpClient *http.Client
+	log        *gitlog.Logger
 
 	mu    sync.RWMutex
 	hosts map[string]*hostState
@@ -28,7 +31,10 @@ type hostState struct {
 }
 
 // NewClient builds a GraphQL transport from host profiles.
-func NewClient(profiles []githubpkg.GitHubHostProfile, httpClient *http.Client) *Client {
+func NewClient(profiles []githubpkg.GitHubHostProfile, httpClient *http.Client, logger *gitlog.Logger) *Client {
+	if logger == nil {
+		logger = gitlog.NewNop()
+	}
 	hosts := make(map[string]*hostState, len(profiles))
 	for _, profile := range profiles {
 		p := profile
@@ -43,7 +49,7 @@ func NewClient(profiles []githubpkg.GitHubHostProfile, httpClient *http.Client) 
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
-	return &Client{httpClient: httpClient, hosts: hosts}
+	return &Client{httpClient: httpClient, log: logger, hosts: hosts}
 }
 
 type graphQLRequest struct {
@@ -144,12 +150,22 @@ func queryGraphQL[T any](c *Client, ctx context.Context, host string, build func
 	profile := c.profileForHost(host)
 	query := build(profile)
 
+	queryType := query
+	if idx := strings.IndexAny(query, " \t\n{("); idx > 0 {
+		queryType = query[:idx]
+	}
+	c.log.Debug("graphql request", "host", host, "query_type", queryType)
+
+	start := time.Now()
 	resp, err := doGraphQLQuery[T](c, ctx, profile, query, vars)
 	if err != nil {
+		c.log.Error("graphql request failed", "host", host, "err", err)
 		var zero graphQLResponse[T]
 		return zero, err
 	}
+	ms := time.Since(start).Milliseconds()
 	if len(resp.Errors) == 0 {
+		c.log.Debug("graphql response ok", "host", host, gitlog.FieldDurationMS, ms)
 		return resp, nil
 	}
 
@@ -158,6 +174,7 @@ func queryGraphQL[T any](c *Client, ctx context.Context, host string, build func
 		query = build(profile)
 		resp2, err := doGraphQLQuery[T](c, ctx, profile, query, vars)
 		if err != nil {
+			c.log.Error("graphql request failed", "host", host, "err", err)
 			var zero graphQLResponse[T]
 			return zero, err
 		}

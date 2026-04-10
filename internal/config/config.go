@@ -90,8 +90,6 @@ type Paths struct {
 	LogFile    string
 }
 
-// xdgDir returns the XDG base directory for the given env var, falling back to
-// the provided home-relative default when the env var is unset or empty.
 func xdgDir(envVar, homeRelDefault string) string {
 	if v := os.Getenv(envVar); v != "" {
 		return v

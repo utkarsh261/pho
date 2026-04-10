@@ -78,7 +78,6 @@ const (
 	defaultHostLimit   = 2
 )
 
-// New returns a scheduler with the default concurrency limits.
 func New(opts ...Option) *Scheduler {
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &Scheduler{

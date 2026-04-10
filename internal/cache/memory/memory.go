@@ -59,7 +59,6 @@ func New[V any, M any](maxBytes int) *Cache[V, M] {
 	return c
 }
 
-// Get returns the stored value and metadata for key.
 func (c *Cache[V, M]) Get(key string) (V, Meta[M], bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

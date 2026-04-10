@@ -53,6 +53,9 @@ func TestDefaultSummaryTabClassifier_Classify(t *testing.T) {
 			pr: testutil.PR(4,
 				testutil.WithLatestReview(viewer, string(domain.ReviewDecisionApproved), base.Add(-30*time.Minute)),
 				testutil.WithHeadOID(head),
+				// UpdatedAt must be before SubmittedAt so the time-based freshness check
+				// treats the approval as still valid (CommitSHA is empty so SHA check is skipped).
+				func(pr *domain.PullRequestSummary) { pr.UpdatedAt = base.Add(-2 * time.Hour) },
 			),
 			want: map[domain.DashboardTab]bool{},
 		},

@@ -184,7 +184,7 @@ func TestFetchDashboardPRs_RetriesWithNestedRollup(t *testing.T) {
 		Token:                  "token",
 		SupportsTopLevelRollup: true,
 		SupportsHeadRefOID:     true,
-	}}, &http.Client{Transport: rt})
+	}}, &http.Client{Transport: rt}, nil)
 
 	repo := testRepo()
 	repo.Host = "example.com"

@@ -64,7 +64,7 @@ func newTestCoordinator(t *testing.T) *cache.Coordinator {
 	t.Cleanup(func() {
 		_ = l2.Close()
 	})
-	return cache.NewCoordinator(l1, l2)
+	return cache.NewCoordinator(l1, l2, nil)
 }
 
 func TestSelectInitialRepo(t *testing.T) {

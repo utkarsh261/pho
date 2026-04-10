@@ -120,8 +120,9 @@ type CountNode struct {
 
 // ActorNode captures a login-bearing GraphQL actor.
 type ActorNode struct {
-	Typename string `json:"__typename,omitempty"`
-	Login    string `json:"login"`
+	Typename  string `json:"__typename,omitempty"`
+	Login     string `json:"login"`
+	AvatarURL string `json:"avatarUrl"`
 }
 
 // RepositoryRef references the parent repo from nested search responses.
@@ -223,7 +224,6 @@ type ReviewNode struct {
 	Author      *ActorNode `json:"author"`
 	State       string     `json:"state"`
 	SubmittedAt *string    `json:"submittedAt"`
-	AvatarURL   string     `json:"avatarUrl"`
 	Body        string     `json:"body,omitempty"`
 }
 

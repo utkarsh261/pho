@@ -1,16 +1,177 @@
 package main
 
 import (
+	"context"
+	"flag"
 	"fmt"
+	"net/http"
 	"os"
+	"path/filepath"
+	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/utk/git-term/internal/application/dashboard"
+	"github.com/utk/git-term/internal/application/discovery"
+	"github.com/utk/git-term/internal/application/search"
+	"github.com/utk/git-term/internal/cache"
+	"github.com/utk/git-term/internal/cache/memory"
+	sqlitecache "github.com/utk/git-term/internal/cache/sqlite"
+	"github.com/utk/git-term/internal/config"
+	"github.com/utk/git-term/internal/github/auth"
+	"github.com/utk/git-term/internal/github/graphql"
+	gitlog "github.com/utk/git-term/internal/log"
+	"github.com/utk/git-term/internal/ui/app"
 )
 
 var version = "dev"
 
+func clearCaches() error {
+	// L2 SQLite cache — use default XDG path so reset works even with a broken config.
+	cacheDir := xdgDir("XDG_CACHE_HOME", ".cache")
+	sqliteDB := filepath.Join(cacheDir, "git-term", "cache.db")
+	if err := os.Remove(sqliteDB); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove sqlite cache %s: %w", sqliteDB, err)
+	}
+
+	// Discovery cache.
+	discDir := filepath.Join(os.TempDir(), "git-term-discovery")
+	if err := os.RemoveAll(discDir); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove discovery cache %s: %w", discDir, err)
+	}
+
+	return nil
+}
+
+func xdgDir(env, fallback string) string {
+	if v := os.Getenv(env); v != "" {
+		return v
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fallback
+	}
+	return filepath.Join(home, fallback)
+}
+
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "--version" {
+	// Flag parsing
+	var (
+		showVersion bool
+		debug       bool
+		reset       bool
+		configPath  string
+		rootDir     string
+	)
+
+	flag.BoolVar(&showVersion, "version", false, "print version and exit")
+	flag.BoolVar(&debug, "debug", false, "enable debug logging (also set by GIT_TERM_DEBUG=1)")
+	flag.BoolVar(&reset, "reset", false, "clear all caches (SQLite + discovery) and exit")
+	flag.StringVar(&configPath, "config", "", "path to config file (default: XDG config dir)")
+	flag.StringVar(&rootDir, "root", ".", "root directory to scan for git repos")
+	flag.Parse()
+
+	if showVersion {
 		fmt.Println("git-term", version)
 		return
 	}
-	fmt.Println("git-term: not yet implemented")
+
+	// Expand ~ in root path
+	if len(rootDir) >= 2 && rootDir[:2] == "~/" {
+		if home, err := os.UserHomeDir(); err == nil {
+			rootDir = filepath.Join(home, rootDir[2:])
+		}
+	}
+
+	// Also honour the env var for debug mode (matches log.IsDebug())
+	if os.Getenv("GIT_TERM_DEBUG") == "1" {
+		debug = true
+	}
+
+	// Load config
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "git-term: failed to load config: %v\n  [config]\n", err)
+		os.Exit(1)
+	}
+
+	// Set up logger
+	level := cfg.Logging.Level
+	if debug {
+		level = "debug"
+	}
+	logger := gitlog.New(cfg.Logging.File, level)
+
+	// Reset caches before starting up.
+	if reset {
+		if err := clearCaches(); err != nil {
+			fmt.Fprintf(os.Stderr, "git-term: failed to clear caches: %v\n", err)
+			os.Exit(1)
+		}
+		logger.Info("caches cleared on startup")
+	}
+
+	// Auth — resolve GitHub host profiles
+	authSvc := auth.NewAuthService()
+	profiles, err := authSvc.ResolveHosts(context.Background())
+	if err != nil {
+		logger.Error("auth failed", "err", err)
+		fmt.Fprintf(os.Stderr, "git-term: authentication error: %v\n  [auth]\nRun 'gh auth login' to authenticate.\n", err)
+		os.Exit(1)
+	}
+	if len(profiles) == 0 {
+		logger.Error("no authenticated hosts found")
+		fmt.Fprintf(os.Stderr, "git-term: no authenticated GitHub hosts found.\n  [auth]\nRun 'gh auth login' to authenticate.\n")
+		os.Exit(1)
+	}
+
+	// Ensure cache directory exists
+	if err := os.MkdirAll(cfg.Cache.Dir, 0o700); err != nil {
+		logger.Warn("failed to create cache directory", "dir", cfg.Cache.Dir, "err", err)
+	}
+
+	// Cache — L1 memory store
+	l1 := memory.NewJSONStore(cfg.Cache.MaxMemoryMB * 1024 * 1024)
+
+	// Cache — L2 SQLite store (optional; fall back to L1 on error)
+	l2, err := sqlitecache.New(filepath.Join(cfg.Cache.Dir, "cache.db"), 1)
+	var l2Store cache.Store
+	if err != nil {
+		logger.Warn("sqlite cache unavailable, using memory-only cache", "err", err)
+		l2Store = l1
+	} else {
+		l2Store = l2
+	}
+
+	coordinator := cache.NewCoordinator(l1, l2Store, logger)
+
+	// GraphQL client
+	ghClient := graphql.NewClient(profiles, &http.Client{Timeout: 30 * time.Second}, logger)
+
+	// Application services
+	discoverySvc := discovery.New(discovery.Config{
+		Pin:     cfg.Repos.Pin,
+		Exclude: cfg.Repos.Exclude,
+	})
+	dashboardSvc := dashboard.NewService(coordinator, ghClient)
+	searchSvc := search.New()
+
+	// Root UI model
+	deps := app.Dependencies{
+		Viewer:    ghClient,
+		Discovery: discoverySvc,
+		Dashboard: dashboardSvc,
+		Search:    searchSvc,
+		Root:      rootDir,
+		Host:      profiles[0].Host,
+		Logger:    logger,
+	}
+	model := app.NewModel(deps)
+
+	// Launch Bubble Tea
+	p := tea.NewProgram(model, tea.WithAltScreen())
+	if _, err := p.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
 }

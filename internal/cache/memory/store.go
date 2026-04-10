@@ -14,7 +14,6 @@ type JSONStore struct {
 	inner *Cache[[]byte, domain.CacheMeta]
 }
 
-// NewJSONStore creates a byte-bounded JSON cache store.
 func NewJSONStore(maxBytes int) *JSONStore {
 	return &JSONStore{
 		inner: New[[]byte, domain.CacheMeta](maxBytes),

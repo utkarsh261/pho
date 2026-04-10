@@ -89,13 +89,13 @@ func (a *authService) ResolveToken(ctx context.Context, host string) (string, er
 
 // ghAuthStatusOutput is the JSON shape returned by `gh auth status --json hosts`.
 type ghAuthStatusOutput struct {
-	Hosts map[string]ghHostEntry `json:"hosts"`
+	Hosts map[string][]ghHostEntry `json:"hosts"`
 }
 
 type ghHostEntry struct {
-	User        string `json:"user"`
-	Token       string `json:"token"`
+	Login       string `json:"login"`
 	GitProtocol string `json:"git_protocol"`
+	Active      bool   `json:"active"`
 }
 
 // ResolveHosts discovers all authenticated hosts via `gh auth status --json hosts`
@@ -120,7 +120,18 @@ func (a *authService) ResolveHosts(ctx context.Context) ([]githubpkg.GitHubHostP
 	}
 
 	profiles := make([]githubpkg.GitHubHostProfile, 0, len(status.Hosts))
-	for host, entry := range status.Hosts {
+	for host, entries := range status.Hosts {
+		if len(entries) == 0 {
+			continue
+		}
+		// Prefer the active entry; fall back to first.
+		entry := entries[0]
+		for _, e := range entries {
+			if e.Active {
+				entry = e
+				break
+			}
+		}
 		token, err := a.ResolveToken(ctx, host)
 		if err != nil {
 			return nil, fmt.Errorf("resolving token for host %s: %w", host, err)
@@ -130,7 +141,7 @@ func (a *authService) ResolveHosts(ctx context.Context) ([]githubpkg.GitHubHostP
 			GraphQLURL:             githubpkg.DefaultGraphQLURL(host),
 			RESTURL:                githubpkg.DefaultRESTURL(host),
 			Token:                  token,
-			ViewerLogin:            entry.User,
+			ViewerLogin:            entry.Login,
 			SupportsTopLevelRollup: true,
 			SupportsHeadRefOID:     true,
 		})

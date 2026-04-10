@@ -53,7 +53,7 @@ func TestCoordinatorReadWriteAndPromotion(t *testing.T) {
 	ctx := context.Background()
 	l1 := &countingStore{inner: memorycache.NewJSONStore(1024 * 1024)}
 	l2 := &countingStore{inner: newSQLiteStore(t)}
-	c := NewCoordinator(l1, l2)
+	c := NewCoordinator(l1, l2, nil)
 
 	key := "dashboard:v1:host=github.com:repo=acme/api:kind=prs"
 	repo := testutil.Repo("acme/api")
@@ -136,7 +136,7 @@ func TestCoordinatorReturnsStaleAndSchedulesRefresh(t *testing.T) {
 	ctx := context.Background()
 	l1 := &countingStore{inner: memorycache.NewJSONStore(1024 * 1024)}
 	l2 := &countingStore{inner: newSQLiteStore(t)}
-	c := NewCoordinator(l1, l2)
+	c := NewCoordinator(l1, l2, nil)
 
 	key := "dashboard:v1:host=github.com:repo=acme/api:kind=recent"
 	snap := testutil.RecentSnap(testutil.Repo("acme/api"))

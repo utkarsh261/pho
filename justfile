@@ -13,3 +13,6 @@ vet:
 
 clean:
     rm -f {{bin}}
+
+reset:
+    go run ./cmd/git-term --reset

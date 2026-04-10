@@ -71,7 +71,6 @@ const (
 	currentTabBoost      = 250
 )
 
-// New returns a ready-to-use search service.
 func New() *Service {
 	return &Service{
 		prIndexes:   make(map[string]*prIndex),
@@ -79,7 +78,6 @@ func New() *Service {
 	}
 }
 
-// SetCurrentRepo records the currently active repository for ranking boosts.
 func (s *Service) SetCurrentRepo(repo string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -87,7 +85,6 @@ func (s *Service) SetCurrentRepo(repo string) {
 	s.currentRepo = canonicalRepoKey(repo)
 }
 
-// SetCurrentTab records the currently active dashboard tab for ranking boosts.
 func (s *Service) SetCurrentTab(tab domain.DashboardTab) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

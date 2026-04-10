@@ -309,7 +309,7 @@ func TestResolveToken_GHFails(t *testing.T) {
 
 // Test 5: ResolveHosts parses JSON (single host)
 func TestResolveHosts_SingleHost(t *testing.T) {
-	statusJSON := `{"hosts":{"github.com":{"user":"alice","token":"","git_protocol":"https"}}}`
+	statusJSON := `{"hosts":{"github.com":[{"login":"alice","active":true}]}}`
 	fakeGH(t, map[string]fakeResponse{
 		"auth status --json hosts": {
 			stdout:   statusJSON,
@@ -353,8 +353,8 @@ func TestResolveHosts_SingleHost(t *testing.T) {
 // Test 6: ResolveHosts multi-host
 func TestResolveHosts_MultiHost(t *testing.T) {
 	statusJSON := `{"hosts":{
-		"github.com":{"user":"alice","token":"","git_protocol":"https"},
-		"ghe.corp.com":{"user":"bob","token":"","git_protocol":"https"}
+		"github.com":[{"login":"alice","active":true}],
+		"ghe.corp.com":[{"login":"bob","active":true}]
 	}}`
 	fakeGH(t, map[string]fakeResponse{
 		"auth status --json hosts": {

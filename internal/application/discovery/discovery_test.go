@@ -155,6 +155,38 @@ func TestDiscover_UsesCachedSnapshotOnLaterFailure(t *testing.T) {
 	}
 }
 
+// TestDiscover_SkipsRepoWithNoRemote ensures a git repo that has no remote
+// configured does not abort the scan — other repos in the same root must
+// still be returned.
+func TestDiscover_SkipsRepoWithNoRemote(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	now := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)
+
+	// A proper repo with a remote.
+	writeRepo(t, filepath.Join(root, "with-remote"), "git@github.com:org/myrepo.git", now)
+
+	// A git repo with an empty .git/config (no remote section).
+	noRemoteDir := filepath.Join(root, "no-remote")
+	if err := os.MkdirAll(filepath.Join(noRemoteDir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(noRemoteDir, ".git", "config"), []byte("[core]\n\trepositoryformatversion = 0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	svc := New(Config{})
+	repos, err := svc.Discover(context.Background(), root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	names := visibleNames(repos)
+	if len(names) != 1 || names[0] != "org/myrepo" {
+		t.Fatalf("expected [org/myrepo], got %v", names)
+	}
+}
+
 func visibleNames(repos []domain.Repository) []string {
 	out := make([]string, 0, len(repos))
 	for _, repo := range repos {
