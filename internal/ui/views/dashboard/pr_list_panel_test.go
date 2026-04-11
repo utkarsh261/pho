@@ -25,7 +25,7 @@ func TestPRListPanelRenderTabsAndRows(t *testing.T) {
 	m.SetTabSnapshot(domain.TabInvolving, nil, 0, false)
 	m.SetTabSnapshot(domain.TabRecent, nil, 0, false)
 	m.SetActiveTab(domain.TabMyPRs)
-	m.SetRect(80, 12)
+	m.SetRect(80, 14)
 
 	view := m.View()
 	if !strings.Contains(view, "My PRs(3)") || !strings.Contains(view, "Needs Review(1)") {
@@ -92,4 +92,84 @@ func makePR(number int, title, branch string) domain.PullRequestSummary {
 		CreatedAt:      time.Date(2026, 4, 9, 12, 0, 0, 0, time.UTC),
 		UpdatedAt:      time.Date(2026, 4, 9, 13, 0, 0, 0, time.UTC),
 	}
+}
+
+func TestPRListPanelVimNavigation(t *testing.T) {
+	t.Parallel()
+
+	prs := make([]domain.PullRequestSummary, 15)
+	for i := range prs {
+		prs[i] = makePR(i+1, fmt.Sprintf("PR %d", i+1), "branch")
+	}
+	key := func(s string) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)} }
+
+	newPanel := func() *PRListPanelModel {
+		m := NewPRListPanelModel()
+		m.SetTabSnapshot(domain.TabMyPRs, prs, len(prs), false)
+		m.SetActiveTab(domain.TabMyPRs)
+		m.SetRect(80, 20)
+		return m
+	}
+
+	t.Run("gg goes to top", func(t *testing.T) {
+		t.Parallel()
+		m := newPanel()
+		m.Cursor = 10
+		m.Update(key("g"))
+		m.Update(key("g"))
+		if m.Cursor != 0 {
+			t.Fatalf("gg: expected cursor=0, got %d", m.Cursor)
+		}
+	})
+
+	t.Run("single g does not jump", func(t *testing.T) {
+		t.Parallel()
+		m := newPanel()
+		m.Cursor = 5
+		m.Update(key("g"))
+		if m.Cursor != 5 {
+			t.Fatalf("single g: expected cursor unchanged at 5, got %d", m.Cursor)
+		}
+	})
+
+	t.Run("G goes to bottom", func(t *testing.T) {
+		t.Parallel()
+		m := newPanel()
+		m.Cursor = 0
+		m.Update(key("G"))
+		if m.Cursor != len(prs)-1 {
+			t.Fatalf("G: expected cursor=%d, got %d", len(prs)-1, m.Cursor)
+		}
+	})
+
+	t.Run("ctrl+d advances cursor", func(t *testing.T) {
+		t.Parallel()
+		m := newPanel()
+		m.Cursor = 0
+		m.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
+		if m.Cursor <= 0 {
+			t.Fatalf("ctrl+d: expected cursor to advance, got %d", m.Cursor)
+		}
+	})
+
+	t.Run("ctrl+u retreats cursor", func(t *testing.T) {
+		t.Parallel()
+		m := newPanel()
+		m.Cursor = 10
+		m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+		if m.Cursor >= 10 {
+			t.Fatalf("ctrl+u: expected cursor to retreat, got %d", m.Cursor)
+		}
+	})
+
+	t.Run("gg emits select cmd", func(t *testing.T) {
+		t.Parallel()
+		m := newPanel()
+		m.Cursor = 10
+		m.Update(key("g"))
+		_, cmd := m.Update(key("g"))
+		if cmd == nil {
+			t.Fatal("gg: expected SelectPR command, got nil")
+		}
+	})
 }

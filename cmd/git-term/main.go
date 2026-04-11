@@ -10,6 +10,8 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 
 	"github.com/utk/git-term/internal/application/dashboard"
 	"github.com/utk/git-term/internal/application/discovery"
@@ -21,6 +23,7 @@ import (
 	"github.com/utk/git-term/internal/github/auth"
 	"github.com/utk/git-term/internal/github/graphql"
 	gitlog "github.com/utk/git-term/internal/log"
+	"github.com/utk/git-term/internal/ui/theme"
 	"github.com/utk/git-term/internal/ui/app"
 )
 
@@ -167,6 +170,11 @@ func main() {
 		Logger:    logger,
 	}
 	model := app.NewModel(deps)
+
+	// Set color profile for lipgloss (enables true-color on capable terminals).
+	lipgloss.SetColorProfile(termenv.NewOutput(os.Stderr).Profile)
+	th := theme.Default()
+	model.SetTheme(th)
 
 	// Launch Bubble Tea
 	p := tea.NewProgram(model, tea.WithAltScreen())

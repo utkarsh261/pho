@@ -7,8 +7,17 @@ const (
 	minPRWidth      = 30
 	minPreviewWidth = 20
 
-	threePaneMinWidth = minRepoWidth + minPRWidth + minPreviewWidth
-	twoPaneMinWidth   = minRepoWidth + minPRWidth
+	// Each panel needs 2 chars for left+right borders.
+	// Each panel also gets 1 char right padding (for symmetry with left side).
+	// Gaps between panels add 1 char each (but this is covered by the right padding).
+	panelBorderOverhead = 2
+	panelRightPad       = 1
+
+	// 3 panels: 3*2 borders + 3*1 right-pad = 9 overhead.
+	// 2 panels: 2*2 borders + 2*1 right-pad = 6 overhead.
+	// 1 panel: 1*2 borders + 1*1 right-pad = 3 overhead.
+	threePaneMinWidth = minRepoWidth + minPRWidth + minPreviewWidth + 3*panelBorderOverhead + 3*panelRightPad
+	twoPaneMinWidth   = minRepoWidth + minPRWidth + 2*panelBorderOverhead + 2*panelRightPad
 )
 
 type DashboardLayout struct {
@@ -48,6 +57,7 @@ func (s LayoutState) Update(msg tea.Msg) LayoutState {
 }
 
 // Calculate derives panel widths for the dashboard body.
+// Widths returned are content widths (excluding borders and gaps).
 func Calculate(width, height int) DashboardLayout {
 	layout := DashboardLayout{
 		Width:  max(width, 0),
@@ -58,9 +68,11 @@ func Calculate(width, height int) DashboardLayout {
 		return layout
 	}
 
+	// Calculate available content width after accounting for borders and right-padding.
 	switch {
 	case width >= threePaneMinWidth:
-		widths := proportionalWidths(width, []panelSpec{
+		available := width - 3*panelBorderOverhead - 3*panelRightPad
+		widths := proportionalWidths(available, []panelSpec{
 			{name: "repo", min: minRepoWidth},
 			{name: "pr", min: minPRWidth},
 			{name: "preview", min: minPreviewWidth},
@@ -69,7 +81,8 @@ func Calculate(width, height int) DashboardLayout {
 		layout.PR = widths[1]
 		layout.Preview = widths[2]
 	case width >= twoPaneMinWidth:
-		widths := proportionalWidths(width, []panelSpec{
+		available := width - 2*panelBorderOverhead - 2*panelRightPad
+		widths := proportionalWidths(available, []panelSpec{
 			{name: "repo", min: minRepoWidth},
 			{name: "pr", min: minPRWidth},
 		})
@@ -77,8 +90,10 @@ func Calculate(width, height int) DashboardLayout {
 		layout.PR = widths[1]
 		layout.Preview = 0
 	default:
+		// Single panel: borders on left+right, plus right padding.
+		available := width - panelBorderOverhead - panelRightPad
 		layout.Repo = 0
-		layout.PR = width
+		layout.PR = available
 		layout.Preview = 0
 	}
 

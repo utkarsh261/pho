@@ -20,14 +20,17 @@ func TestRepoPanelRenderActiveAndCursor(t *testing.T) {
 
 	view := m.View()
 	lines := strings.Split(view, "\n")
-	if len(lines) < 5 {
-		t.Fatalf("expected at least 5 lines, got %d", len(lines))
+	if len(lines) < 7 {
+		t.Fatalf("expected at least 7 lines, got %d", len(lines))
 	}
-	if !strings.Contains(lines[3], "▶") {
-		t.Fatalf("expected active marker on row 2, got %q", lines[3])
+	// Lines 0=header, 1=blank spacing, 2=underline, 3=blank. Repos start at line 4.
+	// ActiveIndex=2 → third repo → line 6
+	// Cursor=3 → fourth repo → line 7
+	if !strings.Contains(lines[6], "▶") {
+		t.Fatalf("expected active marker on row 2, got %q", lines[6])
 	}
-	if !strings.Contains(lines[4], "▌") {
-		t.Fatalf("expected cursor highlight on row 3, got %q", lines[4])
+	if !strings.Contains(lines[7], "▌") {
+		t.Fatalf("expected cursor highlight on row 3, got %q", lines[7])
 	}
 }
 
@@ -85,4 +88,80 @@ func makeRepos(n int) []domain.Repository {
 		})
 	}
 	return repos
+}
+
+func TestRepoPanelVimNavigation(t *testing.T) {
+	t.Parallel()
+
+	repos := makeRepos(20)
+
+	key := func(s string) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)} }
+
+	t.Run("gg goes to top", func(t *testing.T) {
+		t.Parallel()
+		m := NewRepoPanelModel(repos)
+		m.SetRect(32, 10)
+		m.Cursor = 15
+		m.Update(key("g"))
+		m.Update(key("g"))
+		if m.Cursor != 0 {
+			t.Fatalf("gg: expected cursor=0, got %d", m.Cursor)
+		}
+	})
+
+	t.Run("single g does not jump", func(t *testing.T) {
+		t.Parallel()
+		m := NewRepoPanelModel(repos)
+		m.SetRect(32, 10)
+		m.Cursor = 5
+		m.Update(key("g"))
+		if m.Cursor != 5 {
+			t.Fatalf("single g: expected cursor unchanged at 5, got %d", m.Cursor)
+		}
+	})
+
+	t.Run("G goes to bottom", func(t *testing.T) {
+		t.Parallel()
+		m := NewRepoPanelModel(repos)
+		m.SetRect(32, 10)
+		m.Cursor = 0
+		m.Update(key("G"))
+		if m.Cursor != len(repos)-1 {
+			t.Fatalf("G: expected cursor=%d, got %d", len(repos)-1, m.Cursor)
+		}
+	})
+
+	t.Run("ctrl+d scrolls down half page", func(t *testing.T) {
+		t.Parallel()
+		m := NewRepoPanelModel(repos)
+		m.SetRect(32, 14) // visibleCount = 14-4 = 10, half = 5
+		m.Cursor = 0
+		m.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
+		if m.Cursor <= 0 {
+			t.Fatalf("ctrl+d: expected cursor to advance, got %d", m.Cursor)
+		}
+	})
+
+	t.Run("ctrl+u scrolls up half page", func(t *testing.T) {
+		t.Parallel()
+		m := NewRepoPanelModel(repos)
+		m.SetRect(32, 14)
+		m.Cursor = 15
+		m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+		if m.Cursor >= 15 {
+			t.Fatalf("ctrl+u: expected cursor to move up, got %d", m.Cursor)
+		}
+	})
+
+	t.Run("g then other key cancels gg", func(t *testing.T) {
+		t.Parallel()
+		m := NewRepoPanelModel(repos)
+		m.SetRect(32, 10)
+		m.Cursor = 5
+		m.Update(key("g"))
+		m.Update(key("j")) // cancels gg, moves down
+		if m.Cursor != 6 {
+			t.Fatalf("g+j: expected cursor=6, got %d", m.Cursor)
+		}
+	})
 }

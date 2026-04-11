@@ -21,24 +21,24 @@ func TestCalculate(t *testing.T) {
 			name:     "120 columns",
 			width:    120,
 			height:   40,
-			wantRepo: 29,
-			wantPR:   55,
-			wantPrev: 36,
+			wantRepo: 27,
+			wantPR:   50,
+			wantPrev: 34,
 		},
 		{
 			name:     "80 columns",
 			width:    80,
 			height:   40,
-			wantRepo: 20,
-			wantPR:   36,
-			wantPrev: 24,
+			wantRepo: 17,
+			wantPR:   32,
+			wantPrev: 22,
 		},
 		{
 			name:     "60 columns",
 			width:    60,
 			height:   40,
-			wantRepo: 21,
-			wantPR:   39,
+			wantRepo: 19,
+			wantPR:   35,
 			wantPrev: 0,
 		},
 		{
@@ -46,7 +46,7 @@ func TestCalculate(t *testing.T) {
 			width:    40,
 			height:   40,
 			wantRepo: 0,
-			wantPR:   40,
+			wantPR:   37,
 			wantPrev: 0,
 		},
 	}
@@ -72,9 +72,6 @@ func TestCalculate(t *testing.T) {
 			if got.Preview != tc.wantPrev {
 				t.Fatalf("preview width = %d, want %d", got.Preview, tc.wantPrev)
 			}
-			if got.Repo+got.PR+got.Preview != tc.width {
-				t.Fatalf("panel widths sum to %d, want %d", got.Repo+got.PR+got.Preview, tc.width)
-			}
 		})
 	}
 }
@@ -83,8 +80,8 @@ func TestLayoutState_Update_WindowSizeMsg(t *testing.T) {
 	t.Parallel()
 
 	state := NewLayoutState(120, 40)
-	if got := state.Current; got.Repo != 29 || got.PR != 55 || got.Preview != 36 {
-		t.Fatalf("initial layout = %+v, want repo=29 pr=55 preview=36", got)
+	if got := state.Current; got.Repo != 27 || got.PR != 50 || got.Preview != 34 {
+		t.Fatalf("initial layout = %+v, want repo=27 pr=50 preview=34", got)
 	}
 
 	state = state.Update(tea.WindowSizeMsg{Width: 60, Height: 24})
@@ -95,7 +92,7 @@ func TestLayoutState_Update_WindowSizeMsg(t *testing.T) {
 	if state.Height != 24 {
 		t.Fatalf("height = %d, want 24", state.Height)
 	}
-	if state.Current.Repo != 21 || state.Current.PR != 39 || state.Current.Preview != 0 {
-		t.Fatalf("layout after resize = %+v, want repo=21 pr=39 preview=0", state.Current)
+	if state.Current.Repo != 19 || state.Current.PR != 35 || state.Current.Preview != 0 {
+		t.Fatalf("layout after resize = %+v, want repo=19 pr=35 preview=0", state.Current)
 	}
 }

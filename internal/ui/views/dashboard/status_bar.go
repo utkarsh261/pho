@@ -5,8 +5,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/utk/git-term/internal/domain"
+	"github.com/utk/git-term/internal/ui/theme"
 )
 
 type StatusBarModel struct {
@@ -17,42 +20,91 @@ type StatusBarModel struct {
 	Errors       domain.ErrorState
 	CurrentTab   domain.DashboardTab
 	SelectedRepo string
+	theme        *theme.Theme
+	spinner      spinner.Model
 }
 
 func NewStatusBarModel() *StatusBarModel {
-	return &StatusBarModel{}
+	s := spinner.New(spinner.WithSpinner(spinner.Points))
+	s.Spinner.FPS = time.Millisecond * 8
+	return &StatusBarModel{
+		spinner: s,
+	}
 }
 
-func (m *StatusBarModel) Init() tea.Cmd { return nil }
+func (m *StatusBarModel) Init() tea.Cmd { return m.spinner.Tick }
 
 func (m *StatusBarModel) SetRect(width int) {
 	m.Width = width
 }
 
+func (m *StatusBarModel) SetTheme(th *theme.Theme) {
+	m.theme = th
+	if m.theme != nil {
+		m.spinner.Style = lipgloss.NewStyle().Foreground(m.theme.Warning)
+	}
+}
+
 func (m *StatusBarModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var spinCmd tea.Cmd
+	m.spinner, spinCmd = m.spinner.Update(msg)
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.Width = msg.Width
-		return m, nil
+		return m, spinCmd
 	}
-	return m, nil
+	return m, spinCmd
 }
 
 func (m *StatusBarModel) View() string {
 	if m.Width <= 0 {
 		return ""
 	}
-	parts := []string{m.hintText()}
+
+	// Top border
+	border := strings.Repeat("─", m.Width)
+	if m.theme != nil {
+		if len(m.Errors.Errors) > 0 {
+			border = lipgloss.NewStyle().Foreground(m.theme.Error).Render(border)
+		} else {
+			border = m.theme.StatusSep.Render(border)
+		}
+	}
+
+	helpText := m.hintText()
+	if m.theme != nil {
+		helpText = m.theme.StatusHelp.Render(helpText)
+	}
+
+	parts := []string{helpText}
+
 	if m.Loading {
-		parts = append(parts, "loading")
+		parts = append(parts, m.spinner.View())
 	}
+
 	if freshness := strings.TrimSpace(string(m.Freshness)); freshness != "" && m.Freshness != domain.FreshnessFresh {
-		parts = append(parts, freshness)
+		fresh := freshness
+		if m.theme != nil {
+			fresh = m.theme.StatusStale.Render(fresh)
+		}
+		parts = append(parts, fresh)
 	}
+
 	if errText := m.errorText(); errText != "" {
-		parts = append(parts, errText)
+		err := errText
+		if m.theme != nil {
+			err = m.theme.StatusError.Render(err)
+		}
+		parts = append(parts, err)
 	}
-	return fitLine(joinVisible(parts, " | "), m.Width)
+
+	sep := " | "
+	if m.theme != nil {
+		sep = m.theme.StatusSep.Render(" │ ")
+	}
+	joined := fitLine(joinVisible(parts, sep), m.Width)
+	return border + "\n" + joined
 }
 
 func (m *StatusBarModel) hintText() string {

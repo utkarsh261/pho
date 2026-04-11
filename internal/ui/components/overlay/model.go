@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/utk/git-term/internal/domain"
+	"github.com/utk/git-term/internal/ui/theme"
 )
 
 const (
@@ -45,6 +46,7 @@ type DispatchMsg struct {
 // Model is the command palette overlay state.
 type Model struct {
 	search SearchService
+	theme  *theme.Theme
 
 	activeRepo string
 	query      string
@@ -73,6 +75,10 @@ func NewModel(search SearchService) Model {
 
 func (m *Model) SetActiveRepo(repo string) {
 	m.activeRepo = repo
+}
+
+func (m *Model) SetTheme(th *theme.Theme) {
+	m.theme = th
 }
 
 // SetRepoHydrationStats updates the footer hint counts.
@@ -319,6 +325,12 @@ func (m Model) renderBox(boxW, boxH int) string {
 	innerH := maxInt(0, boxH-2)
 
 	content := m.bodyLines(innerW, innerH)
+
+	if m.theme != nil {
+		innerContent := strings.Join(content, "\n")
+		return m.theme.BoxBorder.Width(boxW).Height(boxH).Render(innerContent)
+	}
+
 	lines := make([]string, 0, boxH)
 	lines = append(lines, "┌"+strings.Repeat("─", innerW)+"┐")
 	for _, line := range content {
@@ -329,9 +341,15 @@ func (m Model) renderBox(boxW, boxH int) string {
 }
 
 func (m Model) bodyLines(innerW, innerH int) []string {
+	title := centerText("Command Palette", innerW)
+	query := m.queryLine(innerW)
+	if m.theme != nil {
+		title = m.theme.BoxTitle.Render(title)
+		query = m.theme.BoxQuery.Render(query)
+	}
 	lines := []string{
-		centerText("Command Palette", innerW),
-		m.queryLine(innerW),
+		title,
+		query,
 		"",
 	}
 
@@ -342,13 +360,25 @@ func (m Model) bodyLines(innerW, innerH int) []string {
 		if absoluteIndex == m.selectedIndex {
 			prefix = "> "
 		}
-		lines = append(lines, prefix+formatResult(result, innerW-2))
+		line := prefix + formatResult(result, innerW-2)
+		if m.theme != nil {
+			if absoluteIndex == m.selectedIndex {
+				line = m.theme.BoxSelected.Render(line)
+			} else {
+				line = m.theme.BoxNormal.Render(line)
+			}
+		}
+		lines = append(lines, line)
 	}
 
 	footer := m.footerHint()
 	if footer != "" {
 		lines = append(lines, "")
-		lines = append(lines, truncate(footer, innerW))
+		footerLine := truncate(footer, innerW)
+		if m.theme != nil {
+			footerLine = m.theme.BoxFooter.Render(footerLine)
+		}
+		lines = append(lines, footerLine)
 	}
 
 	if len(lines) > innerH {

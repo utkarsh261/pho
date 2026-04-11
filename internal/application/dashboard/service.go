@@ -31,7 +31,6 @@ type DashboardService interface {
 	LoadPreview(ctx context.Context, repo string, number int) (domain.PRPreviewSnapshot, error)
 }
 
-// Service implements DashboardService using the T2 cache coordinator and GitHub client.
 type Service struct {
 	Cache        *cache.Coordinator
 	Client       githubclient.GitHubClient

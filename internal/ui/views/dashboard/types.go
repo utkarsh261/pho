@@ -6,6 +6,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/utk/git-term/internal/domain"
 )
 
@@ -97,29 +98,32 @@ func truncateText(s string, width int) string {
 	if width <= 0 {
 		return ""
 	}
-	runes := []rune(s)
-	if len(runes) <= width {
+	visible := lipgloss.Width(s)
+	if visible <= width {
 		return s
 	}
 	if width <= 3 {
 		return strings.Repeat(".", width)
 	}
-	return string(runes[:width-3]) + "..."
+	// Truncate using lipgloss which handles ANSI correctly
+	return lipgloss.NewStyle().MaxWidth(width).Render(s)
 }
 
 func padRight(s string, width int) string {
 	if width <= 0 {
 		return ""
 	}
-	runes := []rune(s)
-	if len(runes) >= width {
-		return string(runes[:width])
+	visible := lipgloss.Width(s)
+	if visible >= width {
+		return lipgloss.NewStyle().MaxWidth(width).Render(s)
 	}
-	return s + strings.Repeat(" ", width-len(runes))
+	return s + strings.Repeat(" ", width-visible)
 }
 
 func fitLine(s string, width int) string {
-	return padRight(truncateText(s, width), width)
+	// Use lipgloss Width() so ANSI background/padding is preserved.
+	truncated := truncateText(s, width)
+	return lipgloss.NewStyle().Width(width).Render(truncated)
 }
 
 func renderBlock(lines []string, width, height int) string {

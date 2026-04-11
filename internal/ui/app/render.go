@@ -2,6 +2,9 @@ package app
 
 import (
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+	"github.com/utk/git-term/internal/domain"
 )
 
 func (m *Model) renderDashboard() string {
@@ -22,23 +25,95 @@ func (m *Model) renderDashboard() string {
 }
 
 func (m *Model) composeBody(height int) string {
-	columns := make([]columnView, 0, 3)
+	type panelCol struct {
+		contentW int
+		view     string
+		focus    domain.FocusTarget
+	}
+	columns := make([]panelCol, 0, 3)
 	if w := m.layout.Current.Repo; w > 0 {
-		columns = append(columns, columnView{width: w, view: m.repoPanel.View()})
+		columns = append(columns, panelCol{contentW: w, view: m.repoPanel.View(), focus: domain.FocusRepoPanel})
 	}
 	if w := m.layout.Current.PR; w > 0 {
-		columns = append(columns, columnView{width: w, view: m.prList.View()})
+		columns = append(columns, panelCol{contentW: w, view: m.prList.View(), focus: domain.FocusPRListPanel})
 	}
 	if w := m.layout.Current.Preview; w > 0 {
-		columns = append(columns, columnView{width: w, view: m.preview.View()})
+		columns = append(columns, panelCol{contentW: w, view: m.preview.View(), focus: domain.FocusPreviewPanel})
 	}
 	if len(columns) == 0 {
 		return ""
 	}
-	if len(columns) == 1 {
-		return joinColumn(columns[0], height)
+
+	// Build boxed panels. Each box = content + 2 borders + 1 gap.
+	boxed := make([]string, len(columns))
+	for i, col := range columns {
+		boxed[i] = buildBox(col.view, col.contentW, height, col.focus == m.focus)
 	}
-	return joinColumns(columns, height)
+
+	// Join panels side-by-side.
+	if len(boxed) == 1 {
+		return boxed[0]
+	}
+	return joinStrings(boxed, height)
+}
+
+// buildBox wraps content in a 4-sided border box.
+// contentW = content area width (excl. borders).
+// height = total box height (incl. top+bottom borders).
+// Returns a string that is (contentW + 3) chars wide:
+//   1 left border + contentW + 1 right border + 1 gap space.
+func buildBox(view string, contentW, height int, focused bool) string {
+	bc := lipgloss.Color("#7C3AED")
+	if !focused {
+		bc = lipgloss.Color("#374151")
+	}
+	border := lipgloss.NewStyle().Foreground(bc).Render
+
+	contentH := height - 2
+	if contentH < 1 {
+		contentH = 1
+	}
+
+	lines := make([]string, 0, height)
+
+	// Top: ┌───┐
+	lines = append(lines, border("┌"+strings.Repeat("─", contentW)+"┐"))
+
+	contentLines := strings.Split(view, "\n")
+	for i := 0; i < contentH; i++ {
+		line := ""
+		if i < len(contentLines) {
+			line = contentLines[i]
+		}
+		vis := lipgloss.Width(line)
+		if vis < contentW {
+			line += strings.Repeat(" ", contentW-vis)
+		} else if vis > contentW {
+			line = lipgloss.NewStyle().MaxWidth(contentW).Render(line)
+		}
+		lines = append(lines, border("│")+line+border("│"))
+	}
+
+	// Bottom: └───┘
+	lines = append(lines, border("└"+strings.Repeat("─", contentW)+"┘"))
+
+	// Append 1-char gap to every line (including last panel for symmetry).
+	box := strings.Join(lines, "\n")
+	gapped := strings.ReplaceAll(box, "\n", " \n") + " "
+	return gapped
+}
+
+// joinStrings concatenates pre-built panel strings side-by-side.
+// All panels already have their trailing gap char.
+func joinStrings(panels []string, height int) string {
+	allLines := make([]string, height)
+	for _, panel := range panels {
+		panelLines := strings.Split(panel, "\n")
+		for i := 0; i < height && i < len(panelLines); i++ {
+			allLines[i] += panelLines[i]
+		}
+	}
+	return strings.Join(allLines, "\n")
 }
 
 type columnView struct {
@@ -78,12 +153,12 @@ func padLine(text string, width int) string {
 	if width <= 0 {
 		return ""
 	}
-	runes := []rune(text)
-	if len(runes) > width {
-		runes = runes[:width]
+	visible := lipgloss.Width(text)
+	if visible == width {
+		return text
 	}
-	if len(runes) == width {
-		return string(runes)
+	if visible > width {
+		return lipgloss.NewStyle().MaxWidth(width).Render(text)
 	}
-	return string(runes) + strings.Repeat(" ", width-len(runes))
+	return text + strings.Repeat(" ", width-visible)
 }

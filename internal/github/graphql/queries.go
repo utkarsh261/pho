@@ -181,7 +181,7 @@ func pullRequestPreviewSelection(profile githubpkg.GitHubHostProfile) string {
 		"author { login }",
 		"reviews(first: 20) { nodes { author { login avatarUrl } state submittedAt body } }",
 		"files(first: 20) { nodes { path additions deletions } }",
-		"timelineItems(last: 1) { nodes { ... on PullRequestCommit { __typename id commit { oid messageHeadline committedDate author { user { login } } } } ... on IssueComment { __typename id body createdAt author { login } } ... on PullRequestReview { __typename id state body submittedAt author { login } } ... on MergedEvent { __typename id createdAt actor { login } commit { oid } mergeRefName } } }",
+		"timelineItems(last: 1) { nodes { ... on PullRequestCommit { __typename id commit { oid messageHeadline committedDate author { user { login } name } } } ... on IssueComment { __typename id body createdAt author { login } } ... on PullRequestReview { __typename id state body submittedAt author { login } } ... on MergedEvent { __typename id createdAt actor { login } commit { oid } mergeRefName } } }",
 		"repository { nameWithOwner }",
 	)
 	if profile.SupportsHeadRefOID {

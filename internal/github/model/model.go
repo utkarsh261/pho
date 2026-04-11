@@ -261,6 +261,7 @@ type TimelineItemNode struct {
 // TimelineAuthor matches the commit author shape used in timeline items.
 type TimelineAuthor struct {
 	User *ActorNode `json:"user"`
+	Name string     `json:"name,omitempty"` // git author name, populated when User is nil
 }
 
 // TimelineCommit captures commit metadata in timeline items.

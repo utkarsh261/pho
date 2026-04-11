@@ -5,7 +5,9 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/utk/git-term/internal/domain"
+	"github.com/utk/git-term/internal/ui/theme"
 )
 
 type tabSnapshot struct {
@@ -15,12 +17,14 @@ type tabSnapshot struct {
 }
 
 type PRListPanelModel struct {
-	Tabs   map[domain.DashboardTab]tabSnapshot
-	Active domain.DashboardTab
-	Cursor int
-	Scroll int
-	Width  int
-	Height int
+	Tabs    map[domain.DashboardTab]tabSnapshot
+	Active  domain.DashboardTab
+	Cursor  int
+	Scroll  int
+	Width   int
+	Height  int
+	theme   *theme.Theme
+	lastKey string
 }
 
 func NewPRListPanelModel() *PRListPanelModel {
@@ -36,6 +40,10 @@ func (m *PRListPanelModel) SetRect(width, height int) {
 	m.Width = width
 	m.Height = height
 	m.ensureVisible()
+}
+
+func (m *PRListPanelModel) SetTheme(th *theme.Theme) {
+	m.theme = th
 }
 
 func (m *PRListPanelModel) SetTabSnapshot(tab domain.DashboardTab, prs []domain.PullRequestSummary, totalCount int, truncated bool) {
@@ -63,6 +71,10 @@ func (m *PRListPanelModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.SetRect(msg.Width, msg.Height)
 		return m, nil
 	case tea.KeyMsg:
+		prevKey := m.lastKey
+		if msg.String() != "g" {
+			m.lastKey = ""
+		}
 		switch msg.String() {
 		case "j", "down":
 			if m.moveCursor(1) {
@@ -72,6 +84,31 @@ func (m *PRListPanelModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.moveCursor(-1) {
 				return m, m.selectCurrentCmd()
 			}
+		case "g":
+			if prevKey == "g" {
+				if m.moveCursorTo(0) {
+					return m, m.selectCurrentCmd()
+				}
+			} else {
+				m.lastKey = "g"
+			}
+			return m, nil
+		case "G":
+			prs := m.currentPRs()
+			if m.moveCursorTo(len(prs) - 1) {
+				return m, m.selectCurrentCmd()
+			}
+			return m, nil
+		case "ctrl+d":
+			if m.moveCursor(m.visibleItemCount() / 2) {
+				return m, m.selectCurrentCmd()
+			}
+			return m, nil
+		case "ctrl+u":
+			if m.moveCursor(-(m.visibleItemCount() / 2)) {
+				return m, m.selectCurrentCmd()
+			}
+			return m, nil
 		case "h", "left":
 			next := nextTab(m.Active, -1)
 			if next != m.Active {
@@ -105,11 +142,34 @@ func (m *PRListPanelModel) View() string {
 	if m.Width <= 0 || m.Height <= 0 {
 		return ""
 	}
-	lines := []string{fitLine(m.renderTabBar(), m.Width)}
+	header := "▸ PRs"
+	if m.theme != nil {
+		header = m.theme.Header.Width(m.Width).Render(header)
+	} else {
+		header = fitLine(header, m.Width)
+	}
+	lines := []string{
+		header,
+		fitLine("", m.Width),
+		fitLine(m.renderTabBarThemed(), m.Width),
+		fitLine("", m.Width),
+	}
 	rows := m.visibleRows()
-	for _, row := range rows {
+	if len(rows) == 0 {
+		empty := "No PRs in this tab"
+		if m.theme != nil {
+			empty = m.theme.MutedTxt.Render(empty)
+		}
+		lines = append(lines, fitLine(empty, m.Width))
+		lines = append(lines, fitLine("", m.Width))
+		return renderBlock(lines, m.Width, m.Height)
+	}
+	for i, row := range rows {
 		lines = append(lines, fitLine(row.line1, m.Width))
 		lines = append(lines, fitLine(row.line2, m.Width))
+		if i < len(rows)-1 {
+			lines = append(lines, fitLine("", m.Width))
+		}
 	}
 	if footer := m.footerLine(); footer != "" {
 		lines = append(lines, fitLine(footer, m.Width))
@@ -135,6 +195,25 @@ func (m *PRListPanelModel) moveCursor(delta int) bool {
 	}
 	changed := next != m.Cursor
 	m.Cursor = next
+	m.ensureVisible()
+	return changed
+}
+
+func (m *PRListPanelModel) moveCursorTo(pos int) bool {
+	prs := m.currentPRs()
+	if len(prs) == 0 {
+		m.Cursor = 0
+		m.Scroll = 0
+		return false
+	}
+	if pos < 0 {
+		pos = 0
+	}
+	if pos >= len(prs) {
+		pos = len(prs) - 1
+	}
+	changed := pos != m.Cursor
+	m.Cursor = pos
 	m.ensureVisible()
 	return changed
 }
@@ -203,27 +282,23 @@ func (m *PRListPanelModel) renderRow(pr domain.PullRequestSummary, index int) pr
 	if selected {
 		bar = "▌"
 	}
-	rowWidth := m.Width - 1
-	if rowWidth < 0 {
-		rowWidth = 0
-	}
 
-	meta := fmt.Sprintf("%s %s", ciIcon(pr.CIStatus), reviewIcon(pr.ReviewDecision, pr.IsDraft))
-	prefix := fmt.Sprintf("#%d ", pr.Number)
-	leftWidth := rowWidth - len([]rune(meta)) - len([]rune(prefix)) - 1
-	if leftWidth < 0 {
-		leftWidth = 0
+	meta := fmt.Sprintf("%s %s", m.ciIconStyled(pr.CIStatus), m.reviewIconStyled(pr.ReviewDecision, pr.IsDraft))
+	prefix := m.prNumberStyled(pr.Number)
+	minGap := 2
+	metaW := lipgloss.Width(meta)
+	titleMax := m.Width - lipgloss.Width(bar) - lipgloss.Width(prefix) - 1 - metaW - minGap
+	if titleMax < 1 {
+		titleMax = 1
 	}
-	title := truncateText(pr.Title, leftWidth)
-	line1 := strings.TrimRight(fmt.Sprintf("%s%s%s", bar, prefix, title), " ")
-	if rowWidth > len([]rune(line1)) {
-		padding := rowWidth - len([]rune(line1)) - len([]rune(meta))
-		if padding < 1 {
-			padding = 1
-		}
-		line1 += strings.Repeat(" ", padding) + meta
-	} else {
-		line1 = truncateText(line1, rowWidth)
+	title := truncateText(pr.Title, titleMax)
+	if selected && m.theme != nil {
+		title = m.theme.Bold.Render(title)
+	}
+	line1 := fmt.Sprintf("%s%s %s  %s", bar, prefix, title, meta)
+
+	if selected && m.theme != nil {
+		line1 = m.theme.SelectedRow.Render(line1)
 	}
 
 	branch := pr.HeadRefName
@@ -231,6 +306,9 @@ func (m *PRListPanelModel) renderRow(pr domain.PullRequestSummary, index int) pr
 		branch = pr.BaseRefName
 	}
 	line2 := strings.TrimRight(bar+" "+branch, " ")
+	if selected && m.theme != nil {
+		line2 = m.theme.SelectedRow.Render(m.theme.MutedTxt.Render(line2))
+	}
 	return prRow{line1: line1, line2: line2}
 }
 
@@ -245,6 +323,71 @@ func (m *PRListPanelModel) renderTabBar() string {
 		parts = append(parts, label)
 	}
 	return strings.Join(parts, " | ")
+}
+
+func (m *PRListPanelModel) renderTabBarThemed() string {
+	if m.theme == nil {
+		return m.renderTabBar()
+	}
+	parts := make([]string, 0, len(dashboardTabOrder))
+	for i, tab := range dashboardTabOrder {
+		count := len(m.currentSnapshotFor(tab).PRs)
+		label := fmt.Sprintf("%s(%d)", tabLabel(tab), count)
+		if tab == m.Active {
+			parts = append(parts, m.theme.TabActive.Render(label))
+		} else {
+			parts = append(parts, m.theme.TabInactive.Render(label))
+		}
+		if i < len(dashboardTabOrder)-1 {
+			parts = append(parts, " ")
+		}
+	}
+	return strings.Join(parts, "")
+}
+
+func (m *PRListPanelModel) ciIconStyled(status domain.CIStatus) string {
+	icon := ciIcon(status)
+	if m.theme == nil {
+		return icon
+	}
+	switch status {
+	case domain.CIStatusSuccess:
+		return m.theme.CISuccess.Render(icon)
+	case domain.CIStatusFailure, domain.CIStatusError:
+		return m.theme.CIFailure.Render(icon)
+	case domain.CIStatusPending:
+		return m.theme.CIPending.Render(icon)
+	default:
+		return m.theme.CIMuted.Render(icon)
+	}
+}
+
+func (m *PRListPanelModel) reviewIconStyled(decision domain.ReviewDecision, isDraft bool) string {
+	icon := reviewIcon(decision, isDraft)
+	if m.theme == nil {
+		return icon
+	}
+	if isDraft {
+		return m.theme.ReviewDraft.Render(icon)
+	}
+	switch decision {
+	case domain.ReviewDecisionApproved:
+		return m.theme.ReviewApproved.Render(icon)
+	case domain.ReviewDecisionChangesRequested:
+		return m.theme.ReviewChanges.Render(icon)
+	case domain.ReviewDecisionReviewRequired:
+		return m.theme.ReviewRequired.Render(icon)
+	default:
+		return m.theme.ReviewMuted.Render(icon)
+	}
+}
+
+func (m *PRListPanelModel) prNumberStyled(number int) string {
+	s := fmt.Sprintf("#%d ", number)
+	if m.theme != nil {
+		return m.theme.Number.Render(s)
+	}
+	return s
 }
 
 func (m *PRListPanelModel) currentSnapshotFor(tab domain.DashboardTab) tabSnapshot {
@@ -267,14 +410,14 @@ func (m *PRListPanelModel) footerLine() string {
 }
 
 func (m *PRListPanelModel) visibleItemCount() int {
-	if m.Height <= 2 {
+	if m.Height <= 6 {
 		return 0
 	}
-	available := m.Height - 2
+	available := m.Height - 6
 	if available < 2 {
 		return 0
 	}
-	return available / 2
+	return (available + 1) / 3
 }
 
 func (m *PRListPanelModel) ensureVisible() {

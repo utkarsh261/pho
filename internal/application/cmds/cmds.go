@@ -8,17 +8,14 @@ import (
 	"github.com/utk/git-term/internal/domain"
 )
 
-// ViewerService resolves the active viewer login for a host.
 type ViewerService interface {
 	FetchViewer(ctx context.Context, host string) (string, error)
 }
 
-// DiscoveryService discovers repositories from a filesystem root.
 type DiscoveryService interface {
 	Discover(ctx context.Context, root string) ([]domain.Repository, error)
 }
 
-// DashboardService loads repo-scoped dashboard, involving, recent, and preview snapshots.
 type DashboardService interface {
 	LoadRepo(ctx context.Context, repo domain.Repository, force bool) (domain.DashboardSnapshot, error)
 	LoadInvolving(ctx context.Context, repo domain.Repository, viewer string, force bool) (domain.InvolvingSnapshot, error)
@@ -26,7 +23,6 @@ type DashboardService interface {
 	LoadPreview(ctx context.Context, repo string, number int) (domain.PRPreviewSnapshot, error)
 }
 
-// SearchService rebuilds in-memory search indexes.
 type SearchService interface {
 	BuildPRIndex(repo domain.Repository, snap domain.DashboardSnapshot) error
 	BuildRepoIndex(repos []domain.Repository) error
@@ -88,12 +84,10 @@ type RefreshStarted struct {
 	Key string
 }
 
-// RefreshFinished clears the in-flight marker for a job key.
 type RefreshFinished struct {
 	Key string
 }
 
-// RefreshFailed records a job failure for a specific key.
 type RefreshFailed struct {
 	Key string
 	Err error
@@ -107,7 +101,6 @@ func ResolveViewerCmd(svc ViewerService, host string) tea.Cmd {
 	}
 }
 
-// DiscoverReposCmd discovers repositories from the provided root path.
 func DiscoverReposCmd(svc DiscoveryService, root string) tea.Cmd {
 	return func() tea.Msg {
 		repos, err := svc.Discover(context.Background(), root)
@@ -115,7 +108,6 @@ func DiscoverReposCmd(svc DiscoveryService, root string) tea.Cmd {
 	}
 }
 
-// LoadDashboardCmd loads the dashboard snapshot for a repository.
 func LoadDashboardCmd(svc DashboardService, repo domain.Repository, force bool) tea.Cmd {
 	return func() tea.Msg {
 		snap, err := svc.LoadRepo(context.Background(), repo, force)
@@ -123,7 +115,6 @@ func LoadDashboardCmd(svc DashboardService, repo domain.Repository, force bool) 
 	}
 }
 
-// LoadInvolvingCmd loads the involving snapshot for a repository.
 func LoadInvolvingCmd(svc DashboardService, repo domain.Repository, viewer string, force bool) tea.Cmd {
 	return func() tea.Msg {
 		snap, err := svc.LoadInvolving(context.Background(), repo, viewer, force)
@@ -131,7 +122,6 @@ func LoadInvolvingCmd(svc DashboardService, repo domain.Repository, viewer strin
 	}
 }
 
-// LoadRecentCmd loads the recent activity snapshot for a repository.
 func LoadRecentCmd(svc DashboardService, repo domain.Repository, force bool) tea.Cmd {
 	return func() tea.Msg {
 		snap, err := svc.LoadRecent(context.Background(), repo, force)
@@ -139,7 +129,6 @@ func LoadRecentCmd(svc DashboardService, repo domain.Repository, force bool) tea
 	}
 }
 
-// LoadPreviewCmd loads the preview snapshot for a single PR.
 func LoadPreviewCmd(svc DashboardService, repo string, number int) tea.Cmd {
 	return func() tea.Msg {
 		snap, err := svc.LoadPreview(context.Background(), repo, number)
@@ -147,7 +136,6 @@ func LoadPreviewCmd(svc DashboardService, repo string, number int) tea.Cmd {
 	}
 }
 
-// RebuildPRIndexCmd rebuilds the PR index for a single repository.
 func RebuildPRIndexCmd(svc SearchService, repo domain.Repository, snap domain.DashboardSnapshot) tea.Cmd {
 	return func() tea.Msg {
 		err := svc.BuildPRIndex(repo, snap)
@@ -155,7 +143,6 @@ func RebuildPRIndexCmd(svc SearchService, repo domain.Repository, snap domain.Da
 	}
 }
 
-// RebuildRepoIndexCmd rebuilds the repo search index.
 func RebuildRepoIndexCmd(svc SearchService, repos []domain.Repository) tea.Cmd {
 	return func() tea.Msg {
 		err := svc.BuildRepoIndex(repos)

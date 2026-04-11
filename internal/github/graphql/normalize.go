@@ -410,10 +410,13 @@ func actorLogin(node *model.ActorNode) string {
 }
 
 func timelineCommitAuthor(author *model.TimelineAuthor) string {
-	if author == nil || author.User == nil {
+	if author == nil {
 		return ""
 	}
-	return author.User.Login
+	if author.User != nil {
+		return author.User.Login
+	}
+	return author.Name
 }
 
 func repoIdentity(repo domain.Repository, ref *model.RepositoryRef) string {

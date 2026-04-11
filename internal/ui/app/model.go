@@ -19,6 +19,7 @@ import (
 	"github.com/utk/git-term/internal/ui/keymap"
 	"github.com/utk/git-term/internal/ui/layout"
 	"github.com/utk/git-term/internal/ui/views/dashboard"
+	"github.com/utk/git-term/internal/ui/theme"
 )
 
 // SearchService combines the interactive palette search and index rebuild APIs.
@@ -68,6 +69,7 @@ type Model struct {
 	currentRecent    domain.RecentSnapshot
 
 	hydratedRepos map[string]struct{}
+	theme         *theme.Theme
 }
 
 var dashboardFocusCycle = []domain.FocusTarget{
@@ -140,6 +142,23 @@ func NewModel(deps Dependencies) *Model {
 	return m
 }
 
+// SetTheme applies a theme to all child panel models.
+func (m *Model) SetTheme(th *theme.Theme) {
+	m.theme = th
+	m.repoPanel.SetTheme(th)
+	m.prList.SetTheme(th)
+	m.preview.SetTheme(th)
+	m.status.SetTheme(th)
+	m.palette.SetTheme(th)
+}
+
+// SetFocus changes the focused panel.
+func (m *Model) SetFocus(f domain.FocusTarget) {
+	m.previousFocus = m.focus
+	m.focus = f
+	m.syncStatus()
+}
+
 // Init kicks off startup discovery and auth bootstrap.
 func (m *Model) Init() tea.Cmd {
 	var cmdsOut []tea.Cmd
@@ -160,6 +179,9 @@ func (m *Model) Init() tea.Cmd {
 	if repo, ok := m.selectedRepo(); ok {
 		cmdsOut = append(cmdsOut, m.loadRepoCmds(repo, false)...)
 	}
+
+	// Start spinner animations.
+	cmdsOut = append(cmdsOut, m.preview.Init(), m.status.Init())
 
 	return batch(cmdsOut...)
 }
@@ -560,7 +582,12 @@ func (m *Model) handleSelectRepoMsg(msg dashboard.SelectRepoMsg) tea.Cmd {
 		return nil
 	}
 	selected := m.repoPanel.Repos[msg.Index]
-	return m.selectRepoAt(msg.Index, selected, true)
+	cmd := m.selectRepoAt(msg.Index, selected, false)
+	// Move focus to the PR list panel after selecting a repo.
+	m.focus = domain.FocusPRListPanel
+	m.previousFocus = domain.FocusRepoPanel
+	m.syncStatus()
+	return cmd
 }
 
 func (m *Model) handleSelectPRMsg(msg dashboard.SelectPRMsg) tea.Cmd {
@@ -593,6 +620,7 @@ func (m *Model) handleChangeTabMsg(msg dashboard.ChangeTabMsg) tea.Cmd {
 	m.state.Dashboard.Preview = nil
 	m.state.Dashboard.PreviewLoading = false
 	m.preview = dashboard.NewPreviewPanelModel()
+	m.preview.SetTheme(m.theme)
 	m.preview.SetRect(m.layout.Current.Preview, m.bodyHeight())
 	m.syncStatus()
 	return m.syncCurrentSelection()
@@ -798,7 +826,9 @@ func (m *Model) selectRepoAt(index int, repo domain.Repository, force bool) tea.
 	if m.deps.Viewer != nil && strings.TrimSpace(m.state.Session.ActiveHost) != "" {
 		cmdsOut = append(cmdsOut, cmds.ResolveViewerCmd(m.deps.Viewer, m.state.Session.ActiveHost))
 	}
-	cmdsOut = append(cmdsOut, m.loadRepoCmds(repo, force)...)
+	// Always use cache first (force=false). The stale-while-revalidate
+	// mechanism will schedule a background refresh if data is stale.
+	cmdsOut = append(cmdsOut, m.loadRepoCmds(repo, false)...)
 	return batch(cmdsOut...)
 }
 
@@ -897,26 +927,20 @@ func (m *Model) syncPaletteState() {
 }
 
 func (m *Model) resetDashboardsForRepo() {
-	m.currentDashboard = domain.DashboardSnapshot{}
-	m.currentInvolving = domain.InvolvingSnapshot{}
-	m.currentRecent = domain.RecentSnapshot{}
-	m.state.Dashboard.PRsByTab = map[domain.DashboardTab][]domain.PullRequestSummary{
-		domain.TabMyPRs:       {},
-		domain.TabNeedsReview: {},
-		domain.TabInvolving:   {},
-		domain.TabRecent:      {},
-	}
-	m.state.Dashboard.RecentItems = nil
+	// Do NOT clear PR data — stale cache should remain visible while fresh data loads.
+	// Only reset per-repo transient state.
+	m.state.Dashboard.SelectedIndex = 0
 	m.state.Dashboard.Preview = nil
 	m.state.Dashboard.PreviewLoading = false
+	// Clear tab counts and freshness — these are per-repo and will be
+	// repopulated when DashboardLoaded messages arrive from the cache.
 	m.state.Dashboard.TotalCount = 0
 	m.state.Dashboard.Truncated = false
-	m.state.Dashboard.FreshnessByTab = map[domain.DashboardTab]domain.Freshness{}
-	m.state.Dashboard.LastRefreshAt = map[domain.DashboardTab]time.Time{}
 }
 
 func (m *Model) resetPreviewState() {
 	m.preview = dashboard.NewPreviewPanelModel()
+	m.preview.SetTheme(m.theme)
 	m.preview.SetRect(m.layout.Current.Preview, m.bodyHeight())
 	m.state.Dashboard.Preview = nil
 	m.state.Dashboard.PreviewLoading = false
@@ -1029,10 +1053,10 @@ func (m *Model) clearErrors() {
 }
 
 func (m *Model) bodyHeight() int {
-	if m.layout.Current.Height <= 1 {
+	if m.layout.Current.Height <= 2 {
 		return 0
 	}
-	return m.layout.Current.Height - 1
+	return m.layout.Current.Height - 2
 }
 
 func nowPtr(t time.Time) *time.Time {

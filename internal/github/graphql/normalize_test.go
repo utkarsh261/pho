@@ -243,3 +243,25 @@ func testRepo() domain.Repository {
 		FullName: "myorg/myrepo",
 	}
 }
+
+func TestTimelineCommitAuthor(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		author *model.TimelineAuthor
+		want   string
+	}{
+		{name: "nil author", author: nil, want: ""},
+		{name: "user login preferred", author: &model.TimelineAuthor{User: &model.ActorNode{Login: "octocat"}, Name: "Octo Cat"}, want: "octocat"},
+		{name: "git name fallback when user nil", author: &model.TimelineAuthor{User: nil, Name: "Utkarsh Sharma"}, want: "Utkarsh Sharma"},
+		{name: "both empty", author: &model.TimelineAuthor{User: nil, Name: ""}, want: ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := timelineCommitAuthor(tc.author); got != tc.want {
+				t.Errorf("timelineCommitAuthor() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

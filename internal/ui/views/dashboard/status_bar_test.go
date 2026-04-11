@@ -26,13 +26,16 @@ func TestStatusBarFocusLoadingAndAuthError(t *testing.T) {
 		"o: Open browser",
 		"r: Refresh",
 		"Tab: Next panel",
-		"loading",
 		"stale",
 		"auth:",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("expected %q in %q", want, view)
 		}
+	}
+	// Spinner uses ∙ (Points) or ⣾ (Dot) characters.
+	if !strings.ContainsAny(view, "∙⣾") {
+		t.Fatalf("expected spinner loading indicator in %q", view)
 	}
 }
 
