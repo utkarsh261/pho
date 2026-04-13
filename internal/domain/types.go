@@ -178,6 +178,10 @@ type PRPreviewSnapshot struct {
 	Deletions      int
 	TopFiles       []PreviewFileStat
 	LatestActivity *ActivitySnippet
+	Labels         []Label         // NEW: PR labels
+	Assignees      []string        // NEW: assignee logins (already in summary, added to preview)
+	Mergeable      string          // NEW: MERGEABLE, CONFLICTING, UNKNOWN
+	MergeState     string          // NEW: behind, blocked, clean, dirty, etc.
 }
 
 type ActivityItem struct {
@@ -350,6 +354,7 @@ type PrimaryView string
 
 const (
 	PrimaryViewDashboard PrimaryView = "dashboard"
+	PrimaryViewPRDetail  PrimaryView = "pr_detail"
 )
 
 type OverlayView string
@@ -366,3 +371,75 @@ const (
 	FocusPreviewPanel FocusTarget = "preview_panel"
 	FocusCmdPalette   FocusTarget = "cmd_palette"
 )
+
+// ---- PR Detail domain types (Phase 2) ----
+
+// PRChecks represents the CI/checks status for a PR.
+type PRChecks struct {
+	State    string         // SUCCESS, FAILURE, PENDING, ERROR
+	Contexts []CheckContext
+}
+
+// CheckContext represents a single CI check.
+type CheckContext struct {
+	Name       string
+	State      string // COMPLETED, IN_PROGRESS, QUEUED, WAITING
+	Conclusion string // SUCCESS, FAILURE, NEUTRAL, SKIPPED
+}
+
+// Label is a GitHub label.
+type Label struct {
+	Name  string
+	Color string // rendered in Phase 3 (background tint)
+}
+
+// User is a minimal GitHub user.
+type User struct {
+	Login string
+}
+
+// Reviewer is a review participant with their review state.
+type Reviewer struct {
+	Login string
+	State string // APPROVED, CHANGES_REQUESTED, COMMENTED, etc.
+}
+
+// ReviewRequest represents a pending review request.
+type ReviewRequest struct {
+	Login  string
+	IsTeam bool
+}
+
+// PRDetailSection enumerates the three sections in the content viewport.
+type PRDetailSection int
+
+const (
+	SectionDescription PRDetailSection = iota
+	SectionDiff
+	SectionComments
+)
+
+// SectionState tracks the load status of a single content section.
+// Reserved for future use when sections are rendered independently.
+type SectionState struct {
+	Loaded  bool
+	Loading bool
+	Error   error
+}
+
+// PRDetailState is the planned state container for the PR detail view.
+// Currently unused — PRDetailModel manages its own parallel state.
+// Kept as a type alias target for when the view layer is refactored.
+type PRDetailState struct {
+	Repo     string
+	Number   int
+	Summary  PullRequestSummary // extended via FetchPreview (labels, assignees)
+	Reviews  []PreviewReviewer  // from FetchPreview reviews(first:20)
+	Checks   []PreviewCheckRow  // from FetchPreview statusCheckRollup
+	// Sections map[PRDetailSection]*SectionState — deferred until section-level
+	// loading is implemented. PRDetailModel currently uses parallel bool fields.
+}
+
+// FocusPRDetail is the internal focus target for PR detail view.
+// It is NOT added to the dashboard focus cycle.
+const FocusPRDetail FocusTarget = "pr_detail"

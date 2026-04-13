@@ -93,6 +93,9 @@ func (m *PreviewPanelModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, spinCmd
 	case SelectPRMsg:
+		// Check if we're selecting the same PR that's already pending fetch.
+		samePR := m.selectedRepo == msg.Repo && m.selectedNumber == msg.Number
+
 		m.selectedRepo = msg.Repo
 		m.selectedNumber = msg.Number
 		summary := msg.Summary
@@ -101,7 +104,10 @@ func (m *PreviewPanelModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Loading = true
 		m.Scroll = 0
 		m.DebounceGeneration++
-		if m.PendingFetch {
+
+		// If we're already waiting to fetch the same PR, skip scheduling another.
+		// But if the PR changed, schedule a new fetch.
+		if m.PendingFetch && samePR {
 			return m, spinCmd
 		}
 		m.PendingFetch = true
@@ -227,6 +233,15 @@ func (m *PreviewPanelModel) buildLines() []string {
 		lines = append(lines, "", m.divider(), m.sectionHeader("Top files:"))
 		for _, file := range snap.TopFiles {
 			lines = append(lines, "  "+m.fileLine(file))
+		}
+		// "+N more files" when FileCount > len(TopFiles)
+		if snap.FileCount > len(snap.TopFiles) {
+			more := snap.FileCount - len(snap.TopFiles)
+			if m.theme != nil {
+				lines = append(lines, "  "+m.theme.MutedTxt.Render(fmt.Sprintf("+%d more files", more)))
+			} else {
+				lines = append(lines, fmt.Sprintf("  +%d more files", more))
+			}
 		}
 	}
 

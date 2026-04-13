@@ -196,11 +196,6 @@ func TestLoadRepoForceRefreshUpdatesCache(t *testing.T) {
 	}
 }
 
-// TestStaleWhileRevalidateDoesNotCascade is the core regression guard for
-// network call spam: a stale cache hit schedules exactly one background
-// refresh, and that background refresh must NOT schedule another one.
-// If force=true accidentally passed a non-nil scheduleRefresh callback, the
-// background goroutine would re-trigger itself indefinitely.
 func TestStaleWhileRevalidateDoesNotCascade(t *testing.T) {
 	t.Parallel()
 
@@ -268,8 +263,6 @@ func TestStaleWhileRevalidateDoesNotCascade(t *testing.T) {
 	}
 }
 
-// TestForceRefreshNeverSpawnsBackground ensures that force=true never
-// schedules a background goroutine regardless of cache state.
 func TestForceRefreshNeverSpawnsBackground(t *testing.T) {
 	t.Parallel()
 

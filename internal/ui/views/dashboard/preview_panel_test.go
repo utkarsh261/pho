@@ -329,3 +329,50 @@ func makeFileStat(n int) []domain.PreviewFileStat {
 	}
 	return out
 }
+
+// TestPreviewPanelMoreFilesLine verifies that when FileCount > len(TopFiles),
+// the preview panel shows a "+N more files" line in muted text.
+func TestPreviewPanelMoreFilesLine(t *testing.T) {
+	t.Parallel()
+
+	m := NewPreviewPanelModel()
+	m.SetTheme(theme.Default())
+	m.preview = &domain.PRPreviewSnapshot{
+		Repo:       "org/repo",
+		Number:     1,
+		Title:      "PR with many files",
+		Author:     "alice",
+		FileCount:  25,
+		TopFiles:   makeFileStat(20), // TopFiles capped at 20
+	}
+	// Height 40: enough to show header (~10) + 20 files + "+N more files" line.
+	m.SetRect(80, 40)
+
+	view := m.View()
+	if !strings.Contains(view, "+5 more files") {
+		t.Errorf("expected '+5 more files' in preview, got:\n%s", view)
+	}
+}
+
+// TestPreviewPanelNoMoreFilesWhenUnderCap verifies that when FileCount <= len(TopFiles),
+// no "+N more files" line is shown.
+func TestPreviewPanelNoMoreFilesWhenUnderCap(t *testing.T) {
+	t.Parallel()
+
+	m := NewPreviewPanelModel()
+	m.SetTheme(theme.Default())
+	m.preview = &domain.PRPreviewSnapshot{
+		Repo:     "org/repo",
+		Number:   1,
+		Title:    "Small PR",
+		Author:   "alice",
+		FileCount: 5,
+		TopFiles: makeFileStat(5),
+	}
+	m.SetRect(80, 30)
+
+	view := m.View()
+	if strings.Contains(view, "more files") {
+		t.Errorf("expected no '+N more files' when under cap, got:\n%s", view)
+	}
+}

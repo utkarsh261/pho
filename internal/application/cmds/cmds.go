@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/utk/git-term/internal/diff/model"
 	"github.com/utk/git-term/internal/domain"
 )
 
@@ -26,6 +27,27 @@ type DashboardService interface {
 type SearchService interface {
 	BuildPRIndex(repo domain.Repository, snap domain.DashboardSnapshot) error
 	BuildRepoIndex(repos []domain.Repository) error
+}
+
+type PRService interface {
+	LoadDetail(ctx context.Context, repo domain.Repository, number int, force bool) (domain.PRPreviewSnapshot, bool, error)
+	LoadDiff(ctx context.Context, repo domain.Repository, number int, headSHA string, force bool) (model.DiffModel, bool, error)
+}
+
+type PRDetailLoaded struct {
+	Repo      string
+	Number    int
+	Detail    domain.PRPreviewSnapshot
+	FromCache bool
+	Err       error
+}
+
+type DiffLoaded struct {
+	Repo      string
+	Number    int
+	Diff      model.DiffModel
+	FromCache bool
+	Err       error
 }
 
 // ViewerResolved is emitted when viewer resolution completes.
@@ -158,4 +180,30 @@ func repoKey(repo domain.Repository) string {
 		return repo.Owner + "/" + repo.Name
 	}
 	return repo.Name
+}
+
+func LoadPRDetailCmd(svc PRService, repo domain.Repository, number int, force bool) tea.Cmd {
+	return func() tea.Msg {
+		detail, fromCache, err := svc.LoadDetail(context.Background(), repo, number, force)
+		return PRDetailLoaded{
+			Repo:      repoKey(repo),
+			Number:    number,
+			Detail:    detail,
+			FromCache: fromCache,
+			Err:       err,
+		}
+	}
+}
+
+func LoadDiffCmd(svc PRService, repo domain.Repository, number int, headSHA string, force bool) tea.Cmd {
+	return func() tea.Msg {
+		diff, fromCache, err := svc.LoadDiff(context.Background(), repo, number, headSHA, force)
+		return DiffLoaded{
+			Repo:      repoKey(repo),
+			Number:    number,
+			Diff:      diff,
+			FromCache: fromCache,
+			Err:       err,
+		}
+	}
 }
