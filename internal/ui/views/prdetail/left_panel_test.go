@@ -365,9 +365,9 @@ func TestLayoutBelow80ColsHidesSidebar(t *testing.T) {
 	if !strings.Contains(output, "files changed") {
 		t.Errorf("expected 'files changed' summary at <80 cols, output:\n%s", output)
 	}
-	// File list box borders should NOT appear.
-	if strings.Contains(output, "┌") {
-		t.Errorf("expected no sidebar box-border at <80 cols, output:\n%s", output)
+	// Sidebar should not appear.
+	if strings.Contains(output, "FILES") {
+		t.Errorf("expected no sidebar at <80 cols, output:\n%s", output)
 	}
 }
 

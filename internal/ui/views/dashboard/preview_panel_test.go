@@ -53,7 +53,7 @@ func TestPreviewPanelRenderSnapshot(t *testing.T) {
 		"2026-04-09 12:30 IST",
 		"2026-04-09 13:45 IST",
 		"...",
-		"+120 -12 cmd/main.go",
+		"cmd/main.go" + strings.Repeat(" ", 73) + "    +120 -12",
 		"Latest activity:",
 		"comment by bob",
 	}

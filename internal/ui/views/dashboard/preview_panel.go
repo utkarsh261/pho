@@ -134,6 +134,18 @@ func (m *PreviewPanelModel) View() string {
 	if m.Width <= 0 || m.Height <= 0 {
 		return ""
 	}
+	
+	innerW := m.Width - 2
+	if innerW < 1 {
+		innerW = 1
+	}
+
+	oldW := m.Width
+	m.Width = innerW
+	defer func() { m.Width = oldW }()
+
+	padStyle := lipgloss.NewStyle().Padding(0, 1)
+
 	lines := m.buildLines()
 	if len(lines) == 0 {
 		// No PR selected — show "PREVIEW" header + underline + empty message
@@ -142,7 +154,7 @@ func (m *PreviewPanelModel) View() string {
 			if m.theme != nil {
 				msg = m.theme.MutedTxt.Render(msg)
 			}
-			return renderBlock([]string{msg}, m.Width, m.Height)
+			return padStyle.Render(renderBlock([]string{msg}, innerW, m.Height))
 		}
 		header := "PREVIEW"
 		if m.theme != nil {
@@ -150,15 +162,15 @@ func (m *PreviewPanelModel) View() string {
 		}
 		underline := ""
 		if m.theme != nil {
-			underline = m.theme.Divider.Render(strings.Repeat("─", m.Width))
+			underline = m.theme.Divider.Render(strings.Repeat("─", innerW))
 		} else {
-			underline = strings.Repeat("─", m.Width)
+			underline = strings.Repeat("─", innerW)
 		}
 		empty := "Select a PR to preview"
 		if m.theme != nil {
 			empty = m.theme.MutedTxt.Render(empty)
 		}
-		return renderBlock([]string{header, underline, "", empty}, m.Width, m.Height)
+		return padStyle.Render(renderBlock([]string{header, underline, "", empty}, innerW, m.Height))
 	}
 	if m.Scroll < 0 {
 		m.Scroll = 0
@@ -171,7 +183,7 @@ func (m *PreviewPanelModel) View() string {
 		end = len(lines)
 	}
 	visible := append([]string(nil), lines[m.Scroll:end]...)
-	return renderBlock(visible, m.Width, m.Height)
+	return padStyle.Render(renderBlock(visible, innerW, m.Height))
 }
 
 func (m *PreviewPanelModel) buildLines() []string {
@@ -316,15 +328,40 @@ func (m *PreviewPanelModel) updatedLine(snap domain.PRPreviewSnapshot) string {
 }
 
 func (m *PreviewPanelModel) fileLine(file domain.PreviewFileStat) string {
-	addStr := fmt.Sprintf("+%d", file.Additions)
-	delStr := fmt.Sprintf("-%d", file.Deletions)
-	// "  " indent (added by caller) + addStr + " " + delStr + " " + path + 1 margin
-	overhead := 2 + len(addStr) + 1 + len(delStr) + 1 + 1
-	path := truncatePathLeft(file.Path, maxWidth(m.Width-overhead, 1))
-	if m.theme != nil {
-		return m.theme.Additions.Render(addStr) + " " + m.theme.Deletions.Render(delStr) + " " + path
+	statsWidth := 12
+	budget := m.Width - 2 // caller prefixes "  "
+	pathBudget := budget - statsWidth
+	if pathBudget < 5 {
+		pathBudget = 5
 	}
-	return addStr + " " + delStr + " " + path
+	
+	path := truncatePathLeft(file.Path, pathBudget)
+	
+	pathLen := len([]rune(path))
+	pad := pathBudget - pathLen
+	
+	addPart := fmt.Sprintf("+%d", file.Additions)
+	delPart := fmt.Sprintf("-%d", file.Deletions)
+	visibleLen := len([]rune(addPart)) + 1 + len([]rune(delPart))
+	statsBudget := statsWidth - 1 // 1 for forced leading space padding
+	
+	var statsStr string
+	if visibleLen > statsBudget {
+		if m.theme != nil {
+			statsStr = " " + m.theme.Additions.Render(addPart) + " " + m.theme.Deletions.Render(delPart)
+		} else {
+			statsStr = fmt.Sprintf(" %s %s", addPart, delPart)
+		}
+	} else {
+		statsPad := statsBudget - visibleLen
+		if m.theme != nil {
+			statsStr = " " + strings.Repeat(" ", statsPad) + m.theme.Additions.Render(addPart) + " " + m.theme.Deletions.Render(delPart)
+		} else {
+			statsStr = " " + strings.Repeat(" ", statsPad) + addPart + " " + delPart
+		}
+	}
+
+	return path + strings.Repeat(" ", pad) + statsStr
 }
 
 func (m *PreviewPanelModel) activityLine(act *domain.ActivitySnippet) string {
