@@ -53,8 +53,8 @@ func (m *LeftPanelModel) View(height int, spinnerFrame string) string {
 	}
 	ciH := computeCIHeight(height, len(m.Checks))
 	filesH := height - ciH
-	if filesH < 3 {
-		filesH = 3
+	if filesH < 5 {
+		filesH = 5
 	}
 
 	filesView := m.renderFilesArea(filesH, spinnerFrame)
@@ -69,9 +69,22 @@ func (m *LeftPanelModel) View(height int, spinnerFrame string) string {
 // outerHeight includes the top and bottom border rows.
 func (m *LeftPanelModel) renderFilesArea(outerHeight int, spinnerFrame string) string {
 	borderColor := m.borderColorFor(FocusFiles)
-	innerH := outerHeight - 2 // subtract top + bottom border
+	innerH := outerHeight - 4 // subtract top border, title, mid border, bottom border
 	if innerH < 1 {
 		innerH = 1
+	}
+
+	tabLabel := "FILES"
+	if m.theme != nil {
+		if m.Focus == FocusFiles {
+			tabLabel = m.theme.TabActive.Render(tabLabel)
+		} else {
+			tabLabel = m.theme.TabInactive.Render(tabLabel)
+		}
+	} else {
+		if m.Focus == FocusFiles {
+			tabLabel = "[" + tabLabel + "]"
+		}
 	}
 
 	var rows []string
@@ -81,12 +94,21 @@ func (m *LeftPanelModel) renderFilesArea(outerHeight int, spinnerFrame string) s
 		rows = m.fileRows(innerH)
 	}
 
-	return lipgloss.NewStyle().
+	headBox := lipgloss.NewStyle().
+		Border(panelHeadBorder).
+		BorderForeground(borderColor).
+		Width(lpInner).
+		Render(tabLabel)
+
+	bodyBox := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder()).
+		BorderTop(false).
 		BorderForeground(borderColor).
 		Width(lpInner).
 		Height(innerH).
 		Render(strings.Join(rows, "\n"))
+
+	return lipgloss.JoinVertical(lipgloss.Left, headBox, bodyBox)
 }
 
 // spinnerRows returns innerH rows with a centered spinner in the middle row.
@@ -107,7 +129,7 @@ func (m *LeftPanelModel) spinnerRows(innerH int, spinnerFrame string) []string {
 	return rows
 }
 
-// fileRows returns up to innerH rendered file rows, respecting FilesScroll.
+// fileRows returns up to innerH rendered file rows, respecting FilesScroll, with double spacing.
 func (m *LeftPanelModel) fileRows(innerH int) []string {
 	if len(m.Files) == 0 {
 		rows := make([]string, innerH)
@@ -122,15 +144,27 @@ func (m *LeftPanelModel) fileRows(innerH int) []string {
 		return rows
 	}
 
-	scroll := clamp(m.FilesScroll, 0, max(0, len(m.Files)-innerH))
-	rows := make([]string, innerH)
-	for i := range rows {
+	visibleItems := innerH
+	if visibleItems < 1 {
+		visibleItems = 1
+	}
+
+	scroll := clamp(m.FilesScroll, 0, max(0, len(m.Files)-visibleItems))
+	var rows []string
+	
+	for i := 0; i < visibleItems; i++ {
 		fileIdx := scroll + i
 		if fileIdx >= len(m.Files) {
-			rows[i] = strings.Repeat(" ", lpInner)
-			continue
+			break
 		}
-		rows[i] = m.renderFileRow(m.Files[fileIdx], fileIdx)
+		rows = append(rows, m.renderFileRow(m.Files[fileIdx], fileIdx))
+	}
+
+	for len(rows) < innerH {
+		rows = append(rows, strings.Repeat(" ", lpInner))
+	}
+	if len(rows) > innerH {
+		rows = rows[:innerH]
 	}
 	return rows
 }
@@ -181,28 +215,60 @@ func formatFileStatsColored(additions, deletions int, th *theme.Theme) string {
 
 func (m *LeftPanelModel) renderCIArea(outerHeight int) string {
 	borderColor := m.borderColorFor(FocusCI)
-	innerH := outerHeight - 2
+	innerH := outerHeight - 4 // subtract top, title, mid, bottom borders
 	if innerH < 1 {
 		innerH = 1
 	}
 
-	scroll := clamp(m.CIScroll, 0, max(0, len(m.Checks)-innerH))
-	rows := make([]string, innerH)
-	for i := range rows {
-		checkIdx := scroll + i
-		if checkIdx >= len(m.Checks) {
-			rows[i] = strings.Repeat(" ", lpInner)
-			continue
+	tabLabel := "CI"
+	if m.theme != nil {
+		if m.Focus == FocusCI {
+			tabLabel = m.theme.TabActive.Render(tabLabel)
+		} else {
+			tabLabel = m.theme.TabInactive.Render(tabLabel)
 		}
-		rows[i] = m.renderCIRow(m.Checks[checkIdx])
+	} else {
+		if m.Focus == FocusCI {
+			tabLabel = "[" + tabLabel + "]"
+		}
 	}
 
-	return lipgloss.NewStyle().
+	visibleItems := innerH
+	if visibleItems < 1 {
+		visibleItems = 1
+	}
+
+	scroll := clamp(m.CIScroll, 0, max(0, len(m.Checks)-visibleItems))
+	var rows []string
+	for i := 0; i < visibleItems; i++ {
+		checkIdx := scroll + i
+		if checkIdx >= len(m.Checks) {
+			break
+		}
+		rows = append(rows, m.renderCIRow(m.Checks[checkIdx]))
+	}
+	for len(rows) < innerH {
+		rows = append(rows, strings.Repeat(" ", lpInner))
+	}
+	if len(rows) > innerH {
+		rows = rows[:innerH]
+	}
+
+	headBox := lipgloss.NewStyle().
+		Border(panelHeadBorder).
+		BorderForeground(borderColor).
+		Width(lpInner).
+		Render(tabLabel)
+
+	bodyBox := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder()).
+		BorderTop(false).
 		BorderForeground(borderColor).
 		Width(lpInner).
 		Height(innerH).
 		Render(strings.Join(rows, "\n"))
+
+	return lipgloss.JoinVertical(lipgloss.Left, headBox, bodyBox)
 }
 
 func (m *LeftPanelModel) renderCIRow(check domain.PreviewCheckRow) string {

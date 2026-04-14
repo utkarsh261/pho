@@ -150,41 +150,34 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 	}
 }
 
-// View renders the PR detail view.
-// Returns exactly m.Height rows (status bar is composed separately by the root model).
 func (m *PRDetailModel) View() string {
 	if m.Width <= 0 || m.Height <= 0 {
 		return ""
 	}
 
-	// The view is structured as:
-	//   row 0: header
-	//   row 1: section buttons
-	//   rows 2..m.Height-1: two-panel body
 	headerRow := m.renderHeader()
-	sectionRow := m.renderSectionButtons()
-	bodyH := m.Height - 2
+
+	bodyH := m.Height - 3
 	if bodyH < 1 {
 		bodyH = 1
 	}
 
 	var body string
 	if m.Width >= MinWidthForSidebar {
-		rightWidth := m.Width - LeftPanelWidth
+		rightWidth := m.Width - LeftPanelWidth - 2
 		if rightWidth < 10 {
 			rightWidth = 10
 		}
 		leftView := m.leftPanel.View(bodyH, m.spinner.View())
 		rightView := m.renderRightViewport(rightWidth, bodyH)
-		body = lipgloss.JoinHorizontal(lipgloss.Top, leftView, rightView)
+		body = lipgloss.JoinHorizontal(lipgloss.Top, leftView, "  ", rightView)
 	} else {
 		body = m.renderNarrowBody(m.Width, bodyH)
 	}
 
-	return headerRow + "\n" + sectionRow + "\n" + body
+	return headerRow + "\n" + body
 }
 
-// renderHeader builds the single-row header with PR title, number, state, author.
 func (m *PRDetailModel) renderHeader() string {
 	s := m.Summary
 	state := string(s.State)
@@ -195,64 +188,145 @@ func (m *PRDetailModel) renderHeader() string {
 	if title == "" {
 		title = "(no title)"
 	}
-	maxTitle := m.Width - 40
+	shortcuts := "[o: Browser | Esc: Back]"
+	maxTitle := m.Width - 40 - len(shortcuts)
 	if maxTitle < 10 {
 		maxTitle = 10
 	}
 	if len([]rune(title)) > maxTitle {
 		title = string([]rune(title)[:maxTitle-1]) + "…"
 	}
-	return fmt.Sprintf("%s #%d  [%s]  %s  %s", title, s.Number, state, s.Author, s.Repo)
+	
+	info := fmt.Sprintf("#%d %s <%s> <%s>", s.Number, title, s.Author, state)
+	
+	innerW := m.Width - 2
+	if innerW < 1 {
+		innerW = 1
+	}
+
+	pad := innerW - lipgloss.Width(info) - lipgloss.Width(shortcuts)
+	if pad < 0 {
+		pad = 0
+	}
+	content := info + strings.Repeat(" ", pad) + shortcuts
+
+	var borderColor lipgloss.Color
+	if m.theme != nil {
+		borderColor = m.theme.Border
+	} else {
+		borderColor = theme.Default().Border
+	}
+
+	return lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(borderColor).
+		Width(innerW).
+		Render(content)
 }
 
-// renderSectionButtons renders scroll-spy section labels (purely visual indicators).
-func (m *PRDetailModel) renderSectionButtons() string {
-	return "  Desc | Diff | Comments"
-}
 
-// renderRightViewport renders the content viewport into width × height.
+
 func (m *PRDetailModel) renderRightViewport(width, height int) string {
-	var lines []string
+	innerH := height - 4
+	if innerH < 1 {
+		innerH = 1
+	}
+	innerW := width - 2
+	if innerW < 1 {
+		innerW = 1
+	}
 
-	lines = append(lines, m.sectionDivider("Description", width))
+	contentH := innerH - 2
+	if contentH < 1 {
+		contentH = 1
+	}
+
+	var contentLines []string
+
+	contentLines = append(contentLines, "Description")
 
 	if m.Detail != nil && strings.TrimSpace(m.Detail.BodyExcerpt) != "" {
-		bodyLines := wrapParagraph(m.Detail.BodyExcerpt, max(width-2, 1))
+		bodyLines := wrapParagraph(m.Detail.BodyExcerpt, innerW)
 		for _, l := range bodyLines {
-			lines = append(lines, "  "+l)
+			contentLines = append(contentLines, l)
 		}
 	} else if !m.DetailLoading {
-		lines = append(lines, "  No description provided.")
+		contentLines = append(contentLines, "No description provided.")
 	} else {
-		lines = append(lines, "  Loading…")
+		contentLines = append(contentLines, "Loading…")
 	}
 
-	lines = append(lines, m.sectionDivider("Diff", width))
+	contentLines = append(contentLines, "")
+	contentLines = append(contentLines, strings.Repeat("─", innerW))
 
 	if m.DiffLoading {
-		lines = append(lines, "  ⠋ Loading diff…")
+		contentLines = append(contentLines, "⠋ Loading diff…")
 	} else if m.Diff == nil || len(m.Diff.Files) == 0 {
-		lines = append(lines, "  No changes")
+		contentLines = append(contentLines, "No changes")
 	} else {
 		stats := m.Diff.Stats
-		lines = append(lines, fmt.Sprintf("  %d file(s), +%d -%d", stats.TotalFiles, stats.TotalAdditions, stats.TotalDeletions))
+		contentLines = append(contentLines, fmt.Sprintf("%d file(s), +%d -%d", stats.TotalFiles, stats.TotalAdditions, stats.TotalDeletions))
 	}
 
-	// Slice and precisely pad to height using dashboard logic
 	start := m.ContentScroll
 	if start < 0 {
 		start = 0
 	}
-	end := start + height
-	if end > len(lines) {
-		end = len(lines)
-	}
-	var visible []string
-	if start < len(lines) {
-		visible = append([]string(nil), lines[start:end]...)
+	end := start + contentH
+	if end > len(contentLines) {
+		end = len(contentLines)
 	}
 
-	return renderBlock(visible, width, height)
+	var visible []string
+	if start < len(contentLines) {
+		visible = append([]string(nil), contentLines[start:end]...)
+	}
+
+	var tabDesc, tabDiff, tabComments string
+	if m.theme != nil {
+		tabDesc = m.theme.TabActive.Render("● Desc")
+		tabDiff = m.theme.TabInactive.Render("Diff")
+		tabComments = m.theme.TabInactive.Render("Comments")
+	} else {
+		tabDesc = "[ ● Desc ]"
+		tabDiff = "Diff"
+		tabComments = "Comments"
+	}
+	tabsStr := tabDesc + " " + tabDiff + " " + tabComments
+
+	contentStr := renderBlock(visible, innerW, contentH)
+
+	var borderColor lipgloss.Color
+	if m.theme != nil {
+		borderColor = m.theme.Border
+	} else {
+		borderColor = theme.Default().Border
+	}
+
+	// Active focus color
+	if m.leftPanel.Focus == FocusContent {
+		if m.theme != nil {
+			borderColor = m.theme.Primary
+		} else {
+			borderColor = theme.Default().Primary
+		}
+	}
+
+	headBox := lipgloss.NewStyle().
+		Border(panelHeadBorder).
+		BorderForeground(borderColor).
+		Width(innerW).
+		Render(tabsStr)
+
+	bodyBox := lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder()).
+		BorderTop(false).
+		BorderForeground(borderColor).
+		Width(innerW).
+		Height(innerH).
+		Render(contentStr)
+
+	return lipgloss.JoinVertical(lipgloss.Left, headBox, bodyBox)
 }
 
 // renderNarrowBody renders the body for terminals < 80 cols (no sidebar).
@@ -273,12 +347,7 @@ func (m *PRDetailModel) renderNarrowBody(width, height int) string {
 	return top + "\n" + body
 }
 
-// sectionDivider renders a section header line with a separator.
-func (m *PRDetailModel) sectionDivider(name string, width int) string {
-	label := fmt.Sprintf("── %s ", name)
-	rest := strings.Repeat("─", max(0, width-len(label)-2))
-	return "  " + label + rest
-}
+
 
 // handleKey routes keyboard input within the PR detail view.
 func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
@@ -503,10 +572,11 @@ func (m *PRDetailModel) contentVisibleHeight() int {
 func (m *PRDetailModel) ciVisibleRows() int {
 	ciH := computeCIHeight(m.bodyHeight(), len(m.leftPanel.Checks))
 	inner := ciH - 2
-	if inner < 1 {
-		return 1
+	contentH := inner - 2
+	if contentH < 1 {
+		contentH = 1
 	}
-	return inner
+	return contentH
 }
 
 // maxContentScroll returns the maximum content scroll value.
@@ -533,13 +603,16 @@ func (m *PRDetailModel) clampContentScroll() {
 }
 
 // ensureFileVisible scrolls FilesScroll so FileIndex is visible.
+// Accounts for top border constraints and Tab spacing.
 func (m *PRDetailModel) ensureFileVisible() {
 	filesH := m.bodyHeight() - computeCIHeight(m.bodyHeight(), len(m.leftPanel.Checks))
 	innerH := max(1, filesH-2)
+	contentH := max(1, innerH-2)
+	
 	if m.leftPanel.FileIndex < m.leftPanel.FilesScroll {
 		m.leftPanel.FilesScroll = m.leftPanel.FileIndex
-	} else if m.leftPanel.FileIndex >= m.leftPanel.FilesScroll+innerH {
-		m.leftPanel.FilesScroll = m.leftPanel.FileIndex - innerH + 1
+	} else if m.leftPanel.FileIndex >= m.leftPanel.FilesScroll+contentH {
+		m.leftPanel.FilesScroll = m.leftPanel.FileIndex - contentH + 1
 	}
 }
 

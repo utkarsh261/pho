@@ -7,6 +7,17 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+var panelHeadBorder = lipgloss.Border{
+	Top:         "─",
+	Bottom:      "─",
+	Left:        "│",
+	Right:       "│",
+	TopLeft:     "┌",
+	TopRight:    "┐",
+	BottomLeft:  "├",
+	BottomRight: "┤",
+}
+
 const (
 	// LeftPanelWidth is the fixed OUTER width of the left panel (including 1-char side borders).
 	LeftPanelWidth = 30
@@ -70,21 +81,25 @@ func formatFileStats(additions, deletions int) string {
 	return " " + strings.Repeat(" ", pad) + string(inner)
 }
 
-// computeCIHeight returns the outer row count to allocate for the CI sub-area
-// (including border rows and the heading row). Returns 0 when numChecks == 0.
-// Min 3, max floor(viewportHeight × 0.3).
 func computeCIHeight(viewportHeight, numChecks int) int {
 	if numChecks == 0 {
 		return 0
 	}
-	maxH := int(float64(viewportHeight) * 0.3)
-	if maxH < 3 {
-		maxH = 3
+	if viewportHeight < 10 {
+		return 0
 	}
-	// 2 border rows + actual check rows (at least 1 visible row).
-	h := 2 + numChecks
-	if h < 3 {
-		h = 3
+	maxH := int(float64(viewportHeight) * 0.3)
+	if maxH < 5 {
+		maxH = 5
+	}
+	contentH := numChecks
+	if contentH < 1 {
+		contentH = 1
+	}
+	// 4 overhead rows + actual list rows
+	h := 4 + contentH
+	if h < 5 {
+		h = 5
 	}
 	if h > maxH {
 		h = maxH
