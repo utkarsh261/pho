@@ -210,3 +210,39 @@ func containsLineWithPrefix(text string, spaces int) bool {
 	}
 	return false
 }
+
+// TestOverlayFullUIRender locks the structural bounds of the overlay View output:
+// box borders are present, the title is centered, results are rendered, and the
+// box is horizontally indented by the correct left-padding amount.
+// Assertions are substring-based so they hold both before and after the
+// lipgloss.Place centering refactoring (which changes right/bottom padding but
+// not box content or left alignment).
+func TestOverlayFullUIRender(t *testing.T) {
+	m := NewModel(nil)
+	m.width = 80
+	m.height = 24
+	m.SetResults([]domain.SearchResult{
+		{Kind: domain.SearchResultRepo, Repo: "org/alpha", Title: "Alpha repo"},
+		{Kind: domain.SearchResultPR, Repo: "org/beta", Number: 7, Title: "Fix login flow"},
+	})
+
+	view := m.View()
+
+	// Box borders: boxW = round(80*0.6) = 48, innerW = 46 dashes.
+	assertContains(t, view, "┌──────────────────────────────────────────────┐")
+	assertContains(t, view, "└──────────────────────────────────────────────┘")
+
+	// Title is centered within the 46-char box interior:
+	// "Command Palette" is 15 chars → 15 left-pad + 16 right-pad.
+	assertContains(t, view, "│               Command Palette                │")
+
+	// Query prefix and results.
+	assertContains(t, view, "Query:")
+	assertContains(t, view, "REPO org/alpha - Alpha repo")
+	assertContains(t, view, "PR #7 org/beta - Fix login flow")
+
+	// Box must be horizontally centered: leftPad = (80-48)/2 = 16 spaces.
+	if !containsLineWithPrefix(view, 16) {
+		t.Fatalf("expected box lines to carry 16-space left indent, view:\n%s", view)
+	}
+}

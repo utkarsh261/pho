@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/utk/git-term/internal/domain"
 	"github.com/utk/git-term/internal/testutil"
@@ -109,6 +110,84 @@ func TestLayoutRendersCorrectStructureAtVariousSizes(t *testing.T) {
 				t.Fatalf("expected ~%d lines (got %d), output:\n%s", sc.height, len(lines), output)
 			}
 		})
+	}
+}
+
+// TestAppRenderFullUIRender locks the grid structure of buildBox and the
+// multi-panel renderDashboard output.
+//
+// buildBox assertions use exact string snapshots captured from the pre-refactor
+// implementation; these must survive the transition from manual strings.Repeat
+// padding to lipgloss.NewStyle().Width().MaxWidth().Render() since both produce
+// identical bytes for plain ASCII content in a non-TTY environment.
+func TestAppRenderFullUIRender(t *testing.T) {
+	t.Parallel()
+
+	// --- buildBox: empty panel (no content lines) ---
+	const (
+		emptyBoxW = 20
+		emptyBoxH = 5
+	)
+	gotEmpty := buildBox("", emptyBoxW, emptyBoxH, false)
+	wantEmpty := "┌────────────────────┐ \n│                    │ \n│                    │ \n│                    │ \n└────────────────────┘ "
+	if gotEmpty != wantEmpty {
+		t.Fatalf("buildBox empty mismatch\nwant: %q\n got: %q", wantEmpty, gotEmpty)
+	}
+
+	// --- buildBox: partially filled (2 content lines, 3 content rows total) ---
+	gotPartial := buildBox("Hello\nWorld", emptyBoxW, emptyBoxH, true)
+	wantPartial := "┌────────────────────┐ \n│Hello               │ \n│World               │ \n│                    │ \n└────────────────────┘ "
+	if gotPartial != wantPartial {
+		t.Fatalf("buildBox partial mismatch\nwant: %q\n got: %q", wantPartial, gotPartial)
+	}
+
+	// --- renderDashboard: structural checks for a 3-panel layout ---
+	repo := testutil.Repo("acme/alpha")
+	snap := dashboardSnapshot(repo,
+		pr(repo.FullName, 1, "Fix login"),
+		pr(repo.FullName, 2, "Add tests"),
+	)
+	m := newTestModel([]domain.Repository{repo}, map[string]domain.DashboardSnapshot{
+		repo.FullName: snap,
+	})
+	_, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	_, _ = m.Update(cmdsReposDiscovered([]domain.Repository{repo}))
+	_, _ = m.Update(cmdsDashboardLoaded(repo.FullName, snap, false, nil))
+
+	body := m.renderDashboard()
+	bodyLines := strings.Split(body, "\n")
+
+	// Body includes 38 panel rows (height-2 borders) plus 2 status rows = 40 total,
+	// but renderDashboard returns body+"\n"+status, so line count ≈ height.
+	if len(bodyLines) < 38 || len(bodyLines) > 42 {
+		t.Fatalf("renderDashboard: expected ~40 lines, got %d", len(bodyLines))
+	}
+
+	// All three panel top-borders on line 0.
+	if !strings.Contains(bodyLines[0], "┌") {
+		t.Fatalf("renderDashboard line 0: expected ┌, got %q", bodyLines[0])
+	}
+
+	// Every panel row must have consistent per-line width — each row of the
+	// joined grid must equal the total terminal width (contentW+3 per panel, summed).
+	totalW := m.layout.Current.Repo + m.layout.Current.PR + m.layout.Current.Preview + 3*3
+	for i, line := range bodyLines {
+		w := lipgloss.Width(line)
+		// Status bar lines and separator are allowed to differ; check only box rows.
+		if i >= len(bodyLines)-2 {
+			break
+		}
+		if w != totalW {
+			t.Fatalf("renderDashboard line %d: expected width %d, got %d: %q", i, totalW, w, line)
+		}
+	}
+
+	// Content sanity.
+	if !strings.Contains(body, "Fix login") {
+		t.Fatal("renderDashboard: expected 'Fix login' in output")
+	}
+	if !strings.Contains(body, "Add tests") {
+		t.Fatal("renderDashboard: expected 'Add tests' in output")
 	}
 }
 

@@ -85,12 +85,7 @@ func buildBox(view string, contentW, height int, focused bool) string {
 		if i < len(contentLines) {
 			line = contentLines[i]
 		}
-		vis := lipgloss.Width(line)
-		if vis < contentW {
-			line += strings.Repeat(" ", contentW-vis)
-		} else if vis > contentW {
-			line = lipgloss.NewStyle().MaxWidth(contentW).Render(line)
-		}
+		line = lipgloss.NewStyle().Width(contentW).MaxWidth(contentW).Render(line)
 		lines = append(lines, border("│")+line+border("│"))
 	}
 
@@ -144,7 +139,7 @@ func joinColumn(col columnView, height int) string {
 func lineAt(view string, index, width int) string {
 	lines := strings.Split(view, "\n")
 	if index < 0 || index >= len(lines) {
-		return strings.Repeat(" ", width)
+		return lipgloss.NewStyle().Width(width).Render("")
 	}
 	return padLine(lines[index], width)
 }
