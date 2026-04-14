@@ -15,6 +15,7 @@ import (
 
 	"github.com/utk/git-term/internal/application/dashboard"
 	"github.com/utk/git-term/internal/application/discovery"
+	apppr "github.com/utk/git-term/internal/application/pr"
 	"github.com/utk/git-term/internal/application/search"
 	"github.com/utk/git-term/internal/cache"
 	"github.com/utk/git-term/internal/cache/memory"
@@ -22,6 +23,7 @@ import (
 	"github.com/utk/git-term/internal/config"
 	"github.com/utk/git-term/internal/github/auth"
 	"github.com/utk/git-term/internal/github/graphql"
+	"github.com/utk/git-term/internal/github/rest"
 	gitlog "github.com/utk/git-term/internal/log"
 	"github.com/utk/git-term/internal/ui/theme"
 	"github.com/utk/git-term/internal/ui/app"
@@ -159,12 +161,25 @@ func main() {
 	dashboardSvc := dashboard.NewService(coordinator, ghClient)
 	searchSvc := search.New()
 
+	// REST client for raw diff fetching (one per primary host).
+	restClient := &rest.Client{
+		HTTPClient: &http.Client{Timeout: 30 * time.Second},
+		BaseURL:    profiles[0].RESTURL,
+		Token:      profiles[0].Token,
+	}
+
+	// PR detail service: loads PR metadata (GraphQL) and diffs (REST).
+	prSvc := apppr.NewService(coordinator, ghClient, restClient)
+	prSvc.Host = profiles[0].Host
+	prSvc.Log = logger
+
 	// Root UI model
 	deps := app.Dependencies{
 		Viewer:    ghClient,
 		Discovery: discoverySvc,
 		Dashboard: dashboardSvc,
 		Search:    searchSvc,
+		PR:        prSvc,
 		Root:      rootDir,
 		Host:      profiles[0].Host,
 		Logger:    logger,

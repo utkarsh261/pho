@@ -117,7 +117,7 @@ func (s *PRService) loadDiffInner(ctx context.Context, repo domain.Repository, n
 
 	s.logDebug("fetching raw diff", "key", key, "number", number, "host", s.Host)
 
-	rawDiff, err := s.REST.FetchRawDiff(ctx, s.Owner, s.RepoName(repo), number)
+	rawDiff, err := s.REST.FetchRawDiff(ctx, s.ownerName(repo), s.RepoName(repo), number)
 	if err != nil {
 		if found && headSHA != "" {
 			s.logWarn("diff fetch failed, returning stale", "key", key, "number", number, "err", err)
@@ -178,6 +178,17 @@ func (s *PRService) RepoName(repo domain.Repository) string {
 		return parts[1]
 	}
 	return repo.FullName
+}
+
+func (s *PRService) ownerName(repo domain.Repository) string {
+	if repo.Owner != "" {
+		return repo.Owner
+	}
+	parts := strings.Split(repo.FullName, "/")
+	if len(parts) == 2 {
+		return parts[0]
+	}
+	return s.Owner
 }
 
 func (s *PRService) spawnBackground(fn func()) {

@@ -315,6 +315,8 @@ func (m *Model) Layout() layout.LayoutState {
 }
 
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.logDebug("key", "key", msg.String(), "view", string(m.currentView()), "focus", string(m.focus))
+
 	// PR detail view bypasses dashboard keymap entirely.
 	if m.currentView() == domain.PrimaryViewPRDetail {
 		return m, m.forwardKey(msg)
