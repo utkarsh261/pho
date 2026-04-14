@@ -377,10 +377,7 @@ func (m Model) visibleResultsForBox(innerH int) []domain.SearchResult {
 	if innerH <= 0 || len(m.results) == 0 {
 		return nil
 	}
-	start := m.scrollOffset
-	if start < 0 {
-		start = 0
-	}
+	start := max(m.scrollOffset, 0)
 	available := innerH - 6
 	if footer := m.footerHint(); footer != "" {
 		available -= 2
@@ -388,10 +385,7 @@ func (m Model) visibleResultsForBox(innerH int) []domain.SearchResult {
 	if available < 0 {
 		available = 0
 	}
-	end := start + available
-	if end > len(m.results) {
-		end = len(m.results)
-	}
+	end := min(start+available, len(m.results))
 	if start > end {
 		start = end
 	}

@@ -52,10 +52,7 @@ func (m *LeftPanelModel) View(height int, spinnerFrame string) string {
 		return ""
 	}
 	ciH := computeCIHeight(height, len(m.Checks))
-	filesH := height - ciH
-	if filesH < 5 {
-		filesH = 5
-	}
+	filesH := max(height-ciH, 5)
 
 	filesView := m.renderFilesArea(filesH, spinnerFrame)
 	if ciH > 0 {
@@ -65,14 +62,11 @@ func (m *LeftPanelModel) View(height int, spinnerFrame string) string {
 	return filesView
 }
 
-
 // outerHeight includes the top and bottom border rows.
 func (m *LeftPanelModel) renderFilesArea(outerHeight int, spinnerFrame string) string {
 	borderColor := m.borderColorFor(FocusFiles)
-	innerH := outerHeight - 4 // subtract top border, title, mid border, bottom border
-	if innerH < 1 {
-		innerH = 1
-	}
+	// subtract top border, title, mid border, bottom border
+	innerH := max(outerHeight-4, 1)
 
 	tabLabel := "FILES"
 	if m.theme != nil {
@@ -149,15 +143,12 @@ func (m *LeftPanelModel) fileRows(innerH int) []string {
 		return rows
 	}
 
-	visibleItems := innerH
-	if visibleItems < 1 {
-		visibleItems = 1
-	}
+	visibleItems := max(innerH, 1)
 
 	scroll := clamp(m.FilesScroll, 0, max(0, len(m.Files)-visibleItems))
 	var rows []string
-	
-	for i := 0; i < visibleItems; i++ {
+
+	for i := range visibleItems {
 		fileIdx := scroll + i
 		if fileIdx >= len(m.Files) {
 			break
@@ -216,13 +207,10 @@ func formatFileStatsColored(additions, deletions int, th *theme.Theme) string {
 	return lipgloss.NewStyle().Width(lpStatsWidth).Align(lipgloss.Right).Render(colored)
 }
 
-
 func (m *LeftPanelModel) renderCIArea(outerHeight int) string {
 	borderColor := m.borderColorFor(FocusCI)
-	innerH := outerHeight - 4 // subtract top, title, mid, bottom borders
-	if innerH < 1 {
-		innerH = 1
-	}
+	// subtract top, title, mid, bottom borders
+	innerH := max(outerHeight-4, 1)
 
 	tabLabel := "CI"
 	if m.theme != nil {
@@ -237,10 +225,7 @@ func (m *LeftPanelModel) renderCIArea(outerHeight int) string {
 		}
 	}
 
-	visibleItems := innerH
-	if visibleItems < 1 {
-		visibleItems = 1
-	}
+	visibleItems := max(innerH, 1)
 
 	scroll := clamp(m.CIScroll, 0, max(0, len(m.Checks)-visibleItems))
 	var rows []string
@@ -289,7 +274,6 @@ func (m *LeftPanelModel) renderCIRow(check domain.PreviewCheckRow) string {
 	row := icon + " " + name + " " + status
 	return fitLine(row, lpInner)
 }
-
 
 func (m *LeftPanelModel) borderColorFor(target PRDetailFocus) lipgloss.Color {
 	focused := m.Focus == target

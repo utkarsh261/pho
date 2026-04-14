@@ -851,10 +851,7 @@ func (m *Model) cycleFocus(direction keymap.CycleDirection) tea.Cmd {
 	if m.state.Search.OverlayOpen {
 		return nil
 	}
-	idx := indexOfFocus(m.focus)
-	if idx < 0 {
-		idx = 0
-	}
+	idx := max(indexOfFocus(m.focus), 0)
 	switch direction {
 	case keymap.FocusPrev:
 		idx--
@@ -1007,7 +1004,7 @@ func (m *Model) syncStatus() {
 	}
 }
 
-// ---- ViewStack methods ----
+// ViewStack methods
 
 func (m *Model) pushView(v domain.PrimaryView) {
 	// Guard: prevent double-push of the same view.

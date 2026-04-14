@@ -157,17 +157,11 @@ func (m *PRDetailModel) View() string {
 
 	headerRow := m.renderHeader()
 
-	bodyH := m.Height - 3
-	if bodyH < 1 {
-		bodyH = 1
-	}
+	bodyH := max(m.Height-3, 1)
 
 	var body string
 	if m.Width >= MinWidthForSidebar {
-		rightWidth := m.Width - LeftPanelWidth - 2
-		if rightWidth < 10 {
-			rightWidth = 10
-		}
+		rightWidth := max(m.Width-LeftPanelWidth-2, 10)
 		leftView := m.leftPanel.View(bodyH, m.spinner.View())
 		rightView := m.renderRightViewport(rightWidth, bodyH)
 		body = lipgloss.JoinHorizontal(lipgloss.Top, leftView, "  ", rightView)
@@ -217,10 +211,7 @@ func (m *PRDetailModel) renderHeader() string {
 	}
 	hintsLen := lipgloss.Width(hints)
 
-	innerW := m.Width - 2
-	if innerW < 1 {
-		innerW = 1
-	}
+	innerW := max(m.Width-2, 1)
 
 	// Build the title ensuring we don't overflow the width
 	// Padding needed: spaces around components
@@ -254,10 +245,7 @@ func (m *PRDetailModel) renderHeader() string {
 	var finalHeader string
 	if hintsLen > 0 {
 		leftWidth := lipgloss.Width(leftPart)
-		padWidth := innerW - leftWidth - hintsLen
-		if padWidth < 1 {
-			padWidth = 1
-		}
+		padWidth := max(innerW-leftWidth-hintsLen, 1)
 		finalHeader = leftPart + strings.Repeat(" ", padWidth) + hints
 	} else {
 		finalHeader = leftPart + strings.Repeat(" ", max(0, innerW-lipgloss.Width(leftPart)))
@@ -283,22 +271,10 @@ func (m *PRDetailModel) renderHeader() string {
 }
 
 func (m *PRDetailModel) renderRightViewport(width, height int) string {
-	innerH := height - 4
-	if innerH < 1 {
-		innerH = 1
-	}
-	innerW := width - 2
-	if innerW < 1 {
-		innerW = 1
-	}
-	contentW := innerW - 2
-	if contentW < 1 {
-		contentW = 1
-	}
-	contentH := innerH - 2
-	if contentH < 1 {
-		contentH = 1
-	}
+	innerH := max(height-4, 1)
+	innerW := max(width-2, 1)
+	contentW := max(innerW-2, 1)
+	contentH := max(innerH-2, 1)
 
 	var contentLines []string
 
@@ -327,14 +303,8 @@ func (m *PRDetailModel) renderRightViewport(width, height int) string {
 		contentLines = append(contentLines, fmt.Sprintf("%d file(s), +%d -%d", stats.TotalFiles, stats.TotalAdditions, stats.TotalDeletions))
 	}
 
-	start := m.ContentScroll
-	if start < 0 {
-		start = 0
-	}
-	end := start + contentH
-	if end > len(contentLines) {
-		end = len(contentLines)
-	}
+	start := max(m.ContentScroll, 0)
+	end := min(start+contentH, len(contentLines))
 
 	var visible []string
 	if start < len(contentLines) {
@@ -492,7 +462,7 @@ func (m *PRDetailModel) cycleBackward() {
 	}
 }
 
-// ─── Navigation within focused sub-area ─────────────────────────────────────
+// Navigation within focused sub-area
 
 func (m *PRDetailModel) scrollDown() {
 	switch m.leftPanel.Focus {
@@ -503,7 +473,7 @@ func (m *PRDetailModel) scrollDown() {
 		m.leftPanel.FileIndex++
 		last := len(m.leftPanel.Files) - 1
 		if m.leftPanel.FileIndex > last {
-			// Boundary: if CI has checks, move focus there.
+			// If CI has checks, move focus there.
 			m.leftPanel.FileIndex = last
 			if len(m.leftPanel.Checks) > 0 {
 				m.leftPanel.Focus = FocusCI
@@ -534,7 +504,7 @@ func (m *PRDetailModel) scrollUp() {
 		m.ensureFileVisible()
 	case FocusCI:
 		if m.leftPanel.CIScroll <= 0 {
-			// Boundary: move focus back to Files.
+			// move focus back to Files.
 			m.leftPanel.Focus = FocusFiles
 			m.leftPanel.FilesScroll = 0
 			return
@@ -634,10 +604,7 @@ func (m *PRDetailModel) contentVisibleHeight() int {
 func (m *PRDetailModel) ciVisibleRows() int {
 	ciH := computeCIHeight(m.bodyHeight(), len(m.leftPanel.Checks))
 	inner := ciH - 2
-	contentH := inner - 2
-	if contentH < 1 {
-		contentH = 1
-	}
+	contentH := max(inner-2, 1)
 	return contentH
 }
 
