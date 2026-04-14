@@ -93,20 +93,21 @@ func (m *PreviewPanelModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, spinCmd
 	case SelectPRMsg:
-		// Check if we're selecting the same PR that's already pending fetch.
 		samePR := m.selectedRepo == msg.Repo && m.selectedNumber == msg.Number
 
 		m.selectedRepo = msg.Repo
 		m.selectedNumber = msg.Number
 		summary := msg.Summary
 		m.summary = &summary
-		m.preview = nil
+		
+		if !samePR {
+			m.preview = nil
+			m.Scroll = 0
+		}
+		
 		m.Loading = true
-		m.Scroll = 0
 		m.DebounceGeneration++
 
-		// If we're already waiting to fetch the same PR, skip scheduling another.
-		// But if the PR changed, schedule a new fetch.
 		if m.PendingFetch && samePR {
 			return m, spinCmd
 		}
