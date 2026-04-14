@@ -94,15 +94,10 @@ func (m *LeftPanelModel) renderFilesArea(outerHeight int, spinnerFrame string) s
 		rows = m.fileRows(innerH)
 	}
 
-	// Add manual left padding for each row and header
-	for i, r := range rows {
-		rows[i] = " " + r
-	}
-	tabLabel = " " + tabLabel
-
 	headBox := lipgloss.NewStyle().
 		Border(panelHeadBorder).
 		BorderForeground(borderColor).
+		Padding(0, 1).
 		Width(LeftPanelWidth - 2). // Using LeftPanelWidth - 2 matches the exact outer inner width
 		Render(tabLabel)
 
@@ -110,6 +105,7 @@ func (m *LeftPanelModel) renderFilesArea(outerHeight int, spinnerFrame string) s
 		Border(lipgloss.NormalBorder()).
 		BorderTop(false).
 		BorderForeground(borderColor).
+		Padding(0, 1).
 		Width(LeftPanelWidth - 2).
 		Height(innerH).
 		Render(strings.Join(rows, "\n"))
@@ -121,15 +117,17 @@ func (m *LeftPanelModel) renderFilesArea(outerHeight int, spinnerFrame string) s
 func (m *LeftPanelModel) spinnerRows(innerH int, spinnerFrame string) []string {
 	rows := make([]string, innerH)
 	midRow := innerH / 2
+	centerStyle := lipgloss.NewStyle().Width(LeftPanelWidth - 4).Align(lipgloss.Center)
+
 	for i := range rows {
 		if i == midRow {
 			frame := spinnerFrame
 			if m.theme != nil {
 				frame = m.theme.CIPending.Render(spinnerFrame)
 			}
-			rows[i] = centerInWidth(frame, lpInner)
+			rows[i] = centerStyle.Render(frame)
 		} else {
-			rows[i] = strings.Repeat(" ", lpInner)
+			rows[i] = ""
 		}
 	}
 	return rows
@@ -143,9 +141,10 @@ func (m *LeftPanelModel) fileRows(innerH int) []string {
 		if m.theme != nil {
 			msg = m.theme.MutedTxt.Render(msg)
 		}
-		rows[0] = centerInWidth(msg, lpInner)
+		centerStyle := lipgloss.NewStyle().Width(LeftPanelWidth - 4).Align(lipgloss.Center)
+		rows[0] = centerStyle.Render(msg)
 		for i := 1; i < innerH; i++ {
-			rows[i] = strings.Repeat(" ", lpInner)
+			rows[i] = ""
 		}
 		return rows
 	}
@@ -167,7 +166,7 @@ func (m *LeftPanelModel) fileRows(innerH int) []string {
 	}
 
 	for len(rows) < innerH {
-		rows = append(rows, strings.Repeat(" ", lpInner))
+		rows = append(rows, "")
 	}
 	if len(rows) > innerH {
 		rows = rows[:innerH]
@@ -213,9 +212,8 @@ func formatFileStatsColored(additions, deletions int, th *theme.Theme) string {
 		// Falls back to plain (no color) when numbers are too large to fit.
 		return formatFileStats(additions, deletions)
 	}
-	pad := budget - visibleLen
 	colored := th.Additions.Render(addPart) + " " + th.Deletions.Render(delPart)
-	return " " + strings.Repeat(" ", pad) + colored
+	return lipgloss.NewStyle().Width(lpStatsWidth).Align(lipgloss.Right).Render(colored)
 }
 
 
@@ -254,21 +252,16 @@ func (m *LeftPanelModel) renderCIArea(outerHeight int) string {
 		rows = append(rows, m.renderCIRow(m.Checks[checkIdx]))
 	}
 	for len(rows) < innerH {
-		rows = append(rows, strings.Repeat(" ", lpInner))
+		rows = append(rows, "")
 	}
 	if len(rows) > innerH {
 		rows = rows[:innerH]
 	}
 
-	// Add manual left padding for each row and header
-	for i, r := range rows {
-		rows[i] = " " + r
-	}
-	tabLabel = " " + tabLabel
-
 	headBox := lipgloss.NewStyle().
 		Border(panelHeadBorder).
 		BorderForeground(borderColor).
+		Padding(0, 1).
 		Width(LeftPanelWidth - 2).
 		Render(tabLabel)
 
@@ -276,6 +269,7 @@ func (m *LeftPanelModel) renderCIArea(outerHeight int) string {
 		Border(lipgloss.NormalBorder()).
 		BorderTop(false).
 		BorderForeground(borderColor).
+		Padding(0, 1).
 		Width(LeftPanelWidth - 2).
 		Height(innerH).
 		Render(strings.Join(rows, "\n"))
@@ -356,21 +350,9 @@ func formatCIStatus(state string) string {
 	if len(runes) > lpCIStatusWidth {
 		runes = append(runes[:lpCIStatusWidth-1], '…')
 	}
-	// Left-align (pad right) to exactly lpCIStatusWidth.
-	pad := lpCIStatusWidth - len(runes)
-	if pad < 0 {
-		pad = 0
-	}
-	return string(runes) + strings.Repeat(" ", pad)
+	return lipgloss.NewStyle().Width(lpCIStatusWidth).Align(lipgloss.Left).Render(string(runes))
 }
 
 func centerInWidth(s string, width int) string {
-	visible := lipgloss.Width(s)
-	if visible >= width {
-		return lipgloss.NewStyle().MaxWidth(width).Render(s)
-	}
-	pad := width - visible
-	left := pad / 2
-	right := pad - left
-	return strings.Repeat(" ", left) + s + strings.Repeat(" ", right)
+	return lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(s)
 }

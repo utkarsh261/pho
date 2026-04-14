@@ -69,17 +69,11 @@ func truncatePathLeft(path string, maxWidth int) string {
 // Uses rune-width arithmetic so "…" (1 rune) counts as 1 char, not 3 bytes.
 func formatFileStats(additions, deletions int) string {
 	inner := []rune(fmt.Sprintf("+%d -%d", additions, deletions))
-	budget := lpStatsWidth - 1 // chars for the "+N -N" part (excluding leading space)
+	budget := lpStatsWidth - 1 // Leave at least 1 leading space visually
 	if len(inner) > budget {
-		// Truncate to (budget-1) runes and append "…".
 		inner = append(inner[:budget-1], '…')
 	}
-	// Right-align within budget using rune-aware padding.
-	pad := budget - len(inner)
-	if pad < 0 {
-		pad = 0
-	}
-	return " " + strings.Repeat(" ", pad) + string(inner)
+	return lipgloss.NewStyle().Width(lpStatsWidth).Align(lipgloss.Right).Render(string(inner))
 }
 
 func computeCIHeight(viewportHeight, numChecks int) int {

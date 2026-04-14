@@ -639,3 +639,36 @@ func TestViewRendersFileListAfterDiffLoad(t *testing.T) {
 		t.Errorf("expected 'internal/app.go' in view after DiffLoaded, output:\n%s", output)
 	}
 }
+
+func TestLeftPanelFullUIRender(t *testing.T) {
+	files := makeFiles("cmd/main.go", "internal/app/app.go")
+	checks := makeChecks("build", "lint", "test")
+	m := makePanelWithChecks(checks)
+	m.Files = files
+
+	out := stripANSI(m.View(20, "⠋"))
+	expected := `┌────────────────────────────────────┐
+│  FILES                             │
+├────────────────────────────────────┤
+│ ▶ cmd/main.go                +5 -2 │
+│   internal/app/app.go        +5 -2 │
+│                                    │
+│                                    │
+│                                    │
+│                                    │
+│                                    │
+│                                    │
+│                                    │
+│                                    │
+└────────────────────────────────────┘
+┌────────────────────────────────────┐
+│  CI                                │
+├────────────────────────────────────┤
+│ ✓ build                      pass  │
+│ ✓ lint                       pass  │
+└────────────────────────────────────┘`
+
+	if strings.TrimSpace(out) != strings.TrimSpace(expected) {
+		t.Errorf("full UI render mismatch.\nExpected:\n%s\n\nGot:\n%s", expected, out)
+	}
+}
