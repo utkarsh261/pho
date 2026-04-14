@@ -1,3 +1,4 @@
+// Revisit this, lotta hacks
 package prdetail
 
 import (
@@ -84,13 +85,9 @@ func computeCIHeight(viewportHeight, numChecks int) int {
 		return 0
 	}
 	maxH := int(float64(viewportHeight) * 0.3)
-	if maxH < 5 {
-		maxH = 5
-	}
+	maxH = max(maxH, 5)
 	contentH := numChecks
-	if contentH < 1 {
-		contentH = 1
-	}
+	contentH = max(contentH, 1)
 	// 4 overhead rows + actual list rows
 	h := 4 + contentH
 	if h < 5 {
@@ -112,7 +109,6 @@ func clamp(v, lo, hi int) int {
 	}
 	return v
 }
-
 
 func truncateText(s string, width int) string {
 	if width <= 0 {
