@@ -317,7 +317,21 @@ func (m *Model) Layout() layout.LayoutState {
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.logDebug("key", "key", msg.String(), "view", string(m.currentView()), "focus", string(m.focus))
 
-	// PR detail view bypasses dashboard keymap entirely.
+	// keymap.Dispatch is a dashboard-scoped concern. It understands the four
+	// dashboard focus targets (repo panel, PR list, preview, command palette)
+	// and maps keys to typed Actions that the root model then executes.
+	//
+	// PR detail is a separate view pushed onto the view stack. It has its own
+	// internal focus axis (Files / CI / Content) that does not map to any
+	// domain.FocusTarget, and it reuses keys that the dashboard keymap assigns
+	// different meanings (e.g. esc → Quit on dashboard, esc → BackToDashboard
+	// in PR detail; tab → CycleFocus on dashboard, tab → cycle sub-panels in
+	// PR detail). Routing those keys through keymap.Dispatch would produce the
+	// wrong actions.
+	//
+	// PRDetailModel.Update already contains complete, self-contained key
+	// handling, so the right move is to forward directly and skip the
+	// dashboard dispatcher altogether.
 	if m.currentView() == domain.PrimaryViewPRDetail {
 		return m, m.forwardKey(msg)
 	}
@@ -356,7 +370,6 @@ func (m *Model) handleRootAction(action keymap.Action) tea.Cmd {
 }
 
 func (m *Model) forwardKey(msg tea.KeyMsg) tea.Cmd {
-	// Total bypass: when in PR detail view, ALL keys go to prDetail.
 	if m.currentView() == domain.PrimaryViewPRDetail {
 		if m.prDetail != nil {
 			next, cmd := m.prDetail.Update(msg)
