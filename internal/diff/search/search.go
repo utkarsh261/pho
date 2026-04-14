@@ -6,8 +6,7 @@ import (
 	"github.com/utk/git-term/internal/diff/model"
 )
 
-// Match represents a single search result within a diff file.
-type Match struct {
+type SearchMatch struct {
 	// FileIndex is the index of the file in DiffModel.Files.
 	FileIndex int
 	// LineIndex is the flat index of the line across all lines in all hunks
@@ -55,12 +54,12 @@ func Build(dm *model.DiffModel) *DiffSearchIndex {
 	return idx
 }
 
-func (idx *DiffSearchIndex) Search(query string) []Match {
+func (idx *DiffSearchIndex) Search(query string) []SearchMatch {
 	if query == "" || idx == nil || idx.totalLines == 0 {
 		return nil
 	}
 	q := strings.ToLower(query)
-	var matches []Match
+	var matches []SearchMatch
 
 	for lineIdx := 0; lineIdx < idx.totalLines; lineIdx++ {
 		content, ok := idx.lines[lineIdx]
@@ -74,7 +73,7 @@ func (idx *DiffSearchIndex) Search(query string) []Match {
 			if pos < 0 {
 				break
 			}
-			matches = append(matches, Match{
+			matches = append(matches, SearchMatch{
 				FileIndex: idx.flatToFile[lineIdx],
 				LineIndex: lineIdx,
 				StartCol:  start + pos,
@@ -90,7 +89,7 @@ func (idx *DiffSearchIndex) Search(query string) []Match {
 // given matches slice, wrapping at boundaries. Returns (matchIndex, found).
 // The caller uses the returned matchIndex to index into the matches slice
 // and get the actual Match with FileIndex/LineIndex.
-func NextMatch(matches []Match, cursor int) (int, bool) {
+func NextMatch(matches []SearchMatch, cursor int) (int, bool) {
 	if len(matches) == 0 {
 		return 0, false
 	}
@@ -103,7 +102,7 @@ func NextMatch(matches []Match, cursor int) (int, bool) {
 
 // PrevMatch returns the previous match before the current cursor position in the
 // given matches slice, wrapping at boundaries. Returns (matchIndex, found).
-func PrevMatch(matches []Match, cursor int) (int, bool) {
+func PrevMatch(matches []SearchMatch, cursor int) (int, bool) {
 	if len(matches) == 0 {
 		return 0, false
 	}

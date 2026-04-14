@@ -1,6 +1,5 @@
 package model
 
-// DiffModel is the fully-parsed representation of a unified diff.
 type DiffModel struct {
 	Repo     string
 	PRNumber int
@@ -12,7 +11,6 @@ type DiffModel struct {
 	Stats     DiffStats
 }
 
-// DiffStats aggregates counts across all files in a DiffModel.
 type DiffStats struct {
 	TotalAdditions int
 	TotalDeletions int
@@ -20,7 +18,6 @@ type DiffStats struct {
 	TotalHunks     int
 }
 
-// DiffFile represents a single changed file in a unified diff.
 type DiffFile struct {
 	OldPath   string
 	NewPath   string
@@ -30,7 +27,7 @@ type DiffFile struct {
 	Deletions int
 	Hunks     []DiffHunk
 
-	// DisplayRows is the total number of display rows this file contributes
+	// total number of display rows this file contributes
 	// to the content viewport (1 file header + sum of all hunk display rows).
 	// Used for file-level virtualization.
 	DisplayRows int
@@ -42,7 +39,7 @@ type DiffFile struct {
 
 // DiffHunk represents one @@ -oldStart,oldCount +newStart,newCount @@ block.
 type DiffHunk struct {
-	Header   string // e.g. "@@ -1,5 +1,8 @@"
+	Header   string
 	OldStart int
 	OldCount int
 	NewStart int

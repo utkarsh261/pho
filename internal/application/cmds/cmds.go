@@ -50,19 +50,16 @@ type DiffLoaded struct {
 	Err       error
 }
 
-// ViewerResolved is emitted when viewer resolution completes.
 type ViewerResolved struct {
 	Login string
 	Err   error
 }
 
-// ReposDiscovered is emitted when local repository discovery completes.
 type ReposDiscovered struct {
 	Repos []domain.Repository
 	Err   error
 }
 
-// DashboardLoaded is emitted when a dashboard snapshot completes loading.
 type DashboardLoaded struct {
 	Repo      string
 	Snapshot  domain.DashboardSnapshot
@@ -70,7 +67,6 @@ type DashboardLoaded struct {
 	Err       error
 }
 
-// InvolvingLoaded is emitted when involving PRs complete loading.
 type InvolvingLoaded struct {
 	Repo      string
 	Snapshot  domain.InvolvingSnapshot
@@ -78,7 +74,6 @@ type InvolvingLoaded struct {
 	Err       error
 }
 
-// RecentLoaded is emitted when recent activity completes loading.
 type RecentLoaded struct {
 	Repo      string
 	Snapshot  domain.RecentSnapshot
@@ -86,7 +81,6 @@ type RecentLoaded struct {
 	Err       error
 }
 
-// PreviewLoaded is emitted when a PR preview completes loading.
 type PreviewLoaded struct {
 	Repo      string
 	Number    int
@@ -95,13 +89,11 @@ type PreviewLoaded struct {
 	Err       error
 }
 
-// SearchIndexRebuilt is emitted when a search index rebuild completes.
 type SearchIndexRebuilt struct {
 	Repo string
 	Err  error
 }
 
-// RefreshStarted marks a job key as in-flight.
 type RefreshStarted struct {
 	Key string
 }
@@ -115,7 +107,6 @@ type RefreshFailed struct {
 	Err error
 }
 
-// ResolveViewerCmd resolves the viewer login for the given host.
 func ResolveViewerCmd(svc ViewerService, host string) tea.Cmd {
 	return func() tea.Msg {
 		login, err := svc.FetchViewer(context.Background(), host)

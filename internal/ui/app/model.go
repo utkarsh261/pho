@@ -18,9 +18,9 @@ import (
 	"github.com/utk/git-term/internal/ui/components/overlay"
 	"github.com/utk/git-term/internal/ui/keymap"
 	"github.com/utk/git-term/internal/ui/layout"
+	"github.com/utk/git-term/internal/ui/theme"
 	"github.com/utk/git-term/internal/ui/views/dashboard"
 	"github.com/utk/git-term/internal/ui/views/prdetail"
-	"github.com/utk/git-term/internal/ui/theme"
 )
 
 // SearchService combines the interactive palette search and index rebuild APIs.
@@ -46,7 +46,6 @@ type Dependencies struct {
 	Logger *gitlog.Logger
 }
 
-// Model is the Phase 1 Bubble Tea root model.
 type Model struct {
 	deps Dependencies
 

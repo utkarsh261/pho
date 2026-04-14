@@ -11,7 +11,6 @@ import (
 	"github.com/utk/git-term/internal/domain"
 )
 
-// SearchService is the in-memory search contract used by the application layer.
 type SearchService interface {
 	BuildPRIndex(repo domain.Repository, snap domain.DashboardSnapshot) error
 	BuildRepoIndex(repos []domain.Repository) error
@@ -19,7 +18,6 @@ type SearchService interface {
 	SearchRepos(query string, limit int) []domain.SearchResult
 }
 
-// Service stores fuzzy indexes for repos and PRs entirely in memory.
 type Service struct {
 	mu sync.RWMutex
 

@@ -242,7 +242,7 @@ func TestPrevMatchWraps(t *testing.T) {
 
 func TestNextMatchNoMatches(t *testing.T) {
 	t.Parallel()
-	var matches []Match
+	var matches []SearchMatch
 	next, ok := NextMatch(matches, 0)
 	if ok {
 		t.Error("expected found=false for empty matches")
@@ -254,7 +254,7 @@ func TestNextMatchNoMatches(t *testing.T) {
 
 func TestPrevMatchNoMatches(t *testing.T) {
 	t.Parallel()
-	var matches []Match
+	var matches []SearchMatch
 	prev, ok := PrevMatch(matches, 0)
 	if ok {
 		t.Error("expected found=false for empty matches")
@@ -283,13 +283,13 @@ func TestBuildAndSearchIntegration(t *testing.T) {
 +++ b/main.go
 @@ -1,7 +1,7 @@
  package main
- 
+
  func main() {
 -	fmt.Println("hello")
 +	fmt.Println("world")
  	return
  }
- 
+
  func helper() {
 -	return nil
 +	return err

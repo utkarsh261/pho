@@ -20,7 +20,6 @@ func NewJSONStore(maxBytes int) *JSONStore {
 	}
 }
 
-// Get retrieves and decodes a value by key.
 func (s *JSONStore) Get(_ context.Context, key string, dest any) (domain.CacheMeta, bool, error) {
 	raw, metaWrap, ok := s.inner.Get(key)
 	if !ok {
@@ -36,7 +35,6 @@ func (s *JSONStore) Get(_ context.Context, key string, dest any) (domain.CacheMe
 	return meta, true, nil
 }
 
-// Put encodes and stores a value by key.
 func (s *JSONStore) Put(_ context.Context, key string, value any, meta domain.CacheMeta) error {
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -52,7 +50,6 @@ func (s *JSONStore) Put(_ context.Context, key string, value any, meta domain.Ca
 	return nil
 }
 
-// Delete removes key from the in-memory store.
 func (s *JSONStore) Delete(_ context.Context, key string) error {
 	s.inner.Delete(key)
 	return nil

@@ -20,18 +20,15 @@ import (
 	"github.com/utk/git-term/internal/domain"
 )
 
-// DiscoveryService discovers local repositories from a filesystem root.
 type DiscoveryService interface {
 	Discover(ctx context.Context, root string) ([]domain.Repository, error)
 }
 
-// Config controls discovery filtering.
 type Config struct {
 	Pin     []string
 	Exclude []string
 }
 
-// Service implements DiscoveryService.
 type Service struct {
 	mu      sync.Mutex
 	pinned  map[string]struct{}
@@ -39,7 +36,6 @@ type Service struct {
 	cache   map[string][]domain.Repository
 }
 
-// New returns a discovery service with the provided pin and exclude lists.
 func New(cfg Config) *Service {
 	return &Service{
 		pinned:  normalizeRepoSet(cfg.Pin),

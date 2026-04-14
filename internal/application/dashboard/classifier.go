@@ -7,17 +7,12 @@ import (
 )
 
 // SummaryTabClassifier splits dashboard PR summaries into the local tabs.
-//
-// Phase 1 only classifies my_prs and needs_review locally. involving and recent
-// are hydrated by separate snapshots.
 type SummaryTabClassifier interface {
 	Classify(viewer string, prs []domain.PullRequestSummary) map[domain.DashboardTab][]domain.PullRequestSummary
 }
 
-// DefaultSummaryTabClassifier is the Phase 1 classifier implementation.
 type DefaultSummaryTabClassifier struct{}
 
-// Classify applies the Phase 1 my_prs / needs_review rules.
 func (DefaultSummaryTabClassifier) Classify(viewer string, prs []domain.PullRequestSummary) map[domain.DashboardTab][]domain.PullRequestSummary {
 	out := map[domain.DashboardTab][]domain.PullRequestSummary{
 		domain.TabMyPRs:       {},

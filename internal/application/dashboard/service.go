@@ -22,7 +22,6 @@ const (
 	defaultPreviewHost       = "github.com"
 )
 
-// DashboardService is the Phase 1 application service contract.
 type DashboardService interface {
 	SelectInitialRepo(repos []domain.Repository, cwd string) (*domain.Repository, error)
 	LoadRepo(ctx context.Context, repo domain.Repository, force bool) (domain.DashboardSnapshot, error)
@@ -40,7 +39,6 @@ type Service struct {
 	BackgroundFn func(func())
 }
 
-// NewService builds a dashboard service with sensible defaults.
 func NewService(cacheCoordinator *cache.Coordinator, client githubclient.GitHubClient) *Service {
 	return &Service{
 		Cache:       cacheCoordinator,
@@ -51,7 +49,6 @@ func NewService(cacheCoordinator *cache.Coordinator, client githubclient.GitHubC
 	}
 }
 
-// SelectInitialRepo picks the cwd repo when present, otherwise the first repo.
 func (s *Service) SelectInitialRepo(repos []domain.Repository, cwd string) (*domain.Repository, error) {
 	if len(repos) == 0 {
 		return nil, fmt.Errorf("no repositories available")
@@ -71,7 +68,6 @@ func (s *Service) SelectInitialRepo(repos []domain.Repository, cwd string) (*dom
 	return &selected, nil
 }
 
-// LoadRepo loads the dashboard summary snapshot for a repo.
 func (s *Service) LoadRepo(ctx context.Context, repo domain.Repository, force bool) (domain.DashboardSnapshot, error) {
 	if err := s.ensureReady(); err != nil {
 		return domain.DashboardSnapshot{}, err
@@ -118,7 +114,6 @@ func (s *Service) LoadRepo(ctx context.Context, repo domain.Repository, force bo
 	return out, nil
 }
 
-// LoadInvolving loads the involving snapshot for a repo and viewer.
 func (s *Service) LoadInvolving(ctx context.Context, repo domain.Repository, viewer string, force bool) (domain.InvolvingSnapshot, error) {
 	if err := s.ensureReady(); err != nil {
 		return domain.InvolvingSnapshot{}, err
@@ -163,7 +158,6 @@ func (s *Service) LoadInvolving(ctx context.Context, repo domain.Repository, vie
 	return out, nil
 }
 
-// LoadRecent loads the recent activity snapshot for a repo.
 func (s *Service) LoadRecent(ctx context.Context, repo domain.Repository, force bool) (domain.RecentSnapshot, error) {
 	if err := s.ensureReady(); err != nil {
 		return domain.RecentSnapshot{}, err
@@ -206,7 +200,6 @@ func (s *Service) LoadRecent(ctx context.Context, repo domain.Repository, force 
 	return out, nil
 }
 
-// LoadPreview loads the richer preview snapshot for a PR.
 func (s *Service) LoadPreview(ctx context.Context, repo string, number int) (domain.PRPreviewSnapshot, error) {
 	if err := s.ensureReady(); err != nil {
 		return domain.PRPreviewSnapshot{}, err

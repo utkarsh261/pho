@@ -5,7 +5,7 @@ package domain
 
 import "time"
 
-// ---- Enumerations ----
+// Enums
 
 type PRState string
 
@@ -46,10 +46,10 @@ const (
 type Freshness string
 
 const (
-	FreshnessFresh       Freshness = "fresh"
-	FreshnessStale       Freshness = "stale"
-	FreshnessRefreshing  Freshness = "refreshing"
-	FreshnessErrorStale  Freshness = "error-stale"
+	FreshnessFresh      Freshness = "fresh"
+	FreshnessStale      Freshness = "stale"
+	FreshnessRefreshing Freshness = "refreshing"
+	FreshnessErrorStale Freshness = "error-stale"
 )
 
 type SearchMode string
@@ -72,7 +72,7 @@ const (
 	ActivityKindLabeled         ActivityKind = "labeled"
 )
 
-// ---- Core domain entities ----
+// Core domain entities
 
 type Repository struct {
 	ID             string
@@ -126,7 +126,7 @@ type PullRequestSummary struct {
 
 type ReviewSummary struct {
 	AuthorLogin string
-	State       string // APPROVED, CHANGES_REQUESTED, DISMISSED
+	State       string
 	SubmittedAt time.Time
 	CommitSHA   string
 }
@@ -178,10 +178,10 @@ type PRPreviewSnapshot struct {
 	Deletions      int
 	TopFiles       []PreviewFileStat
 	LatestActivity *ActivitySnippet
-	Labels         []Label         // NEW: PR labels
-	Assignees      []string        // NEW: assignee logins (already in summary, added to preview)
-	Mergeable      string          // NEW: MERGEABLE, CONFLICTING, UNKNOWN
-	MergeState     string          // NEW: behind, blocked, clean, dirty, etc.
+	Labels         []Label
+	Assignees      []string
+	Mergeable      string
+	MergeState     string
 }
 
 type ActivityItem struct {
@@ -195,7 +195,7 @@ type ActivityItem struct {
 	OccurredAt  time.Time
 }
 
-// ---- Snapshot envelopes ----
+// Snapshot envelopes
 
 type DiscoverySnapshot struct {
 	Repos     []Repository
@@ -232,7 +232,7 @@ type PreviewSnapshot struct {
 	FetchedAt time.Time
 }
 
-// ---- Cache ----
+// Cache
 
 type CacheMeta struct {
 	Key          string
@@ -249,7 +249,7 @@ type CacheMeta struct {
 	Encoding     string
 }
 
-// ---- App state ----
+// App state
 
 type SessionState struct {
 	Viewer     string
@@ -283,13 +283,13 @@ type DashboardState struct {
 }
 
 type SearchResult struct {
-	Kind    SearchResultKind
-	Repo    string
-	Number  int
-	Title   string
-	Branch  string
-	Author  string
-	Score   float64
+	Kind   SearchResultKind
+	Repo   string
+	Number int
+	Title  string
+	Branch string
+	Author string
+	Score  float64
 }
 
 type SearchResultKind string
@@ -348,7 +348,7 @@ type AppState struct {
 	Errors    ErrorState
 }
 
-// ---- View stack ----
+// View stack
 
 type PrimaryView string
 
@@ -372,11 +372,11 @@ const (
 	FocusCmdPalette   FocusTarget = "cmd_palette"
 )
 
-// ---- PR Detail domain types (Phase 2) ----
+// PR Detail domain types
 
 // PRChecks represents the CI/checks status for a PR.
 type PRChecks struct {
-	State    string         // SUCCESS, FAILURE, PENDING, ERROR
+	State    string // SUCCESS, FAILURE, PENDING, ERROR
 	Contexts []CheckContext
 }
 
@@ -390,7 +390,7 @@ type CheckContext struct {
 // Label is a GitHub label.
 type Label struct {
 	Name  string
-	Color string // rendered in Phase 3 (background tint)
+	Color string
 }
 
 // User is a minimal GitHub user.
@@ -431,11 +431,11 @@ type SectionState struct {
 // Currently unused — PRDetailModel manages its own parallel state.
 // Kept as a type alias target for when the view layer is refactored.
 type PRDetailState struct {
-	Repo     string
-	Number   int
-	Summary  PullRequestSummary // extended via FetchPreview (labels, assignees)
-	Reviews  []PreviewReviewer  // from FetchPreview reviews(first:20)
-	Checks   []PreviewCheckRow  // from FetchPreview statusCheckRollup
+	Repo    string
+	Number  int
+	Summary PullRequestSummary // extended via FetchPreview (labels, assignees)
+	Reviews []PreviewReviewer  // from FetchPreview reviews(first:20)
+	Checks  []PreviewCheckRow  // from FetchPreview statusCheckRollup
 	// Sections map[PRDetailSection]*SectionState — deferred until section-level
 	// loading is implemented. PRDetailModel currently uses parallel bool fields.
 }

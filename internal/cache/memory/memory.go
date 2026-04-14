@@ -46,8 +46,6 @@ type entry[V any, M any] struct {
 	elem  *list.Element
 }
 
-// New creates a cache with the given maximum byte budget. A non-positive
-// budget disables storage for byteful entries.
 func New[V any, M any](maxBytes int) *Cache[V, M] {
 	c := &Cache[V, M]{
 		maxBytes: maxBytes,
@@ -75,7 +73,6 @@ func (c *Cache[V, M]) Get(key string) (V, Meta[M], bool) {
 	return ent.value, ent.meta, true
 }
 
-// Put stores or replaces a value for key.
 func (c *Cache[V, M]) Put(key string, value V, meta Meta[M]) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -110,7 +107,6 @@ func (c *Cache[V, M]) Put(key string, value V, meta Meta[M]) {
 	c.evictIfNeeded()
 }
 
-// Delete removes key from the cache if present.
 func (c *Cache[V, M]) Delete(key string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

@@ -1,4 +1,4 @@
-// Package prdetail implements the PR detail view model for Phase 2.
+// Package prdetail implements the PR detail view model.
 // It manages the PR detail state and handles keyboard routing within
 // the PR detail view.
 package prdetail
@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/utk/git-term/internal/application/cmds"
 	"github.com/utk/git-term/internal/diff/model"
@@ -207,7 +207,7 @@ func (m *PRDetailModel) renderHeader() string {
 		authorStr = author
 		stateStr = state
 	}
-	
+
 	metaStr := authorStr + " " + stateStr
 	metaLen := lipgloss.Width(metaStr)
 
@@ -225,13 +225,13 @@ func (m *PRDetailModel) renderHeader() string {
 	// Build the title ensuring we don't overflow the width
 	// Padding needed: spaces around components
 	// Format: "Title <author> <state>                  [o: Browser | Esc: Back]"
-	
+
 	reservedSpace := metaLen
 	if hintsLen > 0 {
 		// we want spacing between meta and hints, or we right-align hints
-		reservedSpace += 1 + hintsLen 
+		reservedSpace += 1 + hintsLen
 	}
-	
+
 	// Prepend PR number
 	baseTitle := fmt.Sprintf("#%d %s", m.Summary.Number, m.Summary.Title)
 	if m.Summary.Title == "" {
@@ -248,17 +248,19 @@ func (m *PRDetailModel) renderHeader() string {
 	if lipgloss.Width(baseTitle) > titleBudget {
 		truncTitle = truncateText(baseTitle, titleBudget)
 	}
-	
+
 	leftPart := truncTitle + " " + metaStr
-	
+
 	var finalHeader string
 	if hintsLen > 0 {
 		leftWidth := lipgloss.Width(leftPart)
 		padWidth := innerW - leftWidth - hintsLen
-		if padWidth < 1 { padWidth = 1 }
+		if padWidth < 1 {
+			padWidth = 1
+		}
 		finalHeader = leftPart + strings.Repeat(" ", padWidth) + hints
 	} else {
-		finalHeader = leftPart + strings.Repeat(" ", max(0, innerW - lipgloss.Width(leftPart)))
+		finalHeader = leftPart + strings.Repeat(" ", max(0, innerW-lipgloss.Width(leftPart)))
 	}
 
 	var content string
@@ -350,7 +352,7 @@ func (m *PRDetailModel) renderRightViewport(width, height int) string {
 		tabComments = "Comments"
 	}
 	tabsStr := tabDesc + " " + tabDiff + " " + tabComments
-	
+
 	// Add inner padding
 	for i, r := range visible {
 		visible[i] = " " + r
@@ -409,8 +411,6 @@ func (m *PRDetailModel) renderNarrowBody(width, height int) string {
 	body := m.renderRightViewport(width, height-1)
 	return top + "\n" + body
 }
-
-
 
 // handleKey routes keyboard input within the PR detail view.
 func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
@@ -620,7 +620,6 @@ func (m *PRDetailModel) scrollHalfPageUp() {
 	}
 }
 
-
 // bodyHeight returns the available rows for the two-panel body.
 func (m *PRDetailModel) bodyHeight() int {
 	return max(1, m.Height-2) // subtract header + section buttons rows
@@ -671,14 +670,13 @@ func (m *PRDetailModel) ensureFileVisible() {
 	filesH := m.bodyHeight() - computeCIHeight(m.bodyHeight(), len(m.leftPanel.Checks))
 	innerH := max(1, filesH-2)
 	contentH := max(1, innerH-2)
-	
+
 	if m.leftPanel.FileIndex < m.leftPanel.FilesScroll {
 		m.leftPanel.FilesScroll = m.leftPanel.FileIndex
 	} else if m.leftPanel.FileIndex >= m.leftPanel.FilesScroll+contentH {
 		m.leftPanel.FilesScroll = m.leftPanel.FileIndex - contentH + 1
 	}
 }
-
 
 // handleRefresh refires both load commands with force=true.
 func (m *PRDetailModel) handleRefresh() (*PRDetailModel, tea.Cmd) {
@@ -704,7 +702,6 @@ func (m *PRDetailModel) emitOpenBrowser() tea.Cmd {
 		return OpenBrowserPR{Repo: m.Summary.Repo, Number: m.Summary.Number}
 	}
 }
-
 
 // BackToDashboard is emitted when the user presses Esc or q in PR detail.
 type BackToDashboard struct{}
