@@ -718,7 +718,7 @@ func (m *Model) handleChangeTabMsg(msg dashboard.ChangeTabMsg) tea.Cmd {
 	m.state.Dashboard.PreviewLoading = false
 	m.preview = dashboard.NewPreviewPanelModel()
 	m.preview.SetTheme(m.theme)
-	m.preview.SetRect(m.layout.Current.Preview, m.bodyHeight())
+	m.preview.SetRect(m.layout.Current.Preview, m.bodyHeight()-2)
 	m.syncStatus()
 	return m.syncCurrentSelection()
 }
@@ -973,7 +973,7 @@ func (m *Model) applyWindowSize(msg tea.WindowSizeMsg) {
 	bodyH := m.bodyHeight()
 	m.repoPanel.SetRect(m.layout.Current.Repo, bodyH)
 	m.prList.SetRect(m.layout.Current.PR, bodyH)
-	m.preview.SetRect(m.layout.Current.Preview, bodyH)
+	m.preview.SetRect(m.layout.Current.Preview, bodyH-2)
 	m.status.SetRect(m.layout.Current.Width)
 	m.palette, _ = m.palette.Update(msg)
 	m.syncPaletteStats()
@@ -1060,7 +1060,7 @@ func (m *Model) resetDashboardsForRepo() {
 func (m *Model) resetPreviewState() {
 	m.preview = dashboard.NewPreviewPanelModel()
 	m.preview.SetTheme(m.theme)
-	m.preview.SetRect(m.layout.Current.Preview, m.bodyHeight())
+	m.preview.SetRect(m.layout.Current.Preview, m.bodyHeight()-2)
 	m.state.Dashboard.Preview = nil
 	m.state.Dashboard.PreviewLoading = false
 }

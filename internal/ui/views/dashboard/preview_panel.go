@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/utk/git-term/internal/domain"
 	"github.com/utk/git-term/internal/ui/theme"
 )
@@ -99,12 +99,12 @@ func (m *PreviewPanelModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.selectedNumber = msg.Number
 		summary := msg.Summary
 		m.summary = &summary
-		
+
 		if !samePR {
 			m.preview = nil
 			m.Scroll = 0
 		}
-		
+
 		m.Loading = true
 		m.DebounceGeneration++
 
@@ -135,7 +135,7 @@ func (m *PreviewPanelModel) View() string {
 	if m.Width <= 0 || m.Height <= 0 {
 		return ""
 	}
-	
+
 	innerW := m.Width - 2
 	if innerW < 1 {
 		innerW = 1
@@ -335,13 +335,13 @@ func (m *PreviewPanelModel) fileLine(file domain.PreviewFileStat) string {
 	if pathBudget < 5 {
 		pathBudget = 5
 	}
-	
+
 	path := truncatePathLeft(file.Path, pathBudget)
 	path = lipgloss.NewStyle().Width(pathBudget).Align(lipgloss.Left).Render(path)
-	
+
 	addPart := fmt.Sprintf("+%d", file.Additions)
 	delPart := fmt.Sprintf("-%d", file.Deletions)
-	
+
 	var statsContent string
 	if m.theme != nil {
 		statsContent = m.theme.Additions.Render(addPart) + " " + m.theme.Deletions.Render(delPart)
@@ -374,9 +374,9 @@ func (m *PreviewPanelModel) checkIconStyled(state string) string {
 		return checkIcon(state)
 	}
 	switch state {
-	case "success":
+	case "SUCCESS":
 		return m.theme.CISuccess.Render("✓")
-	case "failure":
+	case "FAILURE", "ERROR":
 		return m.theme.CIFailure.Render("✗")
 	default:
 		return m.theme.CIPending.Render("·")
@@ -399,9 +399,9 @@ func (m *PreviewPanelModel) divider() string {
 
 func checkIcon(state string) string {
 	switch state {
-	case "success":
+	case "SUCCESS":
 		return "✓"
-	case "failure":
+	case "FAILURE", "ERROR":
 		return "✗"
 	default:
 		return "·"
