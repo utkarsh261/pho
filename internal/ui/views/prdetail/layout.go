@@ -20,13 +20,14 @@ var panelHeadBorder = lipgloss.Border{
 
 const (
 	// LeftPanelWidth is the fixed OUTER width of the left panel (including 1-char side borders).
-	LeftPanelWidth = 30
+	LeftPanelWidth = 38
 	// MinWidthForSidebar is the minimum terminal width at which the sidebar is shown.
 	MinWidthForSidebar = 80
 
-	// lpInner is the usable content width inside the left panel border.
+	// lpInner is the usable content width inside the left panel border and padding.
 	// 4-sided border: 1-char left border + 1-char right border = 2 overhead.
-	lpInner = LeftPanelWidth - 2 // 28
+	// 2-pad: 1-char left pad + 1-char right pad = 2 overhead. Total = 4 overhead.
+	lpInner = LeftPanelWidth - 4
 
 	// File row layout within lpInner (28 chars):
 	//   "▶ " indicator  : 2 chars

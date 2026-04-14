@@ -179,52 +179,106 @@ func (m *PRDetailModel) View() string {
 }
 
 func (m *PRDetailModel) renderHeader() string {
-	s := m.Summary
-	state := string(s.State)
-	if s.IsDraft {
-		state = "Draft"
+	author := m.Summary.Author
+	if author == "" {
+		author = "unknown"
 	}
-	title := s.Title
-	if title == "" {
-		title = "(no title)"
+
+	state := "OPEN"
+	if m.Detail != nil {
+		state = string(m.Detail.State)
 	}
-	shortcuts := "[o: Browser | Esc: Back]"
-	maxTitle := m.Width - 40 - len(shortcuts)
-	if maxTitle < 10 {
-		maxTitle = 10
-	}
-	if len([]rune(title)) > maxTitle {
-		title = string([]rune(title)[:maxTitle-1]) + "…"
+
+	var authorStr string
+	var stateStr string
+	if m.theme != nil {
+		authorStr = m.theme.PrimaryTxt.Render(author)
+		switch state {
+		case "OPEN":
+			stateStr = lipgloss.NewStyle().Foreground(m.theme.Secondary).Render("OPEN")
+		case "MERGED":
+			stateStr = m.theme.PrimaryTxt.Render("MERGED")
+		case "CLOSED":
+			stateStr = m.theme.ReviewChanges.Render("CLOSED")
+		default:
+			stateStr = m.theme.ReviewRequired.Render(state)
+		}
+	} else {
+		authorStr = author
+		stateStr = state
 	}
 	
-	info := fmt.Sprintf("#%d %s <%s> <%s>", s.Number, title, s.Author, state)
-	
+	metaStr := authorStr + " " + stateStr
+	metaLen := lipgloss.Width(metaStr)
+
+	hints := "[o: Browser | Esc: Back]"
+	if m.Width < 80 {
+		hints = ""
+	}
+	hintsLen := lipgloss.Width(hints)
+
 	innerW := m.Width - 2
 	if innerW < 1 {
 		innerW = 1
 	}
 
-	pad := innerW - lipgloss.Width(info) - lipgloss.Width(shortcuts)
-	if pad < 0 {
-		pad = 0
+	// Build the title ensuring we don't overflow the width
+	// Padding needed: spaces around components
+	// Format: "Title <author> <state>                  [o: Browser | Esc: Back]"
+	
+	reservedSpace := metaLen
+	if hintsLen > 0 {
+		// we want spacing between meta and hints, or we right-align hints
+		reservedSpace += 1 + hintsLen 
 	}
-	content := info + strings.Repeat(" ", pad) + shortcuts
+	
+	// Prepend PR number
+	baseTitle := fmt.Sprintf("#%d %s", m.Summary.Number, m.Summary.Title)
+	if m.Summary.Title == "" {
+		baseTitle = fmt.Sprintf("Pull Request #%d", m.Summary.Number)
+	}
 
+	// 1 space between title and meta
+	titleBudget := innerW - reservedSpace - 2 // -2 just for padding
+	if titleBudget < 5 {
+		titleBudget = 5
+	}
+
+	truncTitle := baseTitle
+	if lipgloss.Width(baseTitle) > titleBudget {
+		truncTitle = truncateText(baseTitle, titleBudget)
+	}
+	
+	leftPart := truncTitle + " " + metaStr
+	
+	var finalHeader string
+	if hintsLen > 0 {
+		leftWidth := lipgloss.Width(leftPart)
+		padWidth := innerW - leftWidth - hintsLen
+		if padWidth < 1 { padWidth = 1 }
+		finalHeader = leftPart + strings.Repeat(" ", padWidth) + hints
+	} else {
+		finalHeader = leftPart + strings.Repeat(" ", max(0, innerW - lipgloss.Width(leftPart)))
+	}
+
+	var content string
 	var borderColor lipgloss.Color
 	if m.theme != nil {
+		// Apply the blueish background to the entire string
+		content = m.theme.Header.Width(innerW).Render(finalHeader)
 		borderColor = m.theme.Border
 	} else {
+		content = lipgloss.NewStyle().Width(innerW).Render(finalHeader)
 		borderColor = theme.Default().Border
 	}
 
+	// Restore the island (the bordered box)
 	return lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder()).
 		BorderForeground(borderColor).
 		Width(innerW).
 		Render(content)
 }
-
-
 
 func (m *PRDetailModel) renderRightViewport(width, height int) string {
 	innerH := height - 4
@@ -235,7 +289,10 @@ func (m *PRDetailModel) renderRightViewport(width, height int) string {
 	if innerW < 1 {
 		innerW = 1
 	}
-
+	contentW := innerW - 2
+	if contentW < 1 {
+		contentW = 1
+	}
 	contentH := innerH - 2
 	if contentH < 1 {
 		contentH = 1
@@ -246,7 +303,7 @@ func (m *PRDetailModel) renderRightViewport(width, height int) string {
 	contentLines = append(contentLines, "Description")
 
 	if m.Detail != nil && strings.TrimSpace(m.Detail.BodyExcerpt) != "" {
-		bodyLines := wrapParagraph(m.Detail.BodyExcerpt, innerW)
+		bodyLines := wrapParagraph(m.Detail.BodyExcerpt, contentW)
 		for _, l := range bodyLines {
 			contentLines = append(contentLines, l)
 		}
@@ -257,7 +314,7 @@ func (m *PRDetailModel) renderRightViewport(width, height int) string {
 	}
 
 	contentLines = append(contentLines, "")
-	contentLines = append(contentLines, strings.Repeat("─", innerW))
+	contentLines = append(contentLines, strings.Repeat("─", contentW))
 
 	if m.DiffLoading {
 		contentLines = append(contentLines, "⠋ Loading diff…")
@@ -293,6 +350,12 @@ func (m *PRDetailModel) renderRightViewport(width, height int) string {
 		tabComments = "Comments"
 	}
 	tabsStr := tabDesc + " " + tabDiff + " " + tabComments
+	
+	// Add inner padding
+	for i, r := range visible {
+		visible[i] = " " + r
+	}
+	tabsStr = " " + tabsStr
 
 	contentStr := renderBlock(visible, innerW, contentH)
 

@@ -94,17 +94,23 @@ func (m *LeftPanelModel) renderFilesArea(outerHeight int, spinnerFrame string) s
 		rows = m.fileRows(innerH)
 	}
 
+	// Add manual left padding for each row and header
+	for i, r := range rows {
+		rows[i] = " " + r
+	}
+	tabLabel = " " + tabLabel
+
 	headBox := lipgloss.NewStyle().
 		Border(panelHeadBorder).
 		BorderForeground(borderColor).
-		Width(lpInner).
+		Width(LeftPanelWidth - 2). // Using LeftPanelWidth - 2 matches the exact outer inner width
 		Render(tabLabel)
 
 	bodyBox := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder()).
 		BorderTop(false).
 		BorderForeground(borderColor).
-		Width(lpInner).
+		Width(LeftPanelWidth - 2).
 		Height(innerH).
 		Render(strings.Join(rows, "\n"))
 
@@ -254,17 +260,23 @@ func (m *LeftPanelModel) renderCIArea(outerHeight int) string {
 		rows = rows[:innerH]
 	}
 
+	// Add manual left padding for each row and header
+	for i, r := range rows {
+		rows[i] = " " + r
+	}
+	tabLabel = " " + tabLabel
+
 	headBox := lipgloss.NewStyle().
 		Border(panelHeadBorder).
 		BorderForeground(borderColor).
-		Width(lpInner).
+		Width(LeftPanelWidth - 2).
 		Render(tabLabel)
 
 	bodyBox := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder()).
 		BorderTop(false).
 		BorderForeground(borderColor).
-		Width(lpInner).
+		Width(LeftPanelWidth - 2).
 		Height(innerH).
 		Render(strings.Join(rows, "\n"))
 
