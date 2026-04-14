@@ -404,8 +404,8 @@ func TestPreviewPanelFullUIRender(t *testing.T) {
 			OccuredAt: time.Date(2026, 4, 9, 14, 0, 0, 0, time.UTC),
 		},
 		Checks: []domain.PreviewCheckRow{
-			{Name: "check-1", State: "success"},
-			{Name: "check-2", State: "success"},
+			{Name: "check-1", State: "SUCCESS"},
+			{Name: "check-2", State: "SUCCESS"},
 		},
 	}
 	m.preview = &snap
