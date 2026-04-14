@@ -1,4 +1,3 @@
-// Revisit this, lotta hacks
 package prdetail
 
 import (
@@ -84,18 +83,10 @@ func computeCIHeight(viewportHeight, numChecks int) int {
 	if viewportHeight < 10 {
 		return 0
 	}
-	maxH := int(float64(viewportHeight) * 0.3)
-	maxH = max(maxH, 5)
-	contentH := numChecks
-	contentH = max(contentH, 1)
+	maxH := max(int(float64(viewportHeight)*0.3), 5)
+	contentH := max(numChecks, 1)
 	// 4 overhead rows + actual list rows
-	h := 4 + contentH
-	if h < 5 {
-		h = 5
-	}
-	if h > maxH {
-		h = maxH
-	}
+	h := min(max(4+contentH, 5), maxH)
 	return h
 }
 
@@ -136,7 +127,7 @@ func renderBlock(lines []string, width, height int) string {
 		return ""
 	}
 	out := make([]string, 0, height)
-	for i := 0; i < height; i++ {
+	for i := range height {
 		if i < len(lines) {
 			out = append(out, fitLine(lines[i], width))
 			continue
