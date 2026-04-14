@@ -337,32 +337,20 @@ func (m *PreviewPanelModel) fileLine(file domain.PreviewFileStat) string {
 	}
 	
 	path := truncatePathLeft(file.Path, pathBudget)
-	
-	pathLen := len([]rune(path))
-	pad := pathBudget - pathLen
+	path = lipgloss.NewStyle().Width(pathBudget).Align(lipgloss.Left).Render(path)
 	
 	addPart := fmt.Sprintf("+%d", file.Additions)
 	delPart := fmt.Sprintf("-%d", file.Deletions)
-	visibleLen := len([]rune(addPart)) + 1 + len([]rune(delPart))
-	statsBudget := statsWidth - 1 // 1 for forced leading space padding
 	
-	var statsStr string
-	if visibleLen > statsBudget {
-		if m.theme != nil {
-			statsStr = " " + m.theme.Additions.Render(addPart) + " " + m.theme.Deletions.Render(delPart)
-		} else {
-			statsStr = fmt.Sprintf(" %s %s", addPart, delPart)
-		}
+	var statsContent string
+	if m.theme != nil {
+		statsContent = m.theme.Additions.Render(addPart) + " " + m.theme.Deletions.Render(delPart)
 	} else {
-		statsPad := statsBudget - visibleLen
-		if m.theme != nil {
-			statsStr = " " + strings.Repeat(" ", statsPad) + m.theme.Additions.Render(addPart) + " " + m.theme.Deletions.Render(delPart)
-		} else {
-			statsStr = " " + strings.Repeat(" ", statsPad) + addPart + " " + delPart
-		}
+		statsContent = addPart + " " + delPart
 	}
 
-	return path + strings.Repeat(" ", pad) + statsStr
+	statsStr := lipgloss.NewStyle().Width(statsWidth).Align(lipgloss.Right).Render(statsContent)
+	return path + statsStr
 }
 
 func (m *PreviewPanelModel) activityLine(act *domain.ActivitySnippet) string {
