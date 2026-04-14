@@ -53,7 +53,7 @@ func TestPreviewPanelRenderSnapshot(t *testing.T) {
 		"2026-04-09 12:30 IST",
 		"2026-04-09 13:45 IST",
 		"...",
-		"+120 -12 cmd/main.go",
+		"cmd/main.go" + strings.Repeat(" ", 73) + "    +120 -12",
 		"Latest activity:",
 		"comment by bob",
 	}
@@ -329,3 +329,132 @@ func makeFileStat(n int) []domain.PreviewFileStat {
 	}
 	return out
 }
+
+// TestPreviewPanelMoreFilesLine verifies that when FileCount > len(TopFiles),
+// the preview panel shows a "+N more files" line in muted text.
+func TestPreviewPanelMoreFilesLine(t *testing.T) {
+	t.Parallel()
+
+	m := NewPreviewPanelModel()
+	m.SetTheme(theme.Default())
+	m.preview = &domain.PRPreviewSnapshot{
+		Repo:       "org/repo",
+		Number:     1,
+		Title:      "PR with many files",
+		Author:     "alice",
+		FileCount:  25,
+		TopFiles:   makeFileStat(20), // TopFiles capped at 20
+	}
+	// Height 40: enough to show header (~10) + 20 files + "+N more files" line.
+	m.SetRect(80, 40)
+
+	view := m.View()
+	if !strings.Contains(view, "+5 more files") {
+		t.Errorf("expected '+5 more files' in preview, got:\n%s", view)
+	}
+}
+
+// TestPreviewPanelNoMoreFilesWhenUnderCap verifies that when FileCount <= len(TopFiles),
+// no "+N more files" line is shown.
+func TestPreviewPanelNoMoreFilesWhenUnderCap(t *testing.T) {
+	t.Parallel()
+
+	m := NewPreviewPanelModel()
+	m.SetTheme(theme.Default())
+	m.preview = &domain.PRPreviewSnapshot{
+		Repo:     "org/repo",
+		Number:   1,
+		Title:    "Small PR",
+		Author:   "alice",
+		FileCount: 5,
+		TopFiles: makeFileStat(5),
+	}
+	m.SetRect(80, 30)
+
+	view := m.View()
+	if strings.Contains(view, "more files") {
+		t.Errorf("expected no '+N more files' when under cap, got:\n%s", view)
+	}
+}
+
+func TestPreviewPanelFullUIRender(t *testing.T) {
+	t.Parallel()
+
+	m := NewPreviewPanelModel()
+	m.SetTheme(theme.Default())
+	snap := domain.PRPreviewSnapshot{
+		Repo:           "utkarsh261/git-term",
+		Number:         42,
+		Title:          "Improve dashboard rendering",
+		BodyExcerpt:    "This preview text is long enough to force truncation...",
+		Author:         "alice",
+		State:          domain.PRStateOpen,
+		CIStatus:       domain.CIStatusSuccess,
+		ReviewDecision: domain.ReviewDecisionApproved,
+		CreatedAt:      time.Date(2026, 4, 9, 12, 30, 0, 0, time.FixedZone("IST", 5*3600+1800)),
+		UpdatedAt:      time.Date(2026, 4, 9, 13, 45, 0, 0, time.FixedZone("IST", 5*3600+1800)),
+		TopFiles: []domain.PreviewFileStat{
+			{Path: "cmd/main.go", Additions: 120, Deletions: 12},
+			{Path: "internal/ui/views/dashboard/preview_panel.go", Additions: 40, Deletions: 3},
+		},
+		LatestActivity: &domain.ActivitySnippet{
+			Kind:      domain.ActivityKindComment,
+			Author:    "bob",
+			Body:      "Looks good to me",
+			OccuredAt: time.Date(2026, 4, 9, 14, 0, 0, 0, time.UTC),
+		},
+		Checks: []domain.PreviewCheckRow{
+			{Name: "check-1", State: "SUCCESS"},
+			{Name: "check-2", State: "SUCCESS"},
+		},
+	}
+	m.preview = &snap
+	m.SetRect(80, 40)
+
+	expected := ` Improve dashboard rendering                                                    
+                                                                                
+ utkarsh261/git-term  #42                                                       
+ Author: alice | State: open                                                    
+ CI: success | Review: approved                                                 
+                                                                                
+ Created: 2026-04-09 12:30 IST                                                  
+ Updated: 2026-04-09 13:45 IST                                                  
+                                                                                
+ ────────────────────────────────────────────────────────────────────────────── 
+ Body:                                                                          
+ This preview text is long enough to force truncation...                        
+                                                                                
+ ────────────────────────────────────────────────────────────────────────────── 
+ Top files:                                                                     
+   cmd/main.go                                                         +120 -12 
+   internal/ui/views/dashboard/preview_panel.go                          +40 -3 
+                                                                                
+ ────────────────────────────────────────────────────────────────────────────── 
+ Latest activity:                                                               
+   comment by bob at 2026-04-09 14:00 UTC                                       
+ Looks good to me                                                               
+                                                                                
+ ────────────────────────────────────────────────────────────────────────────── 
+ CI checks:                                                                     
+   ✓ check-1                                                                    
+   ✓ check-2                                                                    
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                `
+
+	out := lipgloss.NewStyle().Render(m.View())
+	if strings.TrimRight(out, " \n") != strings.TrimRight(expected, " \n") {
+		t.Fatalf("full UI render mismatch.\nExpected:\n%s\n\nGot:\n%s", expected, out)
+	}
+}
+

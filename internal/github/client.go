@@ -6,7 +6,7 @@ import (
 	"github.com/utk/git-term/internal/domain"
 )
 
-// GitHubClient is the transport interface for all GitHub API operations in Phase 1.
+// GitHubClient is the transport interface for all GitHub API operations.
 // Implementations live in internal/github/graphql. Mocks live in internal/testutil/mocks.
 type GitHubClient interface {
 	FetchViewer(ctx context.Context, host string) (string, error)

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/utk/git-term/internal/domain"
 	"github.com/utk/git-term/internal/ui/theme"
@@ -298,26 +299,8 @@ func (m Model) View() string {
 	if boxW <= 0 || boxH <= 0 {
 		return ""
 	}
-
 	box := m.renderBox(boxW, boxH)
-	lines := strings.Split(box, "\n")
-
-	topPad := maxInt(0, (m.height-boxH)/2)
-	leftPad := maxInt(0, (m.width-boxW)/2)
-	prefix := strings.Repeat(" ", leftPad)
-
-	var out strings.Builder
-	for i := 0; i < topPad; i++ {
-		out.WriteByte('\n')
-	}
-	for i, line := range lines {
-		if i > 0 {
-			out.WriteByte('\n')
-		}
-		out.WriteString(prefix)
-		out.WriteString(line)
-	}
-	return out.String()
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
 }
 
 func (m Model) renderBox(boxW, boxH int) string {
@@ -394,10 +377,7 @@ func (m Model) visibleResultsForBox(innerH int) []domain.SearchResult {
 	if innerH <= 0 || len(m.results) == 0 {
 		return nil
 	}
-	start := m.scrollOffset
-	if start < 0 {
-		start = 0
-	}
+	start := max(m.scrollOffset, 0)
 	available := innerH - 6
 	if footer := m.footerHint(); footer != "" {
 		available -= 2
@@ -405,10 +385,7 @@ func (m Model) visibleResultsForBox(innerH int) []domain.SearchResult {
 	if available < 0 {
 		available = 0
 	}
-	end := start + available
-	if end > len(m.results) {
-		end = len(m.results)
-	}
+	end := min(start+available, len(m.results))
 	if start > end {
 		start = end
 	}
@@ -481,10 +458,7 @@ func formatResult(result domain.SearchResult, width int) string {
 
 func centerText(text string, width int) string {
 	text = truncate(text, width)
-	padding := maxInt(0, width-len(text))
-	left := padding / 2
-	right := padding - left
-	return strings.Repeat(" ", left) + text + strings.Repeat(" ", right)
+	return lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(text)
 }
 
 func padRight(text string, width int) string {
@@ -492,10 +466,7 @@ func padRight(text string, width int) string {
 		return ""
 	}
 	text = truncate(text, width)
-	if len(text) >= width {
-		return text
-	}
-	return text + strings.Repeat(" ", width-len(text))
+	return lipgloss.NewStyle().Width(width).Render(text)
 }
 
 func truncate(text string, width int) string {

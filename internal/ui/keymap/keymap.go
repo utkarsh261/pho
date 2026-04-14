@@ -148,7 +148,7 @@ func dispatchPRListPanel(msg tea.KeyMsg) Result {
 func dispatchPreviewPanel(msg tea.KeyMsg) Result {
 	switch msg.Type {
 	case tea.KeyEnter:
-		return Result{Action: OpenBrowser{}}
+		return Result{Action: OpenPRDetail{}}
 	case tea.KeyCtrlP:
 		return Result{Action: ToggleCmdPalette{}}
 	case tea.KeyTab:
@@ -283,6 +283,12 @@ func (TriggerRefresh) isAction() {}
 type OpenBrowser struct{}
 
 func (OpenBrowser) isAction() {}
+
+// OpenPRDetail is emitted when Enter is pressed on the preview panel.
+// The root model handles this by pushing the PR detail view.
+type OpenPRDetail struct{}
+
+func (OpenPRDetail) isAction() {}
 
 type Quit struct{}
 

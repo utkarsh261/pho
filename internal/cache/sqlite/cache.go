@@ -20,14 +20,11 @@ const (
 	defaultEncoding = "json"
 )
 
-// Cache implements the Phase 1 L2 cache contract using SQLite.
 type Cache struct {
 	db      *sql.DB
 	version int
 }
 
-// New opens (or creates) the SQLite cache database at dbPath and applies the
-// required pragmas and schema.
 func New(dbPath string, version int) (*Cache, error) {
 	if dbPath == "" {
 		return nil, fmt.Errorf("sqlite cache path is empty")
@@ -55,7 +52,6 @@ func New(dbPath string, version int) (*Cache, error) {
 	return c, nil
 }
 
-// Close closes the underlying SQLite connection.
 func (c *Cache) Close() error {
 	if c == nil || c.db == nil {
 		return nil
@@ -106,7 +102,7 @@ func (c *Cache) bootstrap(ctx context.Context) error {
 	return nil
 }
 
-// Get loads an entry into dest. If the key is not found, found is false.
+// If the key is not found, found is false.
 // If the row exists but has an incompatible version or corrupt payload, the row
 // is deleted and treated as a miss.
 func (c *Cache) Get(ctx context.Context, key string, dest any) (meta domain.CacheMeta, found bool, err error) {
@@ -172,7 +168,6 @@ func (c *Cache) Get(ctx context.Context, key string, dest any) (meta domain.Cach
 	return meta, true, nil
 }
 
-// Put upserts an entry.
 func (c *Cache) Put(ctx context.Context, key string, value any, meta domain.CacheMeta) error {
 	payload, err := json.Marshal(value)
 	if err != nil {
@@ -231,7 +226,6 @@ func (c *Cache) Put(ctx context.Context, key string, value any, meta domain.Cach
 	return nil
 }
 
-// Delete removes the key from the cache.
 func (c *Cache) Delete(ctx context.Context, key string) error {
 	_, err := c.db.ExecContext(ctx, `DELETE FROM cache_entries WHERE key = ?`, key)
 	if err != nil {

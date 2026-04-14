@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/utk/git-term/internal/domain"
 	"github.com/utk/git-term/internal/ui/theme"
 )
@@ -93,15 +93,22 @@ func (m *PreviewPanelModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, spinCmd
 	case SelectPRMsg:
+		samePR := m.selectedRepo == msg.Repo && m.selectedNumber == msg.Number
+
 		m.selectedRepo = msg.Repo
 		m.selectedNumber = msg.Number
 		summary := msg.Summary
 		m.summary = &summary
-		m.preview = nil
+
+		if !samePR {
+			m.preview = nil
+			m.Scroll = 0
+		}
+
 		m.Loading = true
-		m.Scroll = 0
 		m.DebounceGeneration++
-		if m.PendingFetch {
+
+		if m.PendingFetch && samePR {
 			return m, spinCmd
 		}
 		m.PendingFetch = true
@@ -128,6 +135,18 @@ func (m *PreviewPanelModel) View() string {
 	if m.Width <= 0 || m.Height <= 0 {
 		return ""
 	}
+
+	innerW := m.Width - 2
+	if innerW < 1 {
+		innerW = 1
+	}
+
+	oldW := m.Width
+	m.Width = innerW
+	defer func() { m.Width = oldW }()
+
+	padStyle := lipgloss.NewStyle().Padding(0, 1)
+
 	lines := m.buildLines()
 	if len(lines) == 0 {
 		// No PR selected — show "PREVIEW" header + underline + empty message
@@ -136,7 +155,7 @@ func (m *PreviewPanelModel) View() string {
 			if m.theme != nil {
 				msg = m.theme.MutedTxt.Render(msg)
 			}
-			return renderBlock([]string{msg}, m.Width, m.Height)
+			return padStyle.Render(renderBlock([]string{msg}, innerW, m.Height))
 		}
 		header := "PREVIEW"
 		if m.theme != nil {
@@ -144,15 +163,15 @@ func (m *PreviewPanelModel) View() string {
 		}
 		underline := ""
 		if m.theme != nil {
-			underline = m.theme.Divider.Render(strings.Repeat("─", m.Width))
+			underline = m.theme.Divider.Render(strings.Repeat("─", innerW))
 		} else {
-			underline = strings.Repeat("─", m.Width)
+			underline = strings.Repeat("─", innerW)
 		}
 		empty := "Select a PR to preview"
 		if m.theme != nil {
 			empty = m.theme.MutedTxt.Render(empty)
 		}
-		return renderBlock([]string{header, underline, "", empty}, m.Width, m.Height)
+		return padStyle.Render(renderBlock([]string{header, underline, "", empty}, innerW, m.Height))
 	}
 	if m.Scroll < 0 {
 		m.Scroll = 0
@@ -165,7 +184,7 @@ func (m *PreviewPanelModel) View() string {
 		end = len(lines)
 	}
 	visible := append([]string(nil), lines[m.Scroll:end]...)
-	return renderBlock(visible, m.Width, m.Height)
+	return padStyle.Render(renderBlock(visible, innerW, m.Height))
 }
 
 func (m *PreviewPanelModel) buildLines() []string {
@@ -227,6 +246,15 @@ func (m *PreviewPanelModel) buildLines() []string {
 		lines = append(lines, "", m.divider(), m.sectionHeader("Top files:"))
 		for _, file := range snap.TopFiles {
 			lines = append(lines, "  "+m.fileLine(file))
+		}
+		// "+N more files" when FileCount > len(TopFiles)
+		if snap.FileCount > len(snap.TopFiles) {
+			more := snap.FileCount - len(snap.TopFiles)
+			if m.theme != nil {
+				lines = append(lines, "  "+m.theme.MutedTxt.Render(fmt.Sprintf("+%d more files", more)))
+			} else {
+				lines = append(lines, fmt.Sprintf("  +%d more files", more))
+			}
 		}
 	}
 
@@ -301,15 +329,28 @@ func (m *PreviewPanelModel) updatedLine(snap domain.PRPreviewSnapshot) string {
 }
 
 func (m *PreviewPanelModel) fileLine(file domain.PreviewFileStat) string {
-	addStr := fmt.Sprintf("+%d", file.Additions)
-	delStr := fmt.Sprintf("-%d", file.Deletions)
-	// "  " indent (added by caller) + addStr + " " + delStr + " " + path + 1 margin
-	overhead := 2 + len(addStr) + 1 + len(delStr) + 1 + 1
-	path := truncatePathLeft(file.Path, maxWidth(m.Width-overhead, 1))
-	if m.theme != nil {
-		return m.theme.Additions.Render(addStr) + " " + m.theme.Deletions.Render(delStr) + " " + path
+	statsWidth := 12
+	budget := m.Width - 2 // caller prefixes "  "
+	pathBudget := budget - statsWidth
+	if pathBudget < 5 {
+		pathBudget = 5
 	}
-	return addStr + " " + delStr + " " + path
+
+	path := truncatePathLeft(file.Path, pathBudget)
+	path = lipgloss.NewStyle().Width(pathBudget).Align(lipgloss.Left).Render(path)
+
+	addPart := fmt.Sprintf("+%d", file.Additions)
+	delPart := fmt.Sprintf("-%d", file.Deletions)
+
+	var statsContent string
+	if m.theme != nil {
+		statsContent = m.theme.Additions.Render(addPart) + " " + m.theme.Deletions.Render(delPart)
+	} else {
+		statsContent = addPart + " " + delPart
+	}
+
+	statsStr := lipgloss.NewStyle().Width(statsWidth).Align(lipgloss.Right).Render(statsContent)
+	return path + statsStr
 }
 
 func (m *PreviewPanelModel) activityLine(act *domain.ActivitySnippet) string {
@@ -333,9 +374,9 @@ func (m *PreviewPanelModel) checkIconStyled(state string) string {
 		return checkIcon(state)
 	}
 	switch state {
-	case "success":
+	case "SUCCESS":
 		return m.theme.CISuccess.Render("✓")
-	case "failure":
+	case "FAILURE", "ERROR":
 		return m.theme.CIFailure.Render("✗")
 	default:
 		return m.theme.CIPending.Render("·")
@@ -358,9 +399,9 @@ func (m *PreviewPanelModel) divider() string {
 
 func checkIcon(state string) string {
 	switch state {
-	case "success":
+	case "SUCCESS":
 		return "✓"
-	case "failure":
+	case "FAILURE", "ERROR":
 		return "✗"
 	default:
 		return "·"

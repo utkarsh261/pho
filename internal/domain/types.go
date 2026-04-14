@@ -5,7 +5,7 @@ package domain
 
 import "time"
 
-// ---- Enumerations ----
+// Enums
 
 type PRState string
 
@@ -46,10 +46,10 @@ const (
 type Freshness string
 
 const (
-	FreshnessFresh       Freshness = "fresh"
-	FreshnessStale       Freshness = "stale"
-	FreshnessRefreshing  Freshness = "refreshing"
-	FreshnessErrorStale  Freshness = "error-stale"
+	FreshnessFresh      Freshness = "fresh"
+	FreshnessStale      Freshness = "stale"
+	FreshnessRefreshing Freshness = "refreshing"
+	FreshnessErrorStale Freshness = "error-stale"
 )
 
 type SearchMode string
@@ -72,7 +72,7 @@ const (
 	ActivityKindLabeled         ActivityKind = "labeled"
 )
 
-// ---- Core domain entities ----
+// Core domain entities
 
 type Repository struct {
 	ID             string
@@ -126,7 +126,7 @@ type PullRequestSummary struct {
 
 type ReviewSummary struct {
 	AuthorLogin string
-	State       string // APPROVED, CHANGES_REQUESTED, DISMISSED
+	State       string
 	SubmittedAt time.Time
 	CommitSHA   string
 }
@@ -178,6 +178,10 @@ type PRPreviewSnapshot struct {
 	Deletions      int
 	TopFiles       []PreviewFileStat
 	LatestActivity *ActivitySnippet
+	Labels         []Label
+	Assignees      []string
+	Mergeable      string
+	MergeState     string
 }
 
 type ActivityItem struct {
@@ -191,7 +195,7 @@ type ActivityItem struct {
 	OccurredAt  time.Time
 }
 
-// ---- Snapshot envelopes ----
+// Snapshot envelopes
 
 type DiscoverySnapshot struct {
 	Repos     []Repository
@@ -228,7 +232,7 @@ type PreviewSnapshot struct {
 	FetchedAt time.Time
 }
 
-// ---- Cache ----
+// Cache
 
 type CacheMeta struct {
 	Key          string
@@ -245,7 +249,7 @@ type CacheMeta struct {
 	Encoding     string
 }
 
-// ---- App state ----
+// App state
 
 type SessionState struct {
 	Viewer     string
@@ -279,13 +283,13 @@ type DashboardState struct {
 }
 
 type SearchResult struct {
-	Kind    SearchResultKind
-	Repo    string
-	Number  int
-	Title   string
-	Branch  string
-	Author  string
-	Score   float64
+	Kind   SearchResultKind
+	Repo   string
+	Number int
+	Title  string
+	Branch string
+	Author string
+	Score  float64
 }
 
 type SearchResultKind string
@@ -344,12 +348,13 @@ type AppState struct {
 	Errors    ErrorState
 }
 
-// ---- View stack ----
+// View stack
 
 type PrimaryView string
 
 const (
 	PrimaryViewDashboard PrimaryView = "dashboard"
+	PrimaryViewPRDetail  PrimaryView = "pr_detail"
 )
 
 type OverlayView string
@@ -366,3 +371,75 @@ const (
 	FocusPreviewPanel FocusTarget = "preview_panel"
 	FocusCmdPalette   FocusTarget = "cmd_palette"
 )
+
+// PR Detail domain types
+
+// PRChecks represents the CI/checks status for a PR.
+type PRChecks struct {
+	State    string // SUCCESS, FAILURE, PENDING, ERROR
+	Contexts []CheckContext
+}
+
+// CheckContext represents a single CI check.
+type CheckContext struct {
+	Name       string
+	State      string // COMPLETED, IN_PROGRESS, QUEUED, WAITING
+	Conclusion string // SUCCESS, FAILURE, NEUTRAL, SKIPPED
+}
+
+// Label is a GitHub label.
+type Label struct {
+	Name  string
+	Color string
+}
+
+// User is a minimal GitHub user.
+type User struct {
+	Login string
+}
+
+// Reviewer is a review participant with their review state.
+type Reviewer struct {
+	Login string
+	State string // APPROVED, CHANGES_REQUESTED, COMMENTED, etc.
+}
+
+// ReviewRequest represents a pending review request.
+type ReviewRequest struct {
+	Login  string
+	IsTeam bool
+}
+
+// PRDetailSection enumerates the three sections in the content viewport.
+type PRDetailSection int
+
+const (
+	SectionDescription PRDetailSection = iota
+	SectionDiff
+	SectionComments
+)
+
+// SectionState tracks the load status of a single content section.
+// Reserved for future use when sections are rendered independently.
+type SectionState struct {
+	Loaded  bool
+	Loading bool
+	Error   error
+}
+
+// PRDetailState is the planned state container for the PR detail view.
+// Currently unused — PRDetailModel manages its own parallel state.
+// Kept as a type alias target for when the view layer is refactored.
+type PRDetailState struct {
+	Repo    string
+	Number  int
+	Summary PullRequestSummary // extended via FetchPreview (labels, assignees)
+	Reviews []PreviewReviewer  // from FetchPreview reviews(first:20)
+	Checks  []PreviewCheckRow  // from FetchPreview statusCheckRollup
+	// Sections map[PRDetailSection]*SectionState — deferred until section-level
+	// loading is implemented. PRDetailModel currently uses parallel bool fields.
+}
+
+// FocusPRDetail is the internal focus target for PR detail view.
+// It is NOT added to the dashboard focus cycle.
+const FocusPRDetail FocusTarget = "pr_detail"

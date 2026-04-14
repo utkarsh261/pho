@@ -101,6 +101,9 @@ type PullRequestNode struct {
 	Comments                 CountNode                   `json:"comments"`
 	ReviewThreads            CountNode                   `json:"reviewThreads"`
 	ReviewDecision           *string                     `json:"reviewDecision"`
+	Mergeable                string                      `json:"mergeable,omitempty"`
+	MergeState               string                      `json:"mergeState,omitempty"`
+	Labels                   LabelConnection             `json:"labels"`
 	Author                   *ActorNode                  `json:"author"`
 	Assignees                AssigneeConnection          `json:"assignees"`
 	ReviewRequests           ReviewRequestConnection     `json:"reviewRequests"`
@@ -111,6 +114,17 @@ type PullRequestNode struct {
 	Files                    FileConnection              `json:"files"`
 	TimelineItems            TimelineItemConnection      `json:"timelineItems"`
 	Repository               *RepositoryRef              `json:"repository,omitempty"`
+}
+
+// LabelConnection carries PR labels.
+type LabelConnection struct {
+	Nodes []LabelNode `json:"nodes"`
+}
+
+// LabelNode represents a single GitHub label.
+type LabelNode struct {
+	Name  string `json:"name"`
+	Color string `json:"color"`
 }
 
 // CountNode represents a totalCount-only GraphQL object.

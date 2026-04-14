@@ -117,7 +117,7 @@ func padRight(s string, width int) string {
 	if visible >= width {
 		return lipgloss.NewStyle().MaxWidth(width).Render(s)
 	}
-	return s + strings.Repeat(" ", width-visible)
+	return lipgloss.NewStyle().Width(width).Align(lipgloss.Left).Render(s)
 }
 
 func fitLine(s string, width int) string {
@@ -136,7 +136,7 @@ func renderBlock(lines []string, width, height int) string {
 			out = append(out, fitLine(lines[i], width))
 			continue
 		}
-		out = append(out, strings.Repeat(" ", width))
+		out = append(out, lipgloss.NewStyle().Width(width).Render(""))
 	}
 	return strings.Join(out, "\n")
 }

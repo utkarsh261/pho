@@ -147,6 +147,10 @@ func normalizePreviewNode(repo domain.Repository, number int, node model.PullReq
 		FileCount:      node.ChangedFiles,
 		Additions:      node.Additions,
 		Deletions:      node.Deletions,
+		Labels:         previewLabels(node.Labels),
+		Assignees:      assigneeLogins(node.Assignees),
+		Mergeable:      node.Mergeable,
+		MergeState:     node.MergeState,
 		LatestActivity: previewLatestActivity(repo, node.Number, node.TimelineItems.Nodes),
 	}
 	if len(node.Files.Nodes) > 0 {
@@ -271,6 +275,20 @@ func previewChecks(nodes []model.StatusContextNode) []domain.PreviewCheckRow {
 			Name:    name,
 			State:   state,
 			Context: context,
+		})
+	}
+	return out
+}
+
+func previewLabels(conn model.LabelConnection) []domain.Label {
+	if len(conn.Nodes) == 0 {
+		return nil
+	}
+	out := make([]domain.Label, 0, len(conn.Nodes))
+	for _, node := range conn.Nodes {
+		out = append(out, domain.Label{
+			Name:  node.Name,
+			Color: node.Color,
 		})
 	}
 	return out

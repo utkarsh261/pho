@@ -18,8 +18,9 @@ import (
 	"github.com/utk/git-term/internal/ui/components/overlay"
 	"github.com/utk/git-term/internal/ui/keymap"
 	"github.com/utk/git-term/internal/ui/layout"
-	"github.com/utk/git-term/internal/ui/views/dashboard"
 	"github.com/utk/git-term/internal/ui/theme"
+	"github.com/utk/git-term/internal/ui/views/dashboard"
+	"github.com/utk/git-term/internal/ui/views/prdetail"
 )
 
 // SearchService combines the interactive palette search and index rebuild APIs.
@@ -34,6 +35,7 @@ type Dependencies struct {
 	Discovery cmds.DiscoveryService
 	Dashboard cmds.DashboardService
 	Search    SearchService
+	PR        cmds.PRService
 
 	Root string
 	Host string
@@ -44,12 +46,18 @@ type Dependencies struct {
 	Logger *gitlog.Logger
 }
 
-// Model is the Phase 1 Bubble Tea root model.
 type Model struct {
 	deps Dependencies
 
 	log   *gitlog.Logger
 	state domain.AppState
+
+	// viewStack tracks the stack of base views. Top element is current view.
+	// Always has at least one element (PrimaryViewDashboard).
+	viewStack []domain.PrimaryView
+
+	// prDetail holds the PR detail sub-model when the top view is PR detail.
+	prDetail *prdetail.PRDetailModel
 
 	layout layout.LayoutState
 
@@ -105,6 +113,7 @@ func NewModel(deps Dependencies) *Model {
 		classifier:    classifier,
 		hydratedRepos: map[string]struct{}{},
 		layout:        layout.NewLayoutState(0, 0),
+		viewStack:     []domain.PrimaryView{domain.PrimaryViewDashboard},
 		repoPanel:     dashboard.NewRepoPanelModel(nil),
 		prList:        dashboard.NewPRListPanelModel(),
 		preview:       dashboard.NewPreviewPanelModel(),
@@ -190,10 +199,41 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.applyWindowSize(msg)
+		// Also forward window size to PR detail if active.
+		if m.currentView() == domain.PrimaryViewPRDetail && m.prDetail != nil {
+			m.prDetail.Width = m.layout.Current.Width
+			m.prDetail.Height = m.layout.Current.Height - 2
+		}
 		return m, nil
 	case tea.KeyMsg:
 		return m.handleKey(msg)
+	case prdetail.BackToDashboard:
+		return m, m.handleBackToDashboard()
+	case prdetail.OpenBrowserPR:
+		return m, openBrowserForPRCmd(m.selectedRepoForURL(msg.Repo), msg.Repo, msg.Number)
+	case cmds.PRDetailLoaded:
+		// Always route to prDetail if it exists, even when the dashboard is the
+		// active view. If the user ESCs before an in-flight response arrives, the
+		// data is still stored so same-PR reuse shows it immediately on reopen.
+		if m.prDetail != nil {
+			next, cmd := m.prDetail.Update(msg)
+			m.prDetail = next
+			return m, cmd
+		}
+		return m, nil
+	case cmds.DiffLoaded:
+		// Same rationale as PRDetailLoaded above.
+		if m.prDetail != nil {
+			next, cmd := m.prDetail.Update(msg)
+			m.prDetail = next
+			return m, cmd
+		}
+		return m, nil
 	default:
+		// Always route unknown messages through applyMessage so dashboard state
+		// (preview debounce, background loads) continues updating regardless of
+		// which view is active. PR-detail-specific messages (PRDetailLoaded,
+		// DiffLoaded) have explicit cases above.
 		return m, m.applyMessage(msg)
 	}
 }
@@ -202,7 +242,26 @@ func (m *Model) View() string {
 	if m.state.Search.OverlayOpen {
 		return m.palette.View()
 	}
-	return m.renderDashboard()
+	switch m.currentView() {
+	case domain.PrimaryViewPRDetail:
+		if m.prDetail != nil {
+			// PR detail renders content in a rect of width × (height - 2).
+			// The "- 2" leaves exactly 2 rows for the shared status bar at the bottom.
+			// This matches composeBody's contentH = height - 2.
+			body := m.prDetail.View()
+			status := m.status.View()
+			if strings.TrimSpace(body) == "" {
+				return status
+			}
+			if strings.TrimSpace(status) == "" {
+				return body
+			}
+			return body + "\n" + status
+		}
+		return m.renderDashboard()
+	default:
+		return m.renderDashboard()
+	}
 }
 
 func (m *Model) State() domain.AppState {
@@ -255,12 +314,30 @@ func (m *Model) Layout() layout.LayoutState {
 }
 
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.logDebug("key", "key", msg.String(), "view", string(m.currentView()), "focus", string(m.focus))
+
+	// keymap.Dispatch is a dashboard-scoped concern. It understands the four
+	// dashboard focus targets (repo panel, PR list, preview, command palette)
+	// and maps keys to typed Actions that the root model then executes.
+	//
+	// PR detail is a separate view pushed onto the view stack. It has its own
+	// internal focus axis (Files / CI / Content) that does not map to any
+	// domain.FocusTarget, and it reuses keys that the dashboard keymap assigns
+	// different meanings (e.g. esc → Quit on dashboard, esc → BackToDashboard
+	// in PR detail; tab → CycleFocus on dashboard, tab → cycle sub-panels in
+	// PR detail). Routing those keys through keymap.Dispatch would produce the
+	// wrong actions.
+	//
+	// PRDetailModel.Update already contains complete, self-contained key
+	// handling, so the right move is to forward directly and skip the
+	// dashboard dispatcher altogether.
+	if m.currentView() == domain.PrimaryViewPRDetail {
+		return m, m.forwardKey(msg)
+	}
+
 	result := keymap.Dispatch(m.focus, msg)
 	if isRootAction(result.Action) {
 		return m, m.handleRootAction(result.Action)
-	}
-	if result.PassThrough || result.Action != nil {
-		return m, m.forwardKey(msg)
 	}
 	return m, m.forwardKey(msg)
 }
@@ -277,6 +354,11 @@ func (m *Model) handleRootAction(action keymap.Action) tea.Cmd {
 		return m.refreshSelectedRepo(true)
 	case keymap.OpenBrowser:
 		return m.openBrowserForCurrentPR()
+	case keymap.SelectPR:
+		// Enter on PR list: select the PR and open detail.
+		return m.handleSelectPRAndOpenDetail()
+	case keymap.OpenPRDetail:
+		return m.openPRDetail()
 	case keymap.Quit:
 		return tea.Quit
 	case keymap.OpenDashboardFilter:
@@ -287,6 +369,15 @@ func (m *Model) handleRootAction(action keymap.Action) tea.Cmd {
 }
 
 func (m *Model) forwardKey(msg tea.KeyMsg) tea.Cmd {
+	if m.currentView() == domain.PrimaryViewPRDetail {
+		if m.prDetail != nil {
+			next, cmd := m.prDetail.Update(msg)
+			m.prDetail = next
+			return cmd
+		}
+		return nil
+	}
+
 	switch m.focus {
 	case domain.FocusCmdPalette:
 		next, cmd := m.palette.Update(msg)
@@ -590,6 +681,11 @@ func (m *Model) handleSelectRepoMsg(msg dashboard.SelectRepoMsg) tea.Cmd {
 	return cmd
 }
 
+func (m *Model) handleSelectPRAndOpenDetail() tea.Cmd {
+	// openPRDetail now handles all state updates (preview, cursor, etc.).
+	return m.openPRDetail()
+}
+
 func (m *Model) handleSelectPRMsg(msg dashboard.SelectPRMsg) tea.Cmd {
 	if msg.Index < 0 {
 		return nil
@@ -621,7 +717,7 @@ func (m *Model) handleChangeTabMsg(msg dashboard.ChangeTabMsg) tea.Cmd {
 	m.state.Dashboard.PreviewLoading = false
 	m.preview = dashboard.NewPreviewPanelModel()
 	m.preview.SetTheme(m.theme)
-	m.preview.SetRect(m.layout.Current.Preview, m.bodyHeight())
+	m.preview.SetRect(m.layout.Current.Preview, m.bodyHeight()-2)
 	m.syncStatus()
 	return m.syncCurrentSelection()
 }
@@ -755,10 +851,7 @@ func (m *Model) cycleFocus(direction keymap.CycleDirection) tea.Cmd {
 	if m.state.Search.OverlayOpen {
 		return nil
 	}
-	idx := indexOfFocus(m.focus)
-	if idx < 0 {
-		idx = 0
-	}
+	idx := max(indexOfFocus(m.focus), 0)
 	switch direction {
 	case keymap.FocusPrev:
 		idx--
@@ -876,7 +969,7 @@ func (m *Model) applyWindowSize(msg tea.WindowSizeMsg) {
 	bodyH := m.bodyHeight()
 	m.repoPanel.SetRect(m.layout.Current.Repo, bodyH)
 	m.prList.SetRect(m.layout.Current.PR, bodyH)
-	m.preview.SetRect(m.layout.Current.Preview, bodyH)
+	m.preview.SetRect(m.layout.Current.Preview, bodyH-2)
 	m.status.SetRect(m.layout.Current.Width)
 	m.palette, _ = m.palette.Update(msg)
 	m.syncPaletteStats()
@@ -911,6 +1004,28 @@ func (m *Model) syncStatus() {
 	}
 }
 
+// ViewStack methods
+
+func (m *Model) pushView(v domain.PrimaryView) {
+	// Guard: prevent double-push of the same view.
+	if m.currentView() == v {
+		return
+	}
+	m.viewStack = append(m.viewStack, v)
+}
+
+func (m *Model) popView() domain.PrimaryView {
+	if len(m.viewStack) <= 1 {
+		return m.viewStack[0]
+	}
+	m.viewStack = m.viewStack[:len(m.viewStack)-1]
+	return m.viewStack[len(m.viewStack)-1]
+}
+
+func (m *Model) currentView() domain.PrimaryView {
+	return m.viewStack[len(m.viewStack)-1]
+}
+
 func (m *Model) syncPaletteStats() {
 	m.palette.SetActiveRepo(m.selectedRepoName())
 	total := len(m.state.Repos.Discovered)
@@ -941,7 +1056,7 @@ func (m *Model) resetDashboardsForRepo() {
 func (m *Model) resetPreviewState() {
 	m.preview = dashboard.NewPreviewPanelModel()
 	m.preview.SetTheme(m.theme)
-	m.preview.SetRect(m.layout.Current.Preview, m.bodyHeight())
+	m.preview.SetRect(m.layout.Current.Preview, m.bodyHeight()-2)
 	m.state.Dashboard.Preview = nil
 	m.state.Dashboard.PreviewLoading = false
 }
@@ -1078,7 +1193,7 @@ func batch(cmdsOut ...tea.Cmd) tea.Cmd {
 
 func isRootAction(action keymap.Action) bool {
 	switch action.(type) {
-	case keymap.ToggleCmdPalette, keymap.CloseCmdPalette, keymap.CycleFocus, keymap.TriggerRefresh, keymap.OpenBrowser, keymap.Quit, keymap.OpenDashboardFilter:
+	case keymap.ToggleCmdPalette, keymap.CloseCmdPalette, keymap.CycleFocus, keymap.TriggerRefresh, keymap.OpenBrowser, keymap.OpenPRDetail, keymap.SelectPR, keymap.Quit, keymap.OpenDashboardFilter:
 		return true
 	default:
 		return false
@@ -1193,6 +1308,38 @@ func derivedPreview(summary domain.PullRequestSummary) domain.PRPreviewSnapshot 
 	}
 }
 
+func (m *Model) openPRDetail() tea.Cmd {
+	current, ok := m.currentSelectedPR()
+	if !ok {
+		return nil
+	}
+	repo, ok := m.selectedRepo()
+	if !ok {
+		return nil
+	}
+
+	m.logDebug("opening pr detail", "pr", m.prSlug(current.Repo, current.Number), "repo", repo.FullName)
+
+	// Same PR reuse: if prDetail exists and matches repo+number, reuse it without
+	// re-init — Init() would re-fire network requests and overwrite scroll state.
+	// Preview state is left untouched; it was already set by the j/k SelectPRMsg path.
+	if m.prDetail != nil && m.prDetail.Summary.Repo == current.Repo && m.prDetail.Summary.Number == current.Number {
+		m.logDebug("reusing existing pr detail model", "pr", m.prSlug(current.Repo, current.Number))
+		m.pushView(domain.PrimaryViewPRDetail)
+		return nil
+	}
+
+	// Different PR or nil — construct fresh model.
+	// PR service may be nil (not wired yet) — model still renders from summary.
+	m.prDetail = prdetail.NewModel(current, repo, m.deps.PR)
+	m.prDetail.SetTheme(m.theme)
+	m.prDetail.Width = m.layout.Current.Width
+	m.prDetail.Height = m.layout.Current.Height - 2 // minus status bar
+	m.pushView(domain.PrimaryViewPRDetail)
+
+	return m.prDetail.Init()
+}
+
 func (m *Model) openBrowserForCurrentPR() tea.Cmd {
 	current, ok := m.currentSelectedPR()
 	if !ok {
@@ -1201,6 +1348,20 @@ func (m *Model) openBrowserForCurrentPR() tea.Cmd {
 	repo := m.selectedRepoForURL(current.Repo)
 	m.logDebug("opening browser", "pr", m.prSlug(current.Repo, current.Number))
 	return openBrowserForPRCmd(repo, current.Repo, current.Number)
+}
+
+// handleBackToDashboard pops the PR detail view and restores dashboard focus.
+// Preview state is untouched: it was set when the PR was selected via j/k navigation
+// and continues updating in the background via applyMessage while detail was open.
+func (m *Model) handleBackToDashboard() tea.Cmd {
+	if m.prDetail != nil {
+		m.logDebug("pr detail closed", "pr", m.prSlug(m.prDetail.Summary.Repo, m.prDetail.Summary.Number))
+	}
+	m.popView()
+	m.focus = domain.FocusPRListPanel
+	m.previousFocus = domain.FocusPreviewPanel
+	m.syncStatus()
+	return nil
 }
 
 func openBrowserForPRCmd(repo domain.Repository, fallbackRepo string, number int) tea.Cmd {

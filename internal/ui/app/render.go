@@ -61,36 +61,30 @@ func (m *Model) composeBody(height int) string {
 // contentW = content area width (excl. borders).
 // height = total box height (incl. top+bottom borders).
 // Returns a string that is (contentW + 3) chars wide:
-//   1 left border + contentW + 1 right border + 1 gap space.
+//
+//	1 left border + contentW + 1 right border + 1 gap space.
 func buildBox(view string, contentW, height int, focused bool) string {
-	bc := lipgloss.Color("#7C3AED")
+	bc := lipgloss.Color("#7C3AED") // TODO: take from theme.go
 	if !focused {
 		bc = lipgloss.Color("#374151")
 	}
 	border := lipgloss.NewStyle().Foreground(bc).Render
 
-	contentH := height - 2
-	if contentH < 1 {
-		contentH = 1
-	}
+	contentH := max(height-2, 1)
 
 	lines := make([]string, 0, height)
 
+	// TODO: this is hack af, fix it
 	// Top: ┌───┐
 	lines = append(lines, border("┌"+strings.Repeat("─", contentW)+"┐"))
 
 	contentLines := strings.Split(view, "\n")
-	for i := 0; i < contentH; i++ {
+	for i := range contentH {
 		line := ""
 		if i < len(contentLines) {
 			line = contentLines[i]
 		}
-		vis := lipgloss.Width(line)
-		if vis < contentW {
-			line += strings.Repeat(" ", contentW-vis)
-		} else if vis > contentW {
-			line = lipgloss.NewStyle().MaxWidth(contentW).Render(line)
-		}
+		line = lipgloss.NewStyle().Width(contentW).MaxWidth(contentW).Render(line)
 		lines = append(lines, border("│")+line+border("│"))
 	}
 
@@ -123,7 +117,7 @@ type columnView struct {
 
 func joinColumns(columns []columnView, height int) string {
 	lines := make([]string, height)
-	for i := 0; i < height; i++ {
+	for i := range height {
 		parts := make([]string, 0, len(columns))
 		for _, col := range columns {
 			parts = append(parts, lineAt(col.view, i, col.width))
@@ -135,7 +129,7 @@ func joinColumns(columns []columnView, height int) string {
 
 func joinColumn(col columnView, height int) string {
 	lines := make([]string, height)
-	for i := 0; i < height; i++ {
+	for i := range height {
 		lines[i] = lineAt(col.view, i, col.width)
 	}
 	return strings.Join(lines, "\n")
@@ -144,7 +138,7 @@ func joinColumn(col columnView, height int) string {
 func lineAt(view string, index, width int) string {
 	lines := strings.Split(view, "\n")
 	if index < 0 || index >= len(lines) {
-		return strings.Repeat(" ", width)
+		return lipgloss.NewStyle().Width(width).Render("")
 	}
 	return padLine(lines[index], width)
 }

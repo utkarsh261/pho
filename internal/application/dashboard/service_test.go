@@ -196,6 +196,111 @@ func TestLoadRepoForceRefreshUpdatesCache(t *testing.T) {
 	}
 }
 
+func TestStaleWhileRevalidateDoesNotCascade(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	coord := newTestCoordinator(t)
+	repo := testutil.Repo("acme/api", testutil.WithLocalPath("/workspace/api"))
+
+	// Seed a stale cache entry: fetched 3 minutes ago, TTL is 2 minutes.
+	staleAt := time.Now().Add(-3 * time.Minute)
+	stale := testutil.DashboardSnap(repo, testutil.PR(1))
+	key := dashboardCacheKey(repo, "prs")
+	if err := coord.Write(ctx, key, stale, dashboardMeta(key, repo, cacheKindDashboardPRs, nil, staleAt)); err != nil {
+		t.Fatalf("seed stale cache: %v", err)
+	}
+
+	clientCalls := 0
+	fresh := testutil.DashboardSnap(repo, testutil.PR(10))
+	svc := &Service{
+		Cache: coord,
+		Client: &fakeGitHubClient{
+			FetchDashboardPRsFn: func(ctx context.Context, repo domain.Repository) ([]domain.PullRequestSummary, int, bool, string, error) {
+				clientCalls++
+				return fresh.PRs, fresh.TotalCount, fresh.Truncated, fresh.EndCursor, nil
+			},
+		},
+		Now: time.Now,
+	}
+
+	// Capture background spawns instead of running goroutines.
+	var spawnCount int
+	var capturedFns []func()
+	svc.BackgroundFn = func(fn func()) {
+		spawnCount++
+		capturedFns = append(capturedFns, fn)
+	}
+
+	// LoadRepo(force=false) on a stale entry: returns stale data immediately
+	// and schedules exactly one background refresh.
+	got, err := svc.LoadRepo(ctx, repo, false)
+	if err != nil {
+		t.Fatalf("load stale: %v", err)
+	}
+	if len(got.PRs) != len(stale.PRs) {
+		t.Fatalf("expected stale PRs to be returned, got %d", len(got.PRs))
+	}
+	if clientCalls != 0 {
+		t.Fatalf("stale hit must not call transport synchronously, got %d calls", clientCalls)
+	}
+	if spawnCount != 1 {
+		t.Fatalf("expected 1 background spawn from stale hit, got %d", spawnCount)
+	}
+
+	// Run the spawned background refresh synchronously.
+	for _, fn := range capturedFns {
+		fn()
+	}
+
+	// The background refresh (force=true) must make exactly one network call
+	// and must NOT schedule another background refresh.
+	if clientCalls != 1 {
+		t.Fatalf("background refresh must call transport exactly once, got %d", clientCalls)
+	}
+	if spawnCount != 1 {
+		t.Fatalf("background refresh must not cascade into another spawn, got %d total spawns", spawnCount)
+	}
+}
+
+func TestForceRefreshNeverSpawnsBackground(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	coord := newTestCoordinator(t)
+	repo := testutil.Repo("acme/api", testutil.WithLocalPath("/workspace/api"))
+
+	// Seed a stale cache entry.
+	staleAt := time.Now().Add(-3 * time.Minute)
+	stale := testutil.DashboardSnap(repo, testutil.PR(1))
+	key := dashboardCacheKey(repo, "prs")
+	if err := coord.Write(ctx, key, stale, dashboardMeta(key, repo, cacheKindDashboardPRs, nil, staleAt)); err != nil {
+		t.Fatalf("seed stale cache: %v", err)
+	}
+
+	clientCalls := 0
+	svc := &Service{
+		Cache: coord,
+		Client: &fakeGitHubClient{
+			FetchDashboardPRsFn: func(ctx context.Context, repo domain.Repository) ([]domain.PullRequestSummary, int, bool, string, error) {
+				clientCalls++
+				return nil, 0, false, "", nil
+			},
+		},
+		Now: time.Now,
+		BackgroundFn: func(fn func()) {
+			t.Errorf("force=true must never spawn a background goroutine")
+		},
+	}
+
+	if _, err := svc.LoadRepo(ctx, repo, true); err != nil {
+		t.Fatalf("force refresh: %v", err)
+	}
+	if clientCalls != 1 {
+		t.Fatalf("expected exactly 1 transport call, got %d", clientCalls)
+	}
+}
+
 func TestLoadPreviewWarmCacheBypassesTransport(t *testing.T) {
 	t.Parallel()
 

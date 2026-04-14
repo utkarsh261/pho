@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/utk/git-term/internal/diff/model"
 	"github.com/utk/git-term/internal/domain"
 )
 
@@ -28,19 +29,37 @@ type SearchService interface {
 	BuildRepoIndex(repos []domain.Repository) error
 }
 
-// ViewerResolved is emitted when viewer resolution completes.
+type PRService interface {
+	LoadDetail(ctx context.Context, repo domain.Repository, number int, force bool) (domain.PRPreviewSnapshot, bool, error)
+	LoadDiff(ctx context.Context, repo domain.Repository, number int, headSHA string, force bool) (model.DiffModel, bool, error)
+}
+
+type PRDetailLoaded struct {
+	Repo      string
+	Number    int
+	Detail    domain.PRPreviewSnapshot
+	FromCache bool
+	Err       error
+}
+
+type DiffLoaded struct {
+	Repo      string
+	Number    int
+	Diff      model.DiffModel
+	FromCache bool
+	Err       error
+}
+
 type ViewerResolved struct {
 	Login string
 	Err   error
 }
 
-// ReposDiscovered is emitted when local repository discovery completes.
 type ReposDiscovered struct {
 	Repos []domain.Repository
 	Err   error
 }
 
-// DashboardLoaded is emitted when a dashboard snapshot completes loading.
 type DashboardLoaded struct {
 	Repo      string
 	Snapshot  domain.DashboardSnapshot
@@ -48,7 +67,6 @@ type DashboardLoaded struct {
 	Err       error
 }
 
-// InvolvingLoaded is emitted when involving PRs complete loading.
 type InvolvingLoaded struct {
 	Repo      string
 	Snapshot  domain.InvolvingSnapshot
@@ -56,7 +74,6 @@ type InvolvingLoaded struct {
 	Err       error
 }
 
-// RecentLoaded is emitted when recent activity completes loading.
 type RecentLoaded struct {
 	Repo      string
 	Snapshot  domain.RecentSnapshot
@@ -64,7 +81,6 @@ type RecentLoaded struct {
 	Err       error
 }
 
-// PreviewLoaded is emitted when a PR preview completes loading.
 type PreviewLoaded struct {
 	Repo      string
 	Number    int
@@ -73,13 +89,11 @@ type PreviewLoaded struct {
 	Err       error
 }
 
-// SearchIndexRebuilt is emitted when a search index rebuild completes.
 type SearchIndexRebuilt struct {
 	Repo string
 	Err  error
 }
 
-// RefreshStarted marks a job key as in-flight.
 type RefreshStarted struct {
 	Key string
 }
@@ -93,7 +107,6 @@ type RefreshFailed struct {
 	Err error
 }
 
-// ResolveViewerCmd resolves the viewer login for the given host.
 func ResolveViewerCmd(svc ViewerService, host string) tea.Cmd {
 	return func() tea.Msg {
 		login, err := svc.FetchViewer(context.Background(), host)
@@ -158,4 +171,30 @@ func repoKey(repo domain.Repository) string {
 		return repo.Owner + "/" + repo.Name
 	}
 	return repo.Name
+}
+
+func LoadPRDetailCmd(svc PRService, repo domain.Repository, number int, force bool) tea.Cmd {
+	return func() tea.Msg {
+		detail, fromCache, err := svc.LoadDetail(context.Background(), repo, number, force)
+		return PRDetailLoaded{
+			Repo:      repoKey(repo),
+			Number:    number,
+			Detail:    detail,
+			FromCache: fromCache,
+			Err:       err,
+		}
+	}
+}
+
+func LoadDiffCmd(svc PRService, repo domain.Repository, number int, headSHA string, force bool) tea.Cmd {
+	return func() tea.Msg {
+		diff, fromCache, err := svc.LoadDiff(context.Background(), repo, number, headSHA, force)
+		return DiffLoaded{
+			Repo:      repoKey(repo),
+			Number:    number,
+			Diff:      diff,
+			FromCache: fromCache,
+			Err:       err,
+		}
+	}
 }
