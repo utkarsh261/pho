@@ -18,6 +18,30 @@ import (
 	"github.com/utk/git-term/internal/ui/theme"
 )
 
+// rightPanelWidth returns the outer width of the right panel given the current terminal width.
+func (m *PRDetailModel) rightPanelWidth() int {
+	if m.Width >= MinWidthForSidebar {
+		return max(m.Width-LeftPanelWidth-2, 10)
+	}
+	return m.Width
+}
+
+// contentViewportWidth returns the usable text-column width inside the content area
+// given the outer right-panel width.
+func contentViewportWidth(rightWidth int) int {
+	innerW := max(rightWidth-2, 1)
+	return max(innerW-2, 1)
+}
+
+// contentViewportHeight returns the number of visible rows in the content text area.
+// Derived from the terminal height by subtracting the header box, the tab headBox,
+// and body-box borders.
+func (m *PRDetailModel) contentViewportHeight() int {
+	bodyH := max(m.Height-3, 1)
+	innerH := max(bodyH-4, 1)
+	return max(innerH-2, 1)
+}
+
 type PRDetailModel struct {
 	Summary domain.PullRequestSummary
 
@@ -136,8 +160,15 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 				cmds.LoadDiffCmd(m.PRService, m.Repo, m.Summary.Number, m.Summary.HeadRefOID, true))
 		}
 		m.Diff = &msg.Diff
+		// Recompute DisplayRows for any file where it is zero (e.g. legacy cache
+		// entries written before DisplayRows was added to DiffFile).
+		for i := range m.Diff.Files {
+			if m.Diff.Files[i].DisplayRows == 0 {
+				m.Diff.Files[i].DisplayRows = diffFileDisplayRows(&m.Diff.Files[i])
+			}
+		}
 		// Sync files into left panel.
-		m.leftPanel.Files = msg.Diff.Files
+		m.leftPanel.Files = m.Diff.Files
 		m.leftPanel.Loading = false
 		return m, spinCmd
 
@@ -276,60 +307,28 @@ func (m *PRDetailModel) renderRightViewport(width, height int) string {
 	contentW := max(innerW-2, 1)
 	contentH := max(innerH-2, 1)
 
-	var contentLines []string
+	// Build sections and clamp scroll within the real content bounds.
+	sections := m.buildContentSections(contentW)
+	total := totalRowsInSections(sections)
+	scroll := clamp(m.ContentScroll, 0, max(0, total-contentH))
 
-	contentLines = append(contentLines, "Description")
+	// Scroll-spy: use the unclamped ContentScroll so that a section jump
+	// (e.g. pressing '2') highlights the Diff tab even when total content
+	// fits within the viewport and the display scroll is clamped to 0.
+	active := activeSectionAt(sections, m.ContentScroll)
 
-	if m.Detail != nil && strings.TrimSpace(m.Detail.BodyExcerpt) != "" {
-		bodyLines := wrapParagraph(m.Detail.BodyExcerpt, contentW)
-		for _, l := range bodyLines {
-			contentLines = append(contentLines, l)
-		}
-	} else if !m.DetailLoading {
-		contentLines = append(contentLines, "No description provided.")
-	} else {
-		contentLines = append(contentLines, "Loading…")
+	// Render content lines using the overscan algorithm.
+	lines := m.renderContentLines(sections, scroll, contentH, contentW)
+
+	// Apply left-padding (1 space) to each content line.
+	for i, l := range lines {
+		lines[i] = " " + l
 	}
+	contentStr := renderBlock(lines, innerW, contentH)
 
-	contentLines = append(contentLines, "")
-	contentLines = append(contentLines, strings.Repeat("─", contentW))
-
-	if m.DiffLoading {
-		contentLines = append(contentLines, "⠋ Loading diff…")
-	} else if m.Diff == nil || len(m.Diff.Files) == 0 {
-		contentLines = append(contentLines, "No changes")
-	} else {
-		stats := m.Diff.Stats
-		contentLines = append(contentLines, fmt.Sprintf("%d file(s), +%d -%d", stats.TotalFiles, stats.TotalAdditions, stats.TotalDeletions))
-	}
-
-	start := max(m.ContentScroll, 0)
-	end := min(start+contentH, len(contentLines))
-
-	var visible []string
-	if start < len(contentLines) {
-		visible = append([]string(nil), contentLines[start:end]...)
-	}
-
-	var tabDesc, tabDiff, tabComments string
-	if m.theme != nil {
-		tabDesc = m.theme.TabActive.Render("● Desc")
-		tabDiff = m.theme.TabInactive.Render("Diff")
-		tabComments = m.theme.TabInactive.Render("Comments")
-	} else {
-		tabDesc = "[ ● Desc ]"
-		tabDiff = "Diff"
-		tabComments = "Comments"
-	}
-	tabsStr := tabDesc + " " + tabDiff + " " + tabComments
-
-	// Add inner padding
-	for i, r := range visible {
-		visible[i] = " " + r
-	}
+	// Build tab indicators (scroll-spy only — not focusable).
+	tabsStr := m.renderSectionTabs(sections, active)
 	tabsStr = " " + tabsStr
-
-	contentStr := renderBlock(visible, innerW, contentH)
 
 	var borderColor lipgloss.Color
 	if m.theme != nil {
@@ -337,8 +336,6 @@ func (m *PRDetailModel) renderRightViewport(width, height int) string {
 	} else {
 		borderColor = theme.Default().Border
 	}
-
-	// Active focus color
 	if m.leftPanel.Focus == FocusContent {
 		if m.theme != nil {
 			borderColor = m.theme.Primary
@@ -362,6 +359,43 @@ func (m *PRDetailModel) renderRightViewport(width, height int) string {
 		Render(contentStr)
 
 	return lipgloss.JoinVertical(lipgloss.Left, headBox, bodyBox)
+}
+
+// renderSectionTabs builds the "Desc | Diff | Comments" indicator string.
+// Active section is highlighted; sections with RowCount=0 are muted.
+func (m *PRDetailModel) renderSectionTabs(sections []ContentSection, active domain.PRDetailSection) string {
+	type tabDef struct {
+		section domain.PRDetailSection
+		label   string
+	}
+	tabs := []tabDef{
+		{domain.SectionDescription, "Desc"},
+		{domain.SectionDiff, "Diff"},
+		{domain.SectionComments, "Comments"},
+	}
+
+	th := m.theme
+	if th == nil {
+		th = theme.Default()
+	}
+
+	parts := make([]string, len(tabs))
+	for i, td := range tabs {
+		sec, hasRows := findSection(sections, td.section)
+		_ = sec
+
+		var rendered string
+		switch {
+		case hasRows && active == td.section:
+			rendered = th.TabActive.Render("● " + td.label)
+		case hasRows:
+			rendered = th.TabInactive.Render(td.label)
+		default:
+			rendered = th.MutedTxt.Render(td.label)
+		}
+		parts[i] = rendered
+	}
+	return strings.Join(parts, " ")
 }
 
 // renderNarrowBody renders the body for terminals < 80 cols (no sidebar).
@@ -403,6 +437,12 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		m.jumpPrevFile()
 	case "l", "right":
 		m.jumpNextFile()
+	case "1":
+		m.jumpToSection(1)
+	case "2":
+		m.jumpToSection(2)
+	case "3":
+		m.jumpToSection(3)
 	case "g":
 		if m.LastKey == "g" {
 			m.scrollToTop()
@@ -422,6 +462,21 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		m.LastKey = ""
 	}
 	return m, nil
+}
+
+// jumpToSection scrolls the content viewport to the start of the given section (1=Desc, 2=Diff, 3=Comments).
+// If the section is empty (RowCount = 0) or does not exist, this is a no-op.
+// On success, focus moves to the Content viewport.
+func (m *PRDetailModel) jumpToSection(num int) {
+	target := domain.PRDetailSection(num - 1)
+	contentWidth := contentViewportWidth(m.rightPanelWidth())
+	sections := m.buildContentSections(contentWidth)
+	sec, ok := findSection(sections, target)
+	if !ok {
+		return
+	}
+	m.ContentScroll = sec.StartRow
+	m.leftPanel.Focus = FocusContent
 }
 
 // cycleForward advances focus: Files → CI (if checks) → Content → Files.
@@ -562,7 +617,7 @@ func (m *PRDetailModel) scrollToBottom() {
 }
 
 func (m *PRDetailModel) scrollHalfPageDown() {
-	half := m.contentVisibleHeight() / 2
+	half := m.contentViewportHeight() / 2
 	switch m.leftPanel.Focus {
 	case FocusContent:
 		m.ContentScroll += half
@@ -577,7 +632,7 @@ func (m *PRDetailModel) scrollHalfPageDown() {
 }
 
 func (m *PRDetailModel) scrollHalfPageUp() {
-	half := m.contentVisibleHeight() / 2
+	half := m.contentViewportHeight() / 2
 	switch m.leftPanel.Focus {
 	case FocusContent:
 		m.ContentScroll -= half
@@ -595,11 +650,6 @@ func (m *PRDetailModel) bodyHeight() int {
 	return max(1, m.Height-2) // subtract header + section buttons rows
 }
 
-// contentVisibleHeight returns the visible row count for the content viewport.
-func (m *PRDetailModel) contentVisibleHeight() int {
-	return max(1, m.bodyHeight())
-}
-
 // ciVisibleRows returns the visible row count within the CI sub-area.
 func (m *PRDetailModel) ciVisibleRows() int {
 	ciH := computeCIHeight(m.bodyHeight(), len(m.leftPanel.Checks))
@@ -608,23 +658,12 @@ func (m *PRDetailModel) ciVisibleRows() int {
 	return contentH
 }
 
-// maxContentScroll returns the maximum content scroll value.
+// maxContentScroll returns the maximum valid content scroll value.
 func (m *PRDetailModel) maxContentScroll() int {
-	return max(0, m.totalContentRows()-m.contentVisibleHeight())
-}
-
-// totalContentRows estimates total rows in the right content viewport.
-func (m *PRDetailModel) totalContentRows() int {
-	rows := 3 // section headers
-	if m.Detail != nil {
-		rows += len(strings.Split(m.Detail.BodyExcerpt, "\n"))
-	}
-	if m.Diff != nil {
-		for _, f := range m.Diff.Files {
-			rows += f.DisplayRows
-		}
-	}
-	return rows
+	contentWidth := contentViewportWidth(m.rightPanelWidth())
+	sections := m.buildContentSections(contentWidth)
+	total := totalRowsInSections(sections)
+	return max(0, total-m.contentViewportHeight())
 }
 
 func (m *PRDetailModel) clampContentScroll() {
