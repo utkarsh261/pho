@@ -11,10 +11,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/utk/git-term/internal/domain"
-	githubpkg "github.com/utk/git-term/internal/github"
-	"github.com/utk/git-term/internal/github/model"
-	gitlog "github.com/utk/git-term/internal/log"
+	"github.com/utkarsh261/pho/internal/domain"
+	githubpkg "github.com/utkarsh261/pho/internal/github"
+	"github.com/utkarsh261/pho/internal/github/model"
+	gitlog "github.com/utkarsh261/pho/internal/log"
 )
 
 // Client implements github.GitHubClient over GitHub GraphQL.

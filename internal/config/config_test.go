@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/utk/git-term/internal/config"
+	"github.com/utkarsh261/pho/internal/config"
 )
 
 // unsetEnv clears an environment variable and restores the original value
@@ -170,7 +170,7 @@ func TestLoad_XDGConfigHome(t *testing.T) {
 	setEnv(t, "XDG_CONFIG_HOME", cfgDir)
 
 	// Create config at the expected XDG path.
-	gitTermDir := filepath.Join(cfgDir, "git-term")
+	gitTermDir := filepath.Join(cfgDir, "pho")
 	if err := os.MkdirAll(gitTermDir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +203,7 @@ func TestLoad_XDGCacheHome(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	want := filepath.Join(cacheDir, "git-term")
+	want := filepath.Join(cacheDir, "pho")
 	if cfg.Cache.Dir != want {
 		t.Errorf("Cache.Dir: got %q, want %q", cfg.Cache.Dir, want)
 	}
@@ -283,9 +283,9 @@ func TestResolvePaths_Empty(t *testing.T) {
 
 	paths := config.ResolvePaths("")
 
-	wantConfig := filepath.Join(home, ".config", "git-term", "config.toml")
-	wantCache := filepath.Join(home, ".cache", "git-term")
-	wantLog := filepath.Join(home, ".local", "state", "git-term", "debug.log")
+	wantConfig := filepath.Join(home, ".config", "pho", "config.toml")
+	wantCache := filepath.Join(home, ".cache", "pho")
+	wantLog := filepath.Join(home, ".local", "state", "pho", "debug.log")
 
 	if paths.ConfigFile != wantConfig {
 		t.Errorf("ConfigFile: got %q, want %q", paths.ConfigFile, wantConfig)
@@ -309,13 +309,13 @@ func TestResolvePaths_XDGOverrides(t *testing.T) {
 
 	paths := config.ResolvePaths("")
 
-	if paths.ConfigFile != filepath.Join(cfgDir, "git-term", "config.toml") {
+	if paths.ConfigFile != filepath.Join(cfgDir, "pho", "config.toml") {
 		t.Errorf("ConfigFile: got %q", paths.ConfigFile)
 	}
-	if paths.CacheDir != filepath.Join(cacheDir, "git-term") {
+	if paths.CacheDir != filepath.Join(cacheDir, "pho") {
 		t.Errorf("CacheDir: got %q", paths.CacheDir)
 	}
-	if paths.LogFile != filepath.Join(stateDir, "git-term", "debug.log") {
+	if paths.LogFile != filepath.Join(stateDir, "pho", "debug.log") {
 		t.Errorf("LogFile: got %q", paths.LogFile)
 	}
 }

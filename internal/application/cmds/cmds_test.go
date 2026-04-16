@@ -8,8 +8,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/utk/git-term/internal/application/cmds"
-	"github.com/utk/git-term/internal/domain"
+	"github.com/utkarsh261/pho/internal/application/cmds"
+	"github.com/utkarsh261/pho/internal/domain"
 )
 
 func TestResolveViewerCmd(t *testing.T) {

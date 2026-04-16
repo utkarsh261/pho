@@ -6,7 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/utk/git-term/internal/domain"
+	"github.com/utkarsh261/pho/internal/domain"
 )
 
 type mockSearchService struct {

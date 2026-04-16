@@ -3,7 +3,7 @@ package anchor
 import (
 	"testing"
 
-	"github.com/utk/git-term/internal/diff/parse"
+	"github.com/utkarsh261/pho/internal/diff/parse"
 )
 
 func TestGenerateAnchorsForAdditions(t *testing.T) {

@@ -3,7 +3,7 @@ package search
 import (
 	"strings"
 
-	"github.com/utk/git-term/internal/diff/model"
+	"github.com/utkarsh261/pho/internal/diff/model"
 )
 
 type SearchMatch struct {

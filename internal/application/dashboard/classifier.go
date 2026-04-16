@@ -3,7 +3,7 @@ package dashboard
 import (
 	"strings"
 
-	"github.com/utk/git-term/internal/domain"
+	"github.com/utkarsh261/pho/internal/domain"
 )
 
 // SummaryTabClassifier splits dashboard PR summaries into the local tabs.

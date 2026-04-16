@@ -8,14 +8,14 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/utk/git-term/internal/application/cmds"
-	"github.com/utk/git-term/internal/diff/model"
-	"github.com/utk/git-term/internal/domain"
-	"github.com/utk/git-term/internal/testutil"
-	"github.com/utk/git-term/internal/ui/components/overlay"
-	"github.com/utk/git-term/internal/ui/keymap"
-	"github.com/utk/git-term/internal/ui/views/dashboard"
-	"github.com/utk/git-term/internal/ui/views/prdetail"
+	"github.com/utkarsh261/pho/internal/application/cmds"
+	"github.com/utkarsh261/pho/internal/diff/model"
+	"github.com/utkarsh261/pho/internal/domain"
+	"github.com/utkarsh261/pho/internal/testutil"
+	"github.com/utkarsh261/pho/internal/ui/components/overlay"
+	"github.com/utkarsh261/pho/internal/ui/keymap"
+	"github.com/utkarsh261/pho/internal/ui/views/dashboard"
+	"github.com/utkarsh261/pho/internal/ui/views/prdetail"
 )
 
 type stubViewerService struct {

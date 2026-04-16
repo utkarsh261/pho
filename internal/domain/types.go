@@ -1,4 +1,4 @@
-// Package domain defines the canonical data model for git-term.
+// Package domain defines the canonical data model for pho.
 // Types in this package are shared across the application, cache, and UI
 // layers. No GitHub transport details belong here.
 package domain
@@ -142,9 +142,17 @@ type PRListRow struct {
 }
 
 type PreviewReviewer struct {
-	Login  string
-	State  string
-	Avatar string
+	Login       string
+	State       string
+	Avatar      string
+	Body        string    // review comment body (may be empty for approval-only reviews)
+	SubmittedAt time.Time // zero if not provided
+}
+
+type PreviewComment struct {
+	Login     string
+	Body      string
+	CreatedAt time.Time
 }
 
 type PreviewCheckRow struct {
@@ -182,6 +190,7 @@ type PRPreviewSnapshot struct {
 	Assignees      []string
 	Mergeable      string
 	MergeState     string
+	Comments       []PreviewComment
 }
 
 type ActivityItem struct {

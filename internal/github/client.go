@@ -3,7 +3,7 @@ package github
 import (
 	"context"
 
-	"github.com/utk/git-term/internal/domain"
+	"github.com/utkarsh261/pho/internal/domain"
 )
 
 // GitHubClient is the transport interface for all GitHub API operations.

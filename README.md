@@ -1,4 +1,20 @@
-# git-term
+# pho
+
+A terminal UI for GitHub pull requests.
+
+## Install
+
+```
+go install github.com/utkarsh261/pho/cmd/pho@latest
+```
+
+Binary lands in `$(go env GOPATH)/bin/pho`.
+
+Or pin a specific version:
+
+```
+go install github.com/utkarsh261/pho/cmd/pho@v0.1.0
+```
 
 ## Requirements
 
@@ -8,7 +24,7 @@
 ## Build
 
 ```
-go build -o git-term ./cmd/git-term
+go build -o pho ./cmd/pho
 ```
 
 With `just`:
@@ -20,7 +36,7 @@ just build
 ## Run
 
 ```
-./git-term
+./pho
 ```
 
 Flags:
@@ -32,13 +48,6 @@ Flags:
 | `--reset` | Clear all caches and exit |
 | `--config <path>` | Path to config file |
 | `--root <dir>` | Root directory to scan for git repos (default `.`) |
-
-With `just`:
-
-```
-just run          # runs with current settings
-just reset        # clears caches
-```
 
 ## Test
 
@@ -62,4 +71,10 @@ With `just`:
 
 ```
 just vet
+```
+
+## Logs
+
+```
+tail -f ~/.local/state/pho/debug.log
 ```

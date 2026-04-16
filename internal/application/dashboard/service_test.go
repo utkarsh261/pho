@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/utk/git-term/internal/cache"
-	memorycache "github.com/utk/git-term/internal/cache/memory"
-	sqlitecache "github.com/utk/git-term/internal/cache/sqlite"
-	"github.com/utk/git-term/internal/domain"
-	"github.com/utk/git-term/internal/testutil"
+	"github.com/utkarsh261/pho/internal/cache"
+	memorycache "github.com/utkarsh261/pho/internal/cache/memory"
+	sqlitecache "github.com/utkarsh261/pho/internal/cache/sqlite"
+	"github.com/utkarsh261/pho/internal/domain"
+	"github.com/utkarsh261/pho/internal/testutil"
 )
 
 type fakeGitHubClient struct {

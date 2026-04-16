@@ -9,8 +9,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/utk/git-term/internal/domain"
-	"github.com/utk/git-term/internal/ui/theme"
+	"github.com/utkarsh261/pho/internal/domain"
+	"github.com/utkarsh261/pho/internal/ui/theme"
 )
 
 const (

@@ -1,4 +1,4 @@
-// Package log provides a structured, file-based logger for git-term built on
+// Package log provides a structured, file-based logger for pho built on
 // top of the stdlib log/slog package. Callers should pass *Logger as a
 // dependency rather than relying on a package-global logger.
 //
@@ -28,7 +28,7 @@ const (
 	FieldFromCache  = "from_cache"
 )
 
-// Logger is the injectable logger for git-term services.
+// Logger is the injectable logger for pho services.
 // Do not use a package-global logger. Pass Logger as a dependency.
 type Logger struct {
 	inner *slog.Logger

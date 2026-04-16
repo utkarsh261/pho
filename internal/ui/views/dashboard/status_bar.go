@@ -8,8 +8,8 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/utk/git-term/internal/domain"
-	"github.com/utk/git-term/internal/ui/theme"
+	"github.com/utkarsh261/pho/internal/domain"
+	"github.com/utkarsh261/pho/internal/ui/theme"
 )
 
 type StatusBarModel struct {

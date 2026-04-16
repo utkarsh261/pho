@@ -12,7 +12,7 @@ const (
 	// acceptDiffHeader is the Accept header required to get raw unified diff output.
 	acceptDiffHeader = "application/vnd.github.v3.diff"
 	// userAgentHeader is a standard User-Agent for GitHub API requests.
-	userAgentHeader = "git-term/1.0"
+	userAgentHeader = "pho/1.0"
 )
 
 // Client fetches raw diff content from the GitHub REST API.

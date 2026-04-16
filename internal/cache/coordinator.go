@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/utk/git-term/internal/domain"
-	gitlog "github.com/utk/git-term/internal/log"
+	"github.com/utkarsh261/pho/internal/domain"
+	gitlog "github.com/utkarsh261/pho/internal/log"
 )
 
 // Coordinator wires L1 and L2 stores together and exposes a stale-while-

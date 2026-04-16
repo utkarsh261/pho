@@ -13,32 +13,32 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
-	"github.com/utk/git-term/internal/application/dashboard"
-	"github.com/utk/git-term/internal/application/discovery"
-	apppr "github.com/utk/git-term/internal/application/pr"
-	"github.com/utk/git-term/internal/application/search"
-	"github.com/utk/git-term/internal/cache"
-	"github.com/utk/git-term/internal/cache/memory"
-	sqlitecache "github.com/utk/git-term/internal/cache/sqlite"
-	"github.com/utk/git-term/internal/config"
-	"github.com/utk/git-term/internal/github/auth"
-	"github.com/utk/git-term/internal/github/graphql"
-	"github.com/utk/git-term/internal/github/rest"
-	gitlog "github.com/utk/git-term/internal/log"
-	"github.com/utk/git-term/internal/ui/app"
-	"github.com/utk/git-term/internal/ui/theme"
+	"github.com/utkarsh261/pho/internal/application/dashboard"
+	"github.com/utkarsh261/pho/internal/application/discovery"
+	apppr "github.com/utkarsh261/pho/internal/application/pr"
+	"github.com/utkarsh261/pho/internal/application/search"
+	"github.com/utkarsh261/pho/internal/cache"
+	"github.com/utkarsh261/pho/internal/cache/memory"
+	sqlitecache "github.com/utkarsh261/pho/internal/cache/sqlite"
+	"github.com/utkarsh261/pho/internal/config"
+	"github.com/utkarsh261/pho/internal/github/auth"
+	"github.com/utkarsh261/pho/internal/github/graphql"
+	"github.com/utkarsh261/pho/internal/github/rest"
+	gitlog "github.com/utkarsh261/pho/internal/log"
+	"github.com/utkarsh261/pho/internal/ui/app"
+	"github.com/utkarsh261/pho/internal/ui/theme"
 )
 
 var version = "dev"
 
 func clearCaches() error {
 	cacheDir := xdgDir("XDG_CACHE_HOME", ".cache")
-	sqliteDB := filepath.Join(cacheDir, "git-term", "cache.db")
+	sqliteDB := filepath.Join(cacheDir, "pho", "cache.db")
 	if err := os.Remove(sqliteDB); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("remove sqlite cache %s: %w", sqliteDB, err)
 	}
 
-	discDir := filepath.Join(os.TempDir(), "git-term-discovery")
+	discDir := filepath.Join(os.TempDir(), "pho-discovery")
 	if err := os.RemoveAll(discDir); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("remove discovery cache %s: %w", discDir, err)
 	}
@@ -67,14 +67,14 @@ func main() {
 	)
 
 	flag.BoolVar(&showVersion, "version", false, "print version and exit")
-	flag.BoolVar(&debug, "debug", false, "enable debug logging (also set by GIT_TERM_DEBUG=1)")
+	flag.BoolVar(&debug, "debug", false, "enable debug logging (also set by PHO_DEBUG=1)")
 	flag.BoolVar(&reset, "reset", false, "clear all caches (SQLite + discovery) and exit")
 	flag.StringVar(&configPath, "config", "", "path to config file (default: XDG config dir)")
 	flag.StringVar(&rootDir, "root", ".", "root directory to scan for git repos")
 	flag.Parse()
 
 	if showVersion {
-		fmt.Println("git-term", version)
+		fmt.Println("pho", version)
 		return
 	}
 
@@ -85,13 +85,13 @@ func main() {
 	}
 
 	// matches log.IsDebug()
-	if os.Getenv("GIT_TERM_DEBUG") == "1" {
+	if os.Getenv("PHO_DEBUG") == "1" {
 		debug = true
 	}
 
 	cfg, err := config.Load(configPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "git-term: failed to load config: %v\n  [config]\n", err)
+		fmt.Fprintf(os.Stderr, "pho: failed to load config: %v\n  [config]\n", err)
 		os.Exit(1)
 	}
 
@@ -103,7 +103,7 @@ func main() {
 
 	if reset {
 		if err := clearCaches(); err != nil {
-			fmt.Fprintf(os.Stderr, "git-term: failed to clear caches: %v\n", err)
+			fmt.Fprintf(os.Stderr, "pho: failed to clear caches: %v\n", err)
 			os.Exit(1)
 		}
 		logger.Info("caches cleared on startup")
@@ -113,12 +113,12 @@ func main() {
 	profiles, err := authSvc.ResolveHosts(context.Background())
 	if err != nil {
 		logger.Error("auth failed", "err", err)
-		fmt.Fprintf(os.Stderr, "git-term: authentication error: %v\n  [auth]\nRun 'gh auth login' to authenticate.\n", err)
+		fmt.Fprintf(os.Stderr, "pho: authentication error: %v\n  [auth]\nRun 'gh auth login' to authenticate.\n", err)
 		os.Exit(1)
 	}
 	if len(profiles) == 0 {
 		logger.Error("no authenticated hosts found")
-		fmt.Fprintf(os.Stderr, "git-term: no authenticated GitHub hosts found.\n  [auth]\nRun 'gh auth login' to authenticate.\n")
+		fmt.Fprintf(os.Stderr, "pho: no authenticated GitHub hosts found.\n  [auth]\nRun 'gh auth login' to authenticate.\n")
 		os.Exit(1)
 	}
 

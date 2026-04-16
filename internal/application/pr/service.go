@@ -7,13 +7,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/utk/git-term/internal/cache"
-	"github.com/utk/git-term/internal/diff/anchor"
-	"github.com/utk/git-term/internal/diff/model"
-	"github.com/utk/git-term/internal/diff/parse"
-	"github.com/utk/git-term/internal/domain"
-	githubclient "github.com/utk/git-term/internal/github"
-	"github.com/utk/git-term/internal/github/rest"
+	"github.com/utkarsh261/pho/internal/cache"
+	"github.com/utkarsh261/pho/internal/diff/anchor"
+	"github.com/utkarsh261/pho/internal/diff/model"
+	"github.com/utkarsh261/pho/internal/diff/parse"
+	"github.com/utkarsh261/pho/internal/domain"
+	githubclient "github.com/utkarsh261/pho/internal/github"
+	"github.com/utkarsh261/pho/internal/github/rest"
 )
 
 const (
@@ -222,7 +222,7 @@ func repoFullName(repo domain.Repository) string {
 }
 
 func previewCacheKey(host, repo string, number int) string {
-	return fmt.Sprintf("preview:v1:host=%s:repo=%s:pr=%d", host, repo, number)
+	return fmt.Sprintf("preview:v2:host=%s:repo=%s:pr=%d", host, repo, number)
 }
 
 func diffCacheKey(host, repo string, number int, sha string) string {

@@ -7,14 +7,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/utk/git-term/internal/cache"
-	memorycache "github.com/utk/git-term/internal/cache/memory"
-	sqlitecache "github.com/utk/git-term/internal/cache/sqlite"
-	"github.com/utk/git-term/internal/diff/anchor"
-	"github.com/utk/git-term/internal/diff/model"
-	"github.com/utk/git-term/internal/diff/parse"
-	"github.com/utk/git-term/internal/domain"
-	"github.com/utk/git-term/internal/testutil"
+	"github.com/utkarsh261/pho/internal/cache"
+	memorycache "github.com/utkarsh261/pho/internal/cache/memory"
+	sqlitecache "github.com/utkarsh261/pho/internal/cache/sqlite"
+	"github.com/utkarsh261/pho/internal/diff/anchor"
+	"github.com/utkarsh261/pho/internal/diff/model"
+	"github.com/utkarsh261/pho/internal/diff/parse"
+	"github.com/utkarsh261/pho/internal/domain"
+	"github.com/utkarsh261/pho/internal/testutil"
 )
 
 type fakeGitHubClient struct {
@@ -60,6 +60,11 @@ func (f *fakeGitHubClient) FetchPreview(ctx context.Context, repo domain.Reposit
 	return f.FetchPreviewFn(ctx, repo, number)
 }
 
+// frozenNow is the fixed time used for both service.Now and coord.Now in tests.
+// Entries seeded at this time with a 2-minute TTL are fresh; entries seeded
+// at 2020 are still stale, so stale-path tests remain valid.
+var frozenNow = time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+
 func newTestCoordinator(t *testing.T) *cache.Coordinator {
 	t.Helper()
 
@@ -71,7 +76,9 @@ func newTestCoordinator(t *testing.T) *cache.Coordinator {
 	t.Cleanup(func() {
 		_ = l2.Close()
 	})
-	return cache.NewCoordinator(l1, l2, nil)
+	coord := cache.NewCoordinator(l1, l2, nil)
+	coord.Now = func() time.Time { return frozenNow }
+	return coord
 }
 
 func testRepo() domain.Repository {

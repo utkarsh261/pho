@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/utk/git-term/internal/domain"
+	"github.com/utkarsh261/pho/internal/domain"
 )
 
 // JSONStore adapts the generic in-memory cache to the common cache Store

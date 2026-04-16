@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/utk/git-term/internal/domain"
-	"github.com/utk/git-term/internal/github/model"
+	"github.com/utkarsh261/pho/internal/domain"
+	"github.com/utkarsh261/pho/internal/github/model"
 )
 
 func normalizeDashboardResponse(repo domain.Repository, resp model.DashboardData) ([]domain.PullRequestSummary, int, bool, string, error) {
@@ -163,6 +163,7 @@ func normalizePreviewNode(repo domain.Repository, number int, node model.PullReq
 			})
 		}
 	}
+	snapshot.Comments = previewComments(node.Comments)
 	return snapshot, nil
 }
 
@@ -244,10 +245,39 @@ func previewReviewers(conn model.ReviewConnection) []domain.PreviewReviewer {
 		if node.Author != nil {
 			avatar = node.Author.AvatarURL
 		}
+		var submittedAt time.Time
+		if node.SubmittedAt != nil {
+			submittedAt, _ = time.Parse(time.RFC3339, *node.SubmittedAt)
+		}
 		out = append(out, domain.PreviewReviewer{
-			Login:  login,
-			State:  node.State,
-			Avatar: avatar,
+			Login:       login,
+			State:       node.State,
+			Avatar:      avatar,
+			Body:        strings.TrimSpace(node.Body),
+			SubmittedAt: submittedAt,
+		})
+	}
+	return out
+}
+
+func previewComments(conn model.IssueCommentConnection) []domain.PreviewComment {
+	if len(conn.Nodes) == 0 {
+		return nil
+	}
+	out := make([]domain.PreviewComment, 0, len(conn.Nodes))
+	for _, node := range conn.Nodes {
+		login := actorLogin(node.Author)
+		if login == "" {
+			continue
+		}
+		var createdAt time.Time
+		if node.CreatedAt != "" {
+			createdAt, _ = time.Parse(time.RFC3339, node.CreatedAt)
+		}
+		out = append(out, domain.PreviewComment{
+			Login:     login,
+			Body:      strings.TrimSpace(node.Body),
+			CreatedAt: createdAt,
 		})
 	}
 	return out

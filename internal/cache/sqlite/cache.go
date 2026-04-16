@@ -12,7 +12,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/utk/git-term/internal/domain"
+	"github.com/utkarsh261/pho/internal/domain"
 )
 
 const (
@@ -40,6 +40,10 @@ func New(dbPath string, version int) (*Cache, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite cache: %w", err)
 	}
+	// Single connection eliminates SQLITE_BUSY: all reads and writes are
+	// serialized through one connection, so there is never a second writer
+	// waiting on the lock. For an in-process cache this is the right default.
+	db.SetMaxOpenConns(1)
 
 	c := &Cache{
 		db:      db,
@@ -61,7 +65,7 @@ func (c *Cache) Close() error {
 
 func (c *Cache) bootstrap(ctx context.Context) error {
 	pragmas := []string{
-		"PRAGMA journal_mode=DELETE;",
+		"PRAGMA journal_mode=WAL;",
 		"PRAGMA synchronous=NORMAL;",
 		"PRAGMA busy_timeout=5000;",
 	}

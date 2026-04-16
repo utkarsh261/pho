@@ -11,16 +11,16 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/utk/git-term/internal/application/cmds"
-	achdashboard "github.com/utk/git-term/internal/application/dashboard"
-	"github.com/utk/git-term/internal/domain"
-	gitlog "github.com/utk/git-term/internal/log"
-	"github.com/utk/git-term/internal/ui/components/overlay"
-	"github.com/utk/git-term/internal/ui/keymap"
-	"github.com/utk/git-term/internal/ui/layout"
-	"github.com/utk/git-term/internal/ui/theme"
-	"github.com/utk/git-term/internal/ui/views/dashboard"
-	"github.com/utk/git-term/internal/ui/views/prdetail"
+	"github.com/utkarsh261/pho/internal/application/cmds"
+	achdashboard "github.com/utkarsh261/pho/internal/application/dashboard"
+	"github.com/utkarsh261/pho/internal/domain"
+	gitlog "github.com/utkarsh261/pho/internal/log"
+	"github.com/utkarsh261/pho/internal/ui/components/overlay"
+	"github.com/utkarsh261/pho/internal/ui/keymap"
+	"github.com/utkarsh261/pho/internal/ui/layout"
+	"github.com/utkarsh261/pho/internal/ui/theme"
+	"github.com/utkarsh261/pho/internal/ui/views/dashboard"
+	"github.com/utkarsh261/pho/internal/ui/views/prdetail"
 )
 
 // SearchService combines the interactive palette search and index rebuild APIs.

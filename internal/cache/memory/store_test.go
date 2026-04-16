@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/utk/git-term/internal/domain"
-	"github.com/utk/git-term/internal/testutil"
+	"github.com/utkarsh261/pho/internal/domain"
+	"github.com/utkarsh261/pho/internal/testutil"
 )
 
 func TestJSONStoreRoundTrip(t *testing.T) {

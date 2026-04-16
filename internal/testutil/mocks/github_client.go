@@ -3,8 +3,8 @@ package mocks
 import (
 	"context"
 
-	"github.com/utk/git-term/internal/domain"
-	githubclient "github.com/utk/git-term/internal/github"
+	"github.com/utkarsh261/pho/internal/domain"
+	githubclient "github.com/utkarsh261/pho/internal/github"
 )
 
 // Ensure MockGitHubClient implements github.GitHubClient at compile time.

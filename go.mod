@@ -1,4 +1,4 @@
-module github.com/utk/git-term
+module github.com/utkarsh261/pho
 
 go 1.25.0
 
