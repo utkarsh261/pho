@@ -677,11 +677,16 @@ func (m *PRDetailModel) ensureFileVisible() {
 	}
 }
 
-// handleRefresh refires both load commands with force=true.
+// handleRefresh clears cached data and refires both load commands with force=true
+// in parallel. Clearing m.Detail and m.Diff causes the right viewport to show
+// loading placeholders immediately, giving visual confirmation that a refresh is
+// underway (analogous to the left-panel spinner).
 func (m *PRDetailModel) handleRefresh() (*PRDetailModel, tea.Cmd) {
 	if m.PRService == nil {
 		return m, nil
 	}
+	m.Detail = nil
+	m.Diff = nil
 	m.DetailLoading = true
 	m.DiffLoading = true
 	m.leftPanel.Loading = true
