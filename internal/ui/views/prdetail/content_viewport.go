@@ -6,8 +6,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	diffmodel "github.com/utk/git-term/internal/diff/model"
-	"github.com/utk/git-term/internal/domain"
+	diffmodel "github.com/utkarsh261/pho/internal/diff/model"
+	"github.com/utkarsh261/pho/internal/domain"
 )
 
 // ContentSection holds the display-row range for one section of the unified content viewport.

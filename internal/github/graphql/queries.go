@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/utk/git-term/internal/domain"
-	githubpkg "github.com/utk/git-term/internal/github"
+	"github.com/utkarsh261/pho/internal/domain"
+	githubpkg "github.com/utkarsh261/pho/internal/github"
 )
 
 func buildViewerQuery() string {

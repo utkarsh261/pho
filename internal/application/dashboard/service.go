@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/utk/git-term/internal/cache"
-	"github.com/utk/git-term/internal/domain"
-	githubclient "github.com/utk/git-term/internal/github"
+	"github.com/utkarsh261/pho/internal/cache"
+	"github.com/utkarsh261/pho/internal/domain"
+	githubclient "github.com/utkarsh261/pho/internal/github"
 )
 
 const (

@@ -3,8 +3,8 @@ package search
 import (
 	"testing"
 
-	"github.com/utk/git-term/internal/diff/model"
-	"github.com/utk/git-term/internal/diff/parse"
+	"github.com/utkarsh261/pho/internal/diff/model"
+	"github.com/utkarsh261/pho/internal/diff/parse"
 )
 
 func TestSearchEmptyQuery(t *testing.T) {

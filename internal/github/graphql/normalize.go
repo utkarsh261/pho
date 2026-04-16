@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/utk/git-term/internal/domain"
-	"github.com/utk/git-term/internal/github/model"
+	"github.com/utkarsh261/pho/internal/domain"
+	"github.com/utkarsh261/pho/internal/github/model"
 )
 
 func normalizeDashboardResponse(repo domain.Repository, resp model.DashboardData) ([]domain.PullRequestSummary, int, bool, string, error) {

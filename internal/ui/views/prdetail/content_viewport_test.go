@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	diffmodel "github.com/utk/git-term/internal/diff/model"
-	"github.com/utk/git-term/internal/domain"
-	"github.com/utk/git-term/internal/ui/theme"
+	diffmodel "github.com/utkarsh261/pho/internal/diff/model"
+	"github.com/utkarsh261/pho/internal/domain"
+	"github.com/utkarsh261/pho/internal/ui/theme"
 )
 
 // ── helpers ───────────────────────────────────────────────────────────────────

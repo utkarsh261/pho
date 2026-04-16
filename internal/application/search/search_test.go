@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/utk/git-term/internal/application/search"
-	"github.com/utk/git-term/internal/domain"
+	"github.com/utkarsh261/pho/internal/application/search"
+	"github.com/utkarsh261/pho/internal/domain"
 )
 
 func TestService_SearchPRsExactNumberRanksFirst(t *testing.T) {

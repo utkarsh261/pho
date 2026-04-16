@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	diffmodel "github.com/utk/git-term/internal/diff/model"
-	"github.com/utk/git-term/internal/application/cmds"
-	"github.com/utk/git-term/internal/domain"
-	"github.com/utk/git-term/internal/ui/theme"
+	diffmodel "github.com/utkarsh261/pho/internal/diff/model"
+	"github.com/utkarsh261/pho/internal/application/cmds"
+	"github.com/utkarsh261/pho/internal/domain"
+	"github.com/utkarsh261/pho/internal/ui/theme"
 )
 
 // ansiRe strips ANSI escape sequences so we can assert on plain text.

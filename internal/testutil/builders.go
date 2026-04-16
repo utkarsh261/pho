@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/utk/git-term/internal/domain"
+	"github.com/utkarsh261/pho/internal/domain"
 )
 
 // Repo returns a Repository with sensible defaults. Override with options.

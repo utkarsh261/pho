@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/utk/git-term/internal/domain"
-	githubpkg "github.com/utk/git-term/internal/github"
-	"github.com/utk/git-term/internal/github/model"
+	"github.com/utkarsh261/pho/internal/domain"
+	githubpkg "github.com/utkarsh261/pho/internal/github"
+	"github.com/utkarsh261/pho/internal/github/model"
 )
 
 func TestNormalizeDashboardResponse_Fixture(t *testing.T) {

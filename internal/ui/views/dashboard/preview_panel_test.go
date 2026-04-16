@@ -8,8 +8,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/utk/git-term/internal/domain"
-	"github.com/utk/git-term/internal/ui/theme"
+	"github.com/utkarsh261/pho/internal/domain"
+	"github.com/utkarsh261/pho/internal/ui/theme"
 )
 
 func TestPreviewPanelRenderSnapshot(t *testing.T) {
@@ -383,7 +383,7 @@ func TestPreviewPanelFullUIRender(t *testing.T) {
 	m := NewPreviewPanelModel()
 	m.SetTheme(theme.Default())
 	snap := domain.PRPreviewSnapshot{
-		Repo:           "utkarsh261/git-term",
+		Repo:           "utkarsh261/pho",
 		Number:         42,
 		Title:          "Improve dashboard rendering",
 		BodyExcerpt:    "This preview text is long enough to force truncation...",
@@ -413,7 +413,7 @@ func TestPreviewPanelFullUIRender(t *testing.T) {
 
 	expected := ` Improve dashboard rendering                                                    
                                                                                 
- utkarsh261/git-term  #42                                                       
+ utkarsh261/pho  #42                                                            
  Author: alice | State: open                                                    
  CI: success | Review: approved                                                 
                                                                                 

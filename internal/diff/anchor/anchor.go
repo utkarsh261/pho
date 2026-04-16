@@ -1,7 +1,7 @@
 package anchor
 
 import (
-	"github.com/utk/git-term/internal/diff/model"
+	"github.com/utkarsh261/pho/internal/diff/model"
 )
 
 func Generate(dm *model.DiffModel, commitSHA string) {

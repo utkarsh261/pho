@@ -1,4 +1,4 @@
-// Package domain defines the canonical data model for git-term.
+// Package domain defines the canonical data model for pho.
 // Types in this package are shared across the application, cache, and UI
 // layers. No GitHub transport details belong here.
 package domain

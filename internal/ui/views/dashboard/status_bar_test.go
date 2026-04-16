@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/utk/git-term/internal/domain"
+	"github.com/utkarsh261/pho/internal/domain"
 )
 
 func TestStatusBarFocusLoadingAndAuthError(t *testing.T) {

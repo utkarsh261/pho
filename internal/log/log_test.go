@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/utk/git-term/internal/log"
+	"github.com/utkarsh261/pho/internal/log"
 )
 
 // logPath creates a temporary log file path inside t.TempDir().

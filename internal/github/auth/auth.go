@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	githubpkg "github.com/utk/git-term/internal/github"
+	githubpkg "github.com/utkarsh261/pho/internal/github"
 )
 
 // AuthService resolves GitHub host profiles and tokens at startup.

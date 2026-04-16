@@ -3,7 +3,7 @@ package keymap
 import (
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/utk/git-term/internal/domain"
+	"github.com/utkarsh261/pho/internal/domain"
 )
 
 // Action is a typed UI intent emitted by the keymap registry.

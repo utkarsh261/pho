@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/utk/git-term/internal/domain"
+	"github.com/utkarsh261/pho/internal/domain"
 )
 
 type DiscoveryService interface {
@@ -188,7 +188,7 @@ type diskCache struct {
 
 func (s *Service) cacheFile(root string) string {
 	sum := sha256.Sum256([]byte(root + "\x00" + strings.Join(sortedKeys(s.pinned), ",") + "\x00" + strings.Join(sortedKeys(s.exclude), ",")))
-	return filepath.Join(os.TempDir(), "git-term-discovery", fmt.Sprintf("%x.json", sum[:]))
+	return filepath.Join(os.TempDir(), "pho-discovery", fmt.Sprintf("%x.json", sum[:]))
 }
 
 func (s *Service) saveDiskCache(root string, repos []domain.Repository) error {

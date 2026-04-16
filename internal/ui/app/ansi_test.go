@@ -8,8 +8,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/utk/git-term/internal/domain"
-	"github.com/utk/git-term/internal/testutil"
+	"github.com/utkarsh261/pho/internal/domain"
+	"github.com/utkarsh261/pho/internal/testutil"
 )
 
 // truncatedANSI matches an incomplete ANSI escape sequence at the end of a line,

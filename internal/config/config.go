@@ -1,4 +1,4 @@
-// Package config handles loading and resolving configuration for git-term.
+// Package config handles loading and resolving configuration for pho.
 // It reads a TOML file (defaulting to the XDG config path) and applies
 // hardcoded defaults for any fields that are zero-valued or absent.
 package config
@@ -118,10 +118,10 @@ func expandTilde(path string) string {
 func ResolvePaths(configPath string) Paths {
 	if configPath == "" {
 		cfgDir := xdgDir("XDG_CONFIG_HOME", ".config")
-		configPath = filepath.Join(cfgDir, "git-term", "config.toml")
+		configPath = filepath.Join(cfgDir, "pho", "config.toml")
 	}
-	cacheDir := filepath.Join(xdgDir("XDG_CACHE_HOME", ".cache"), "git-term")
-	logFile := filepath.Join(xdgDir("XDG_STATE_HOME", ".local/state"), "git-term", "debug.log")
+	cacheDir := filepath.Join(xdgDir("XDG_CACHE_HOME", ".cache"), "pho")
+	logFile := filepath.Join(xdgDir("XDG_STATE_HOME", ".local/state"), "pho", "debug.log")
 	return Paths{
 		ConfigFile: configPath,
 		CacheDir:   cacheDir,

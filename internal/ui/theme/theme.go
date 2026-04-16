@@ -1,4 +1,4 @@
-// Package theme defines all lipgloss styles for the git-term terminal UI.
+// Package theme defines all lipgloss styles for the pho terminal UI.
 // A single Theme struct is constructed once at startup and passed to every
 // panel model — no globals, no side effects.
 package theme
