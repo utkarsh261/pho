@@ -8,6 +8,9 @@ build:
 test:
     go test ./...
 
+test-race:
+    go test -race -count=1 ./...
+
 vet:
     go vet ./...
 
