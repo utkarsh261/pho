@@ -36,6 +36,7 @@ checksum:
 changelog:
   sort: asc
   use: github
+  abbrev: 7
   filters:
     exclude: ["^docs:", "^test:", "^chore:", "Merge pull request", "Merge branch"]
 
