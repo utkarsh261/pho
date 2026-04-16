@@ -160,13 +160,6 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 				cmds.LoadDiffCmd(m.PRService, m.Repo, m.Summary.Number, m.Summary.HeadRefOID, true))
 		}
 		m.Diff = &msg.Diff
-		// Recompute DisplayRows for any file where it is zero (e.g. legacy cache
-		// entries written before DisplayRows was added to DiffFile).
-		for i := range m.Diff.Files {
-			if m.Diff.Files[i].DisplayRows == 0 {
-				m.Diff.Files[i].DisplayRows = diffFileDisplayRows(&m.Diff.Files[i])
-			}
-		}
 		// Sync files into left panel.
 		m.leftPanel.Files = m.Diff.Files
 		m.leftPanel.Loading = false

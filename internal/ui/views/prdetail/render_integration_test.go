@@ -18,20 +18,18 @@ func plainText(s string) string {
 	return ansiRe.ReplaceAllString(s, "")
 }
 
-// makeFileWithHunks builds a DiffFile with real hunk data and computes DisplayRows.
+// makeFileWithHunks builds a DiffFile with real hunk data.
+// DisplayRows is set via diffFileDisplayRows so it matches the UI row layout
+// (3 overhead rows + hunk headers + diff lines).
 func makeFileWithHunks(path string, hunks []diffmodel.DiffHunk) diffmodel.DiffFile {
-	rows := 1 // file header row
-	for _, h := range hunks {
-		rows++ // hunk header row
-		rows += len(h.Lines)
+	f := diffmodel.DiffFile{
+		OldPath: path,
+		NewPath: path,
+		Status:  "modified",
+		Hunks:   hunks,
 	}
-	return diffmodel.DiffFile{
-		OldPath:     path,
-		NewPath:     path,
-		Status:      "modified",
-		Hunks:       hunks,
-		DisplayRows: rows,
-	}
+	f.DisplayRows = diffFileDisplayRows(&f)
+	return f
 }
 
 // ── Diff content visible in rendered output ──────────────────────────────────
@@ -264,7 +262,8 @@ func TestTabIndicatorDiffActiveWhenDescriptionEmpty(t *testing.T) {
 
 // ── renderDiffSectionLines unit-level checks ──────────────────────────────────
 
-// TestRenderDiffSectionLinesFileHeader verifies row 0 is the file header.
+// TestRenderDiffSectionLinesFileHeader verifies row 2 is the file header bar.
+// Row layout per file: 0=blank, 1=dashed separator, 2=file header bar, 3+=hunks.
 func TestRenderDiffSectionLinesFileHeader(t *testing.T) {
 	t.Parallel()
 
@@ -280,15 +279,20 @@ func TestRenderDiffSectionLinesFileHeader(t *testing.T) {
 
 	lines := m.renderDiffSectionLines(0, f.DisplayRows, 80)
 
-	if len(lines) == 0 {
-		t.Fatal("renderDiffSectionLines returned no lines")
+	if len(lines) < 3 {
+		t.Fatalf("expected at least 3 rows, got %d", len(lines))
 	}
-	if !strings.Contains(lines[0], "cmd/main.go") {
-		t.Errorf("expected file header on row 0 to contain 'cmd/main.go', got %q", lines[0])
+	// row 0: blank padding
+	if strings.TrimSpace(plainText(lines[0])) != "" {
+		t.Errorf("expected blank row at row 0, got %q", lines[0])
+	}
+	// row 2: file header bar contains filename
+	if !strings.Contains(plainText(lines[2]), "cmd/main.go") {
+		t.Errorf("expected file header bar at row 2 to contain 'cmd/main.go', got %q", plainText(lines[2]))
 	}
 }
 
-// TestRenderDiffSectionLinesHunkHeader verifies row 1 is the hunk header.
+// TestRenderDiffSectionLinesHunkHeader verifies row 3 is the hunk header.
 func TestRenderDiffSectionLinesHunkHeader(t *testing.T) {
 	t.Parallel()
 
@@ -304,16 +308,17 @@ func TestRenderDiffSectionLinesHunkHeader(t *testing.T) {
 
 	lines := m.renderDiffSectionLines(0, f.DisplayRows, 80)
 
-	if len(lines) < 2 {
-		t.Fatalf("expected at least 2 rows, got %d", len(lines))
+	if len(lines) < 4 {
+		t.Fatalf("expected at least 4 rows, got %d", len(lines))
 	}
-	if lines[1] != "@@ -5,3 +5,4 @@" {
-		t.Errorf("expected hunk header on row 1, got %q", lines[1])
+	// row 3: hunk header (after blank, separator, file bar)
+	if !strings.Contains(plainText(lines[3]), "@@ -5,3 +5,4 @@") {
+		t.Errorf("expected hunk header at row 3, got %q", plainText(lines[3]))
 	}
 }
 
 // TestRenderDiffSectionLinesDiffLineRaw verifies that diff line Raw values
-// appear in subsequent rows after the hunk header.
+// appear at rows 4 and 5 (after blank, separator, file bar, hunk header).
 func TestRenderDiffSectionLinesDiffLineRaw(t *testing.T) {
 	t.Parallel()
 
@@ -333,17 +338,17 @@ func TestRenderDiffSectionLinesDiffLineRaw(t *testing.T) {
 	m.Diff = makeDiff(files)
 	m.DiffLoading = false
 
-	// rows: 0=file header, 1=hunk header, 2="-gone", 3="+here"
+	// rows: 0=blank, 1=separator, 2=file bar, 3=hunk header, 4="-gone", 5="+here"
 	lines := m.renderDiffSectionLines(0, f.DisplayRows, 80)
 
-	if len(lines) < 4 {
-		t.Fatalf("expected 4 rows (header+hunk+2 lines), got %d: %v", len(lines), lines)
+	if len(lines) < 6 {
+		t.Fatalf("expected 6 rows, got %d: %v", len(lines), lines)
 	}
-	if lines[2] != "-gone" {
-		t.Errorf("expected '-gone' at row 2, got %q", lines[2])
+	if lines[4] != "-gone" {
+		t.Errorf("expected '-gone' at row 4, got %q", lines[4])
 	}
-	if lines[3] != "+here" {
-		t.Errorf("expected '+here' at row 3, got %q", lines[3])
+	if lines[5] != "+here" {
+		t.Errorf("expected '+here' at row 5, got %q", lines[5])
 	}
 }
 
@@ -355,8 +360,8 @@ func TestRenderDiffSectionLinesMultipleFiles(t *testing.T) {
 	hunk1 := []diffmodel.DiffHunk{{Header: "@@ -1 +1 @@", Lines: []diffmodel.DiffLine{{Raw: " ctx"}}}}
 	hunk2 := []diffmodel.DiffHunk{{Header: "@@ -2 +2 @@", Lines: []diffmodel.DiffLine{{Raw: "+second"}}}}
 
-	f1 := makeFileWithHunks("alpha.go", hunk1) // rows 0..f1.DisplayRows-1
-	f2 := makeFileWithHunks("beta.go", hunk2)  // rows f1.DisplayRows..f1+f2.DisplayRows-1
+	f1 := makeFileWithHunks("alpha.go", hunk1)
+	f2 := makeFileWithHunks("beta.go", hunk2)
 	files := []diffmodel.DiffFile{f1, f2}
 
 	m := makePRDetail(100, 30, files, nil)
@@ -364,6 +369,7 @@ func TestRenderDiffSectionLinesMultipleFiles(t *testing.T) {
 	m.DiffLoading = false
 
 	// Request exactly the rows belonging to f2.
+	// f1.DisplayRows == diffFileDisplayRows(&f1) since makeFileWithHunks uses it.
 	localStart := f1.DisplayRows
 	localEnd := f1.DisplayRows + f2.DisplayRows
 	lines := m.renderDiffSectionLines(localStart, localEnd, 80)
@@ -371,8 +377,9 @@ func TestRenderDiffSectionLinesMultipleFiles(t *testing.T) {
 	if len(lines) == 0 {
 		t.Fatal("expected rows for second file, got none")
 	}
-	if !strings.Contains(lines[0], "beta.go") {
-		t.Errorf("expected 'beta.go' file header in first returned row, got %q", lines[0])
+	// f2 row layout: 0=blank, 1=separator, 2=file bar with "beta.go"
+	if !strings.Contains(plainText(lines[2]), "beta.go") {
+		t.Errorf("expected 'beta.go' in file header bar at row 2, got %q", plainText(lines[2]))
 	}
 }
 
@@ -394,17 +401,14 @@ func TestRenderDiffSectionLinesLoadingPlaceholder(t *testing.T) {
 
 // ── domain.PRPreviewSnapshot reviewers section ───────────────────────────────
 
-// TestLegacyCacheDisplayRowsZero verifies that when a DiffModel arrives from a
-// legacy cache entry with DisplayRows=0 on every file (written before the field
-// was added), the model recomputes DisplayRows from hunks so that:
-//   - the diff section has the correct row count (not the safety value of 1)
-//   - pressing '2' actually scrolls to the diff section
-//   - diff file headers and hunk content are visible in the rendered output
+// TestLegacyCacheDisplayRowsZero verifies that files with DisplayRows==0 (legacy
+// cache entries written before the field existed) still produce a correct diff
+// section because diffSectionRowCount always derives row counts from hunks via
+// diffFileDisplayRows — it never reads f.DisplayRows.
 func TestLegacyCacheDisplayRowsZero(t *testing.T) {
 	t.Parallel()
 
-	// Build files with real hunk data but DisplayRows deliberately set to 0
-	// to simulate a stale cache entry.
+	// Build files with real hunk data but DisplayRows deliberately set to 0.
 	hunks := []diffmodel.DiffHunk{
 		{
 			Header: "@@ -1,3 +1,4 @@",
@@ -421,7 +425,7 @@ func TestLegacyCacheDisplayRowsZero(t *testing.T) {
 			NewPath:     path,
 			Status:      "modified",
 			Hunks:       hunks,
-			DisplayRows: 0, // legacy cache: field missing
+			DisplayRows: 0, // legacy: field missing in old cache entry
 		}
 	}
 
@@ -432,31 +436,24 @@ func TestLegacyCacheDisplayRowsZero(t *testing.T) {
 	}
 
 	m := makePRDetail(100, 30, files, nil)
-	// Simulate long description so diff is below the fold at scroll=0.
+	// Long description pushes diff below the fold at scroll=0.
 	m.Detail = makeDetailWithBody(strings.Repeat("word ", 200))
-	// Feed the diff via the DiffLoaded message path so recompute runs.
 	dm := makeDiff(files)
 	diffMsg := cmds.DiffLoaded{Diff: *dm}
 	next, _ := m.Update(diffMsg)
 	m = next
 
-	// Verify DisplayRows was recomputed (should be 1+1+3 = 5 per file).
-	for i, f := range m.Diff.Files {
-		if f.DisplayRows == 0 {
-			t.Errorf("file %d (%s): DisplayRows still 0 after recompute", i, f.NewPath)
-		}
-	}
-
-	// Verify the diff section has the correct total rows (not just 1).
+	// Diff section must have the correct row count computed from hunks.
+	// Each file: 3 overhead + 1 hunk header + 3 lines = 7 rows.  3 files = 21.
 	cw := m.contentW()
 	sections := m.buildContentSections(cw)
 	diff, ok := findSection(sections, domain.SectionDiff)
 	if !ok {
-		t.Fatal("expected SectionDiff to be present after recompute")
+		t.Fatal("expected SectionDiff to be present")
 	}
-	// 3 files × 5 rows = 15 diff rows; must be >1 (the stale safety value).
-	if diff.RowCount <= 1 {
-		t.Errorf("expected diff.RowCount > 1 after DisplayRows recompute, got %d", diff.RowCount)
+	wantRows := 3 * diffFileDisplayRows(&m.Diff.Files[0])
+	if diff.RowCount != wantRows {
+		t.Errorf("expected diff.RowCount=%d (from hunks), got %d", wantRows, diff.RowCount)
 	}
 
 	// Pressing '2' must scroll to the diff start.
@@ -466,7 +463,7 @@ func TestLegacyCacheDisplayRowsZero(t *testing.T) {
 		t.Errorf("expected ContentScroll=%d after '2', got %d", diff.StartRow, m.ContentScroll)
 	}
 
-	// Rendered output must contain diff file headers.
+	// Rendered output must contain diff file header bars.
 	out := plainText(m.View())
 	if !strings.Contains(out, "alpha.go") {
 		t.Errorf("expected 'alpha.go' in rendered output after '2'; got:\n%s", out)

@@ -112,25 +112,37 @@ func TestViewportEmptyDescriptionStartsAtDiff(t *testing.T) {
 	}
 }
 
-// TestViewportNoCommentsOmitsSection verifies that the Comments section is omitted
-// entirely when no review nodes exist.
-func TestViewportNoCommentsOmitsSection(t *testing.T) {
+// TestViewportNoCommentsShowsPlaceholder verifies that when no reviews exist the
+// Comments section is still present (RowCount >= 1) and contains the "No reviews"
+// placeholder text so that pressing '3' always lands somewhere.
+func TestViewportNoCommentsShowsPlaceholder(t *testing.T) {
 	t.Parallel()
 
 	files := makeFilesWithDisplayRows(1, 5)
 	m := makePRDetail(100, 30, files, nil)
 	m.Detail = makeDetailWithBody("some body")
-	m.Detail.Reviewers = nil // no reviews
+	m.Detail.Reviewers = nil // no reviews submitted
 	m.Diff = makeDiff(files)
 	m.DiffLoading = false
 	m.DetailLoading = false
+	m.SetTheme(theme.Default())
 
-	sections := m.buildContentSections(m.contentW())
+	cw := m.contentW()
+	sections := m.buildContentSections(cw)
 
-	for _, sec := range sections {
-		if sec.Section == domain.SectionComments {
-			t.Errorf("expected Comments section to be omitted, but found it with RowCount=%d", sec.RowCount)
-		}
+	sec, ok := findSection(sections, domain.SectionComments)
+	if !ok {
+		t.Fatal("expected Comments section to be present even with no reviews")
+	}
+	if sec.RowCount < 1 {
+		t.Errorf("expected RowCount >= 1 for placeholder, got %d", sec.RowCount)
+	}
+
+	// Rendered output at the comments section start should contain the placeholder.
+	lines := m.renderContentLines(sections, sec.StartRow, 5, cw)
+	joined := strings.Join(lines, "\n")
+	if !strings.Contains(joined, "No reviews") {
+		t.Errorf("expected 'No reviews' placeholder in rendered output, got:\n%s", joined)
 	}
 }
 
@@ -328,10 +340,30 @@ func TestCapitalGScrollsToBottom(t *testing.T) {
 // ── Ctrl+D / Ctrl+U tests ────────────────────────────────────────────────────
 
 // TestCtrlDPageDown verifies that Ctrl+D scrolls down by contentViewportHeight/2.
+// Uses files with real hunk data so diffSectionRowCount produces enough rows
+// (diffFileDisplayRows = 3 overhead + hunk lines) to exceed the viewport.
 func TestCtrlDPageDown(t *testing.T) {
 	t.Parallel()
 
-	files := makeFilesWithDisplayRows(5, 10)
+	// Build 5 files each with 8 context lines → diffFileDisplayRows = 3+1+8 = 12 per file = 60 total.
+	makeRichFile := func() diffmodel.DiffFile {
+		lines := make([]diffmodel.DiffLine, 8)
+		for i := range lines {
+			lines[i] = diffmodel.DiffLine{Kind: "context", Raw: " ctx"}
+		}
+		hunk := diffmodel.DiffHunk{Header: "@@ -1,8 +1,8 @@", Lines: lines}
+		f := diffmodel.DiffFile{
+			OldPath: "file.go", NewPath: "file.go", Status: "modified",
+			Hunks: []diffmodel.DiffHunk{hunk},
+		}
+		f.DisplayRows = diffFileDisplayRows(&f)
+		return f
+	}
+	files := make([]diffmodel.DiffFile, 5)
+	for i := range files {
+		files[i] = makeRichFile()
+	}
+
 	m := makePRDetail(100, 30, files, nil)
 	m.Detail = makeDetailWithBody("body text")
 	m.Diff = makeDiff(files)

@@ -98,7 +98,7 @@ type PullRequestNode struct {
 	Additions                int                         `json:"additions"`
 	Deletions                int                         `json:"deletions"`
 	ChangedFiles             int                         `json:"changedFiles"`
-	Comments                 CountNode                   `json:"comments"`
+	Comments                 IssueCommentConnection      `json:"comments"`
 	ReviewThreads            CountNode                   `json:"reviewThreads"`
 	ReviewDecision           *string                     `json:"reviewDecision"`
 	Mergeable                string                      `json:"mergeable,omitempty"`
@@ -130,6 +130,19 @@ type LabelNode struct {
 // CountNode represents a totalCount-only GraphQL object.
 type CountNode struct {
 	TotalCount int `json:"totalCount"`
+}
+
+// IssueCommentNode captures a single PR comment (IssueComment).
+type IssueCommentNode struct {
+	Author    *ActorNode `json:"author"`
+	Body      string     `json:"body,omitempty"`
+	CreatedAt string     `json:"createdAt,omitempty"`
+}
+
+// IssueCommentConnection carries PR comment nodes with a total count.
+type IssueCommentConnection struct {
+	TotalCount int                `json:"totalCount"`
+	Nodes      []IssueCommentNode `json:"nodes"`
 }
 
 // ActorNode captures a login-bearing GraphQL actor.

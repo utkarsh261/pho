@@ -1,8 +1,10 @@
 package prdetail
 
 import (
-	"fmt"
 	"strings"
+	"time"
+
+	"github.com/charmbracelet/lipgloss"
 
 	diffmodel "github.com/utk/git-term/internal/diff/model"
 	"github.com/utk/git-term/internal/domain"
@@ -46,8 +48,10 @@ func (m *PRDetailModel) buildContentSections(contentWidth int) []ContentSection 
 
 	sections := []ContentSection{desc, diff}
 
-	// ── Comments (omitted when empty) ────────────────────────────────────────
-	cLines := m.commentLines()
+	// ── Comments ─────────────────────────────────────────────────────────────
+	// Always present when detail is loaded (shows "No reviews" when empty).
+	// Omitted only while detail is still loading.
+	cLines := m.commentLines(contentWidth)
 	if len(cLines) > 0 {
 		sections = append(sections, ContentSection{
 			Section:  domain.SectionComments,
@@ -93,12 +97,18 @@ func findSection(sections []ContentSection, target domain.PRDetailSection) (Cont
 	return ContentSection{}, false
 }
 
-// diffFileDisplayRows returns the number of display rows a DiffFile occupies:
-// 1 (file header) + 1 per hunk header + 1 per diff line.
-// Mirrors parse.fileDisplayRows but is available inside the UI package so
-// the model can patch legacy cache entries that have DisplayRows == 0.
+// diffFileDisplayRows returns the UI display-row count for one DiffFile:
+//
+//	row 0   : blank padding before separator
+//	row 1   : dashed separator line
+//	row 2   : file header bar (styled background + bold)
+//	row 3.. : hunk header + diff lines (repeated per hunk)
+//
+// This is the authoritative source for per-file row counts used by both
+// diffSectionRowCount and renderDiffSectionLines, so they stay in sync
+// regardless of what f.DisplayRows holds (legacy cache entries may have 0).
 func diffFileDisplayRows(f *diffmodel.DiffFile) int {
-	rows := 1 // file header
+	rows := 3 // blank + separator + header bar
 	for _, h := range f.Hunks {
 		rows++ // hunk header
 		rows += len(h.Lines)
@@ -131,18 +141,25 @@ func (m *PRDetailModel) descriptionLines(contentWidth int) []string {
 		header = m.theme.MutedTxt.Bold(true).Render(header)
 	}
 	lines = append(lines, header)
-	// Divider rule
-	lines = append(lines, strings.Repeat("─", cw))
+
+	// Divider rule — muted color
+	divider := strings.Repeat("─", cw)
+	if m.theme != nil {
+		divider = m.theme.MutedTxt.Render(divider)
+	}
+	lines = append(lines, divider)
+
 	// Word-wrapped body
 	lines = append(lines, wrapParagraph(body, cw)...)
 	return lines
 }
 
 // diffSectionRowCount returns the number of display rows for the Diff section.
+// Always derives the count from hunk structure via diffFileDisplayRows so that
+// legacy cache entries with DisplayRows==0 are handled correctly.
 //
 // Returns 0 only when the diff is not loading and not loaded (truly absent).
 // Returns 1 for a loading placeholder or an empty loaded diff.
-// Returns sum-of-DisplayRows for a loaded diff with files.
 func (m *PRDetailModel) diffSectionRowCount() int {
 	if m.Diff == nil {
 		if m.DiffLoading {
@@ -154,31 +171,146 @@ func (m *PRDetailModel) diffSectionRowCount() int {
 		return 1 // "No changes" placeholder
 	}
 	total := 0
-	for _, f := range m.Diff.Files {
-		total += f.DisplayRows
+	for i := range m.Diff.Files {
+		total += diffFileDisplayRows(&m.Diff.Files[i])
 	}
 	if total == 0 {
-		return 1 // safety: at least one row
+		return 1 // safety
 	}
 	return total
 }
 
 // commentLines returns the display lines for the Comments section.
-// Returns nil when there are no review nodes to display.
-func (m *PRDetailModel) commentLines() []string {
+// Renders formal reviews (reviews field) and regular PR comments (comments field)
+// interleaved chronologically. Each item renders as:
+//
+//	header line (@login · state · date) + blank + wrapped body + blank separator
+//
+// Reviews with no body still appear (approval-only reviews).
+// Returns nil when detail is not loaded.
+// Returns ["No reviews"] placeholder when detail is loaded but nothing to show.
+func (m *PRDetailModel) commentLines(contentWidth ...int) []string {
 	if m.Detail == nil {
 		return nil
 	}
-	var lines []string
+	cw := 80
+	if len(contentWidth) > 0 && contentWidth[0] > 0 {
+		cw = contentWidth[0]
+	}
+
+	type entry struct {
+		login string
+		state string // for reviews; empty for plain comments
+		ts    time.Time
+		body  string
+	}
+
+	var entries []entry
+
 	for _, r := range m.Detail.Reviewers {
 		if r.Login == "" {
 			continue
 		}
 		state := r.State
 		if state == "" {
-			state = "commented"
+			state = "COMMENTED"
 		}
-		lines = append(lines, fmt.Sprintf("@%s: %s", r.Login, state))
+		entries = append(entries, entry{
+			login: r.Login,
+			state: state,
+			ts:    r.SubmittedAt,
+			body:  r.Body,
+		})
+	}
+
+	for _, c := range m.Detail.Comments {
+		if c.Login == "" {
+			continue
+		}
+		entries = append(entries, entry{
+			login: c.Login,
+			state: "",
+			ts:    c.CreatedAt,
+			body:  c.Body,
+		})
+	}
+
+	// Sort chronologically by timestamp (zero times go last).
+	for i := 1; i < len(entries); i++ {
+		for j := i; j > 0; j-- {
+			a, b := entries[j-1], entries[j]
+			aZero, bZero := a.ts.IsZero(), b.ts.IsZero()
+			if aZero && !bZero {
+				// a has no timestamp → move to end
+				entries[j-1], entries[j] = entries[j], entries[j-1]
+			} else if !aZero && !bZero && a.ts.After(b.ts) {
+				entries[j-1], entries[j] = entries[j], entries[j-1]
+			} else {
+				break
+			}
+		}
+	}
+
+	// Section header: blank padding + dashed separator + bold label.
+	var sectionHeader []string
+	sectionHeader = append(sectionHeader, "") // blank padding before separator
+	sep := strings.Repeat("╌", cw)
+	label := "Comments"
+	if m.theme != nil {
+		sep = m.theme.MutedTxt.Render(sep)
+		label = m.theme.MutedTxt.Bold(true).Render(label)
+	}
+	sectionHeader = append(sectionHeader, sep)
+	sectionHeader = append(sectionHeader, label)
+
+	if len(entries) == 0 {
+		msg := "No reviews"
+		if m.theme != nil {
+			msg = m.theme.MutedTxt.Render(msg)
+		}
+		return append(sectionHeader, msg)
+	}
+
+	lines := append([]string{}, sectionHeader...)
+	for _, e := range entries {
+		// Format timestamp.
+		ts := ""
+		if !e.ts.IsZero() {
+			if e.ts.Year() == time.Now().Year() {
+				ts = e.ts.Format("Jan 02")
+			} else {
+				ts = e.ts.Format("Jan 02 2006")
+			}
+		}
+
+		// Header line: "@login · STATE · date" (state omitted for plain comments)
+		var header string
+		if m.theme != nil {
+			header = m.theme.SecondaryTxt.Render("@" + e.login)
+			if e.state != "" {
+				header += m.theme.MutedTxt.Render(" · " + e.state)
+			}
+			if ts != "" {
+				header += m.theme.MutedTxt.Render(" · " + ts)
+			}
+		} else {
+			header = "@" + e.login
+			if e.state != "" {
+				header += " · " + e.state
+			}
+			if ts != "" {
+				header += " · " + ts
+			}
+		}
+		lines = append(lines, header)
+
+		if e.body != "" {
+			lines = append(lines, "") // blank after header
+			lines = append(lines, wrapParagraph(e.body, cw)...)
+		}
+
+		// Blank separator between blocks.
+		lines = append(lines, "")
 	}
 	return lines
 }
@@ -220,7 +352,7 @@ func (m *PRDetailModel) renderContentLines(
 
 	// Pre-compute source lines once (cheap for desc + comments).
 	descLines := m.descriptionLines(contentWidth)
-	cLines := m.commentLines()
+	cLines := m.commentLines(contentWidth)
 
 	// collected maps absolute row index → rendered string.
 	collected := make(map[int]string, contentH+overscan*2)
@@ -275,16 +407,15 @@ func (m *PRDetailModel) renderContentLines(
 // Applies file-level virtualization: only files whose row ranges overlap
 // [localStart, localEnd) are processed.
 //
-// Each DiffFile maps to display rows as follows:
+// Each DiffFile maps to display rows as follows (via diffFileDisplayRows):
 //
-//	row 0         : file header  ("─── path" or "─── old → new")
-//	row 1         : first hunk header  ("@@ … @@")
-//	rows 2..N     : diff lines from that hunk (raw text with +/- prefix)
+//	row 0         : blank line (padding before separator)
+//	row 1         : dashed separator "╌╌╌╌╌" (muted)
+//	row 2         : file header bar  (Subtle bg, bold, full-width)
+//	row 3         : first hunk header  ("@@ … @@")
+//	rows 4..N     : diff lines from that hunk
 //	row N+1       : second hunk header (if any), then its lines, etc.
-//
-// This gives the user readable diff content without requiring Chunk F's
-// full syntax-highlighted renderer.
-func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, _ int) []string {
+func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidth int) []string {
 	n := localEnd - localStart
 	out := make([]string, n)
 
@@ -299,19 +430,36 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, _ int) []st
 		return out
 	}
 
-	// Walk files using locally-computed cumulative row offsets.
-	// (DiffFile.StartRow is authoritative when set by the service; we recompute
-	// here so tests that skip the service still get correct virtualization.)
+	cw := max(contentWidth, 1)
+
+	// Build themed styles once.
+	var separatorLine string
+	var fileHeaderStyle lipgloss.Style
+	var hunkHeaderStyle lipgloss.Style
+
+	dashStr := strings.Repeat("╌", cw)
+	if m.theme != nil {
+		separatorLine = m.theme.MutedTxt.Render(dashStr)
+		fileHeaderStyle = lipgloss.NewStyle().
+			Background(m.theme.Subtle).
+			Foreground(lipgloss.Color("#E2E8F0")).
+			Bold(true).
+			Width(cw)
+		hunkHeaderStyle = m.theme.MutedTxt
+	} else {
+		separatorLine = dashStr
+		fileHeaderStyle = lipgloss.NewStyle().Bold(true).Width(cw)
+		hunkHeaderStyle = lipgloss.NewStyle()
+	}
+
 	outIdx := 0
 	fileRow := 0
 
-	for _, f := range m.Diff.Files {
-		dr := f.DisplayRows
-		if dr <= 0 {
-			dr = 1
-		}
-		fileEnd := fileRow + dr
+	for i := range m.Diff.Files {
+		f := &m.Diff.Files[i]
+		dr := diffFileDisplayRows(f)
 
+		fileEnd := fileRow + dr
 		overlapStart := max(fileRow, localStart)
 		overlapEnd := min(fileEnd, localEnd)
 		if overlapStart >= overlapEnd {
@@ -319,36 +467,46 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, _ int) []st
 			continue
 		}
 
-		// Build the flat display-row slice for this file only for the rows we need.
-		// Row layout: [fileHeader, hunkHeader, line…, hunkHeader, line…, …]
+		// Build the flat display-row slice for this file.
+		//   row 0 : blank
+		//   row 1 : dashed separator
+		//   row 2 : file header bar
+		//   row 3+: hunk header, then diff lines (repeat per hunk)
 		type displayRow struct{ text string }
 		rows := make([]displayRow, 0, dr)
 
-		// row 0: file header
-		if f.IsBinary {
-			rows = append(rows, displayRow{"⊘ binary: " + f.NewPath})
-		} else {
-			header := f.NewPath
-			if f.Status == "renamed" && f.OldPath != "" && f.OldPath != f.NewPath {
-				header = f.OldPath + " → " + f.NewPath
-			}
-			rows = append(rows, displayRow{"─── " + header})
-		}
+		// row 0: blank padding
+		rows = append(rows, displayRow{""})
 
-		// rows 1..: hunk headers + diff lines
+		// row 1: dashed separator
+		rows = append(rows, displayRow{separatorLine})
+
+		// row 2: file header bar
+		var label string
+		if f.IsBinary {
+			label = " ⊘ " + f.NewPath + " (binary)"
+		} else {
+			label = " " + f.NewPath
+			if f.Status == "renamed" && f.OldPath != "" && f.OldPath != f.NewPath {
+				label = " " + f.OldPath + " → " + f.NewPath
+			}
+		}
+		rows = append(rows, displayRow{fileHeaderStyle.Render(label)})
+
+		// rows 3+: hunk headers + diff lines
 		for _, hunk := range f.Hunks {
-			rows = append(rows, displayRow{hunk.Header})
+			rows = append(rows, displayRow{hunkHeaderStyle.Render(hunk.Header)})
 			for _, dl := range hunk.Lines {
 				rows = append(rows, displayRow{dl.Raw})
 			}
 		}
 
-		// Pad to DisplayRows if the model has more rows than content.
+		// Pad to dr if content is shorter (e.g. file with no hunks).
 		for len(rows) < dr {
 			rows = append(rows, displayRow{""})
 		}
 
-		// Emit the rows that overlap [overlapStart, overlapEnd).
+		// Emit only the rows that overlap [overlapStart, overlapEnd).
 		for row := overlapStart; row < overlapEnd; row++ {
 			localRow := row - fileRow
 			if outIdx < n {
