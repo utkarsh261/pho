@@ -460,6 +460,8 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 	hunkHeaderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#22D3EE")).Bold(true)
 	additionStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#4ADE80"))
 	deletionStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444"))
+	currentWordStyle, otherWordStyle, currentLineBg := m.searchHighlightStyles()
+	searchCtx := m.buildSearchRenderContext()
 
 	dashStr := strings.Repeat("╌", cw)
 	if m.theme != nil {
@@ -481,6 +483,7 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 
 	outIdx := 0
 	fileRow := 0
+	globalLineIndex := 0
 
 	for i := range m.Diff.Files {
 		// Stop iterating once we've passed the truncation boundary.
@@ -501,6 +504,7 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 		overlapEnd := min(effectiveEnd, localEnd)
 		if overlapStart >= overlapEnd {
 			fileRow += dr
+			globalLineIndex += diffFileLineCount(f)
 			continue
 		}
 
@@ -533,16 +537,25 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 			for _, hunk := range f.Hunks {
 				rows = append(rows, displayRow{hunkHeaderStyle.Render(hunk.Header)})
 				for _, dl := range hunk.Lines {
-					var s string
+					baseStyle := lipgloss.NewStyle()
 					switch dl.Kind {
 					case "addition":
-						s = additionStyle.Render(dl.Raw)
+						baseStyle = additionStyle
 					case "deletion":
-						s = deletionStyle.Render(dl.Raw)
-					default: // context, unknown
-						s = dl.Raw
+						baseStyle = deletionStyle
 					}
+					s := m.renderSearchMatchLine(
+						dl.Raw,
+						i,
+						globalLineIndex,
+						searchCtx,
+						baseStyle,
+						currentWordStyle,
+						otherWordStyle,
+						currentLineBg,
+					)
 					rows = append(rows, displayRow{s})
+					globalLineIndex++
 				}
 			}
 		}

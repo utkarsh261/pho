@@ -18,6 +18,10 @@ type SearchMatch struct {
 	EndCol   int
 }
 
+// Match is the public search-match type used by UI layers.
+// It aliases SearchMatch to preserve backwards compatibility.
+type Match = SearchMatch
+
 // DiffSearchIndex is a case-insensitive substring search index over
 // all diff content in a DiffModel. It indexes line content only —
 // not file paths.

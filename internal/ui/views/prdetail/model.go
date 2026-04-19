@@ -14,6 +14,7 @@ import (
 
 	"github.com/utkarsh261/pho/internal/application/cmds"
 	"github.com/utkarsh261/pho/internal/diff/model"
+	diffsearch "github.com/utkarsh261/pho/internal/diff/search"
 	"github.com/utkarsh261/pho/internal/domain"
 	"github.com/utkarsh261/pho/internal/ui/theme"
 )
@@ -63,6 +64,13 @@ type PRDetailModel struct {
 	ContentScroll int
 
 	LastKey string
+
+	searchActive  bool
+	searchQuery   string
+	searchIndex   *diffsearch.DiffSearchIndex
+	searchMatches []diffsearch.Match
+	searchCursor  int
+	searchCommit  bool
 
 	leftPanel LeftPanelModel
 	spinner   spinner.Model
@@ -160,6 +168,9 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 				cmds.LoadDiffCmd(m.PRService, m.Repo, m.Summary.Number, m.Summary.HeadRefOID, true))
 		}
 		m.Diff = &msg.Diff
+		m.normalizeDiffRows()
+		m.searchIndex = nil
+		m.refreshSearchMatches()
 		// Sync files into left panel.
 		m.leftPanel.Files = m.Diff.Files
 		m.leftPanel.Loading = false
@@ -411,7 +422,18 @@ func (m *PRDetailModel) renderNarrowBody(width, height int) string {
 
 // handleKey routes keyboard input within the PR detail view.
 func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
+	if m.searchActive && m.handleSearchKey(msg) {
+		m.LastKey = ""
+		return m, nil
+	}
+
 	switch msg.String() {
+	case "/":
+		m.activateSearch()
+		return m, nil
+	case "n", "N":
+		// Search navigation is only meaningful while searchActive=true.
+		return m, nil
 	case "esc", "q":
 		return m, m.emitBackToDashboard()
 	case "r":
@@ -714,6 +736,8 @@ func (m *PRDetailModel) handleRefresh() (*PRDetailModel, tea.Cmd) {
 	m.DetailLoading = true
 	m.DiffLoading = true
 	m.leftPanel.Loading = true
+	m.searchIndex = nil
+	m.refreshSearchMatches()
 	headSHA := m.Summary.HeadRefOID
 	return m, tea.Batch(
 		cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true),
@@ -731,7 +755,7 @@ func (m *PRDetailModel) emitOpenBrowser() tea.Cmd {
 	}
 }
 
-// BackToDashboard is emitted when the user presses Esc or q in PR detail.
+// BackToDashboard is emitted when the user presses q (or Esc while search is inactive) in PR detail.
 type BackToDashboard struct{}
 
 // OpenBrowserPR is emitted when the user presses 'o' in PR detail.
