@@ -1,6 +1,7 @@
 package prdetail
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -492,5 +493,160 @@ func TestRenderCommentsAppearsInView(t *testing.T) {
 
 	if !strings.Contains(out, "bobreviewer") {
 		t.Errorf("expected reviewer 'bobreviewer' in rendered output; got:\n%s", out)
+	}
+}
+
+// ── Enter-on-file navigation tests ────────────────────────────────────────────
+
+// makeSimpleHunk builds a minimal one-line hunk so diffFileDisplayRows returns a
+// deterministic value (3 overhead + 1 hunk header + N lines = 3+1+N).
+func makeSimpleHunk(lines int) diffmodel.DiffHunk {
+	hunk := diffmodel.DiffHunk{Header: "@@ -1 +1 @@"}
+	for i := range lines {
+		hunk.Lines = append(hunk.Lines, diffmodel.DiffLine{Kind: "context", Raw: fmt.Sprintf(" line%d", i)})
+	}
+	return hunk
+}
+
+// makeTestFile builds a DiffFile with one hunk of n lines. DisplayRows is set
+// from the authoritative diffFileDisplayRows so it matches the renderer.
+func makeTestFile(path string, lines int) diffmodel.DiffFile {
+	f := diffmodel.DiffFile{
+		OldPath: path,
+		NewPath: path,
+		Status:  "modified",
+		Hunks:   []diffmodel.DiffHunk{makeSimpleHunk(lines)},
+	}
+	f.DisplayRows = diffFileDisplayRows(&f)
+	return f
+}
+
+// diffSectionStart returns the absolute content-scroll row where the diff section begins.
+func diffSectionStart(m *PRDetailModel) int {
+	sections := m.buildContentSections(m.contentW())
+	sec, _ := findSection(sections, domain.SectionDiff)
+	return sec.StartRow
+}
+
+// TestEnterOnFileFirstFileScrollsToDiffStart verifies that pressing Enter on
+// file 0 sets ContentScroll to the diff section's start row.
+func TestEnterOnFileFirstFileScrollsToDiffStart(t *testing.T) {
+	t.Parallel()
+
+	files := []diffmodel.DiffFile{
+		makeTestFile("a.go", 3),
+		makeTestFile("b.go", 3),
+	}
+	m := makePRDetail(120, 40, files, nil)
+	m.Detail = makeDetailWithBody("") // no description → diff starts at row 0
+	m.Diff = makeDiff(files)
+	m.leftPanel.Focus = FocusFiles
+	m.leftPanel.FileIndex = 0
+
+	m = pressKey(m, "enter")
+
+	want := diffSectionStart(m)
+	if m.ContentScroll != want {
+		t.Errorf("expected ContentScroll=%d (diff section start) after Enter on file 0, got %d", want, m.ContentScroll)
+	}
+	if m.leftPanel.Focus != FocusContent {
+		t.Errorf("expected FocusContent after Enter on file, got %v", m.leftPanel.Focus)
+	}
+}
+
+// TestEnterOnFileSecondFileScrollsPastFirstFile verifies that pressing Enter on
+// file 1 sets ContentScroll = diffSection.StartRow + displayRows(file0).
+// Height=15 → contentViewportHeight≈6, small enough that 16 total diff rows
+// exceed the viewport and maxContentScroll > 0.
+func TestEnterOnFileSecondFileScrollsPastFirstFile(t *testing.T) {
+	t.Parallel()
+
+	file0 := makeTestFile("a.go", 5) // 3 + 1 + 5 = 9 display rows
+	file1 := makeTestFile("b.go", 3)
+	files := []diffmodel.DiffFile{file0, file1}
+
+	m := makePRDetail(120, 15, files, nil)
+	m.Detail = makeDetailWithBody("")
+	m.Diff = makeDiff(files)
+	m.leftPanel.Focus = FocusFiles
+	m.leftPanel.FileIndex = 1
+
+	m = pressKey(m, "enter")
+
+	base := diffSectionStart(m)
+	file0Rows := diffFileDisplayRows(&files[0])
+	want := base + file0Rows
+	if m.ContentScroll != want {
+		t.Errorf("expected ContentScroll=%d after Enter on file 1, got %d", want, m.ContentScroll)
+	}
+}
+
+// TestEnterOnFileWithDescriptionAccountsForDescRows verifies that when a
+// description is present (adds rows before the diff section), the scroll target
+// is still correct — i.e. diffSection.StartRow offsets the description rows.
+// Height=15 ensures the combined desc+diff rows exceed the viewport.
+func TestEnterOnFileWithDescriptionAccountsForDescRows(t *testing.T) {
+	t.Parallel()
+
+	files := []diffmodel.DiffFile{
+		makeTestFile("x.go", 5),
+		makeTestFile("y.go", 5),
+	}
+	m := makePRDetail(120, 15, files, nil)
+	m.Detail = makeDetailWithBody("some description that adds a few rows above the diff")
+	m.Diff = makeDiff(files)
+	m.leftPanel.Focus = FocusFiles
+	m.leftPanel.FileIndex = 0
+
+	m = pressKey(m, "enter")
+
+	// The diff section must start after the description rows.
+	base := diffSectionStart(m)
+	if base == 0 {
+		t.Error("expected diff section to start after description rows, got StartRow=0")
+	}
+	if m.ContentScroll != base {
+		t.Errorf("expected ContentScroll=%d, got %d", base, m.ContentScroll)
+	}
+}
+
+// TestEnterOnFileNoDiffIsNoop verifies that pressing Enter when no diff is loaded
+// does not panic and does not change ContentScroll.
+func TestEnterOnFileNoDiffIsNoop(t *testing.T) {
+	t.Parallel()
+
+	m := makePRDetail(120, 40, nil, nil)
+	m.Detail = makeDetailWithBody("")
+	m.Diff = nil
+	m.leftPanel.Focus = FocusFiles
+	m.leftPanel.FileIndex = 0
+	m.ContentScroll = 0
+
+	m = pressKey(m, "enter")
+
+	if m.ContentScroll != 0 {
+		t.Errorf("expected ContentScroll unchanged (0) when no diff loaded, got %d", m.ContentScroll)
+	}
+}
+
+// TestEnterOnFileNotInFileFocusIsNoop verifies that pressing Enter from
+// FocusContent or FocusCI does not trigger file jump.
+func TestEnterOnFileNotInFileFocusIsNoop(t *testing.T) {
+	t.Parallel()
+
+	files := []diffmodel.DiffFile{makeTestFile("a.go", 3)}
+	m := makePRDetail(120, 40, files, nil)
+	m.Detail = makeDetailWithBody("")
+	m.Diff = makeDiff(files)
+	m.leftPanel.Focus = FocusContent
+	m.ContentScroll = 7
+
+	m = pressKey(m, "enter")
+
+	if m.ContentScroll != 7 {
+		t.Errorf("expected ContentScroll unchanged (7) when focus is not FocusFiles, got %d", m.ContentScroll)
+	}
+	if m.leftPanel.Focus != FocusContent {
+		t.Errorf("expected FocusContent unchanged, got %v", m.leftPanel.Focus)
 	}
 }

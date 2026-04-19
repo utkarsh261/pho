@@ -89,6 +89,8 @@ func pressKey(m *PRDetailModel, key string) *PRDetailModel {
 		msg = tea.KeyMsg{Type: tea.KeyCtrlD}
 	} else if key == "ctrl+u" {
 		msg = tea.KeyMsg{Type: tea.KeyCtrlU}
+	} else if key == "enter" {
+		msg = tea.KeyMsg{Type: tea.KeyEnter}
 	} else if len(key) == 1 {
 		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)}
 	}

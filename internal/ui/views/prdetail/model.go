@@ -426,6 +426,10 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		m.scrollDown()
 	case "k", "up":
 		m.scrollUp()
+	case "enter":
+		if m.leftPanel.Focus == FocusFiles {
+			m.jumpToFile(m.leftPanel.FileIndex)
+		}
 	case "h", "left":
 		m.jumpPrevFile()
 	case "l", "right":
@@ -469,6 +473,26 @@ func (m *PRDetailModel) jumpToSection(num int) {
 		return
 	}
 	m.ContentScroll = sec.StartRow
+	m.leftPanel.Focus = FocusContent
+}
+
+// jumpToFile scrolls the content viewport so that file at index idx is at the top
+// and moves focus to the Content viewport. No-op when diff is absent or idx is out of range.
+func (m *PRDetailModel) jumpToFile(idx int) {
+	if m.Diff == nil || idx < 0 || idx >= len(m.Diff.Files) {
+		return
+	}
+	contentWidth := contentViewportWidth(m.rightPanelWidth())
+	sections := m.buildContentSections(contentWidth)
+	diffSec, ok := findSection(sections, domain.SectionDiff)
+	if !ok {
+		return
+	}
+	fileOffset := 0
+	for i := 0; i < idx; i++ {
+		fileOffset += diffFileDisplayRows(&m.Diff.Files[i])
+	}
+	m.ContentScroll = clamp(diffSec.StartRow+fileOffset, 0, m.maxContentScroll())
 	m.leftPanel.Focus = FocusContent
 }
 
