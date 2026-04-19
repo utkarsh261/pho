@@ -97,18 +97,25 @@ func findSection(sections []ContentSection, target domain.PRDetailSection) (Cont
 	return ContentSection{}, false
 }
 
+// maxDiffDisplayRows is the cap on rendered diff rows before a truncation banner is shown.
+const maxDiffDisplayRows = 5000
+
 // diffFileDisplayRows returns the UI display-row count for one DiffFile:
 //
 //	row 0   : blank padding before separator
 //	row 1   : dashed separator line
 //	row 2   : file header bar (styled background + bold)
 //	row 3.. : hunk header + diff lines (repeated per hunk)
+//	        : binary files get exactly 1 placeholder row at row 3
 //
 // This is the authoritative source for per-file row counts used by both
 // diffSectionRowCount and renderDiffSectionLines, so they stay in sync
 // regardless of what f.DisplayRows holds (legacy cache entries may have 0).
 func diffFileDisplayRows(f *diffmodel.DiffFile) int {
 	rows := 3 // blank + separator + header bar
+	if f.IsBinary {
+		return rows + 1 // +1 for the "📄 Binary file (no diff available)" placeholder row
+	}
 	for _, h := range f.Hunks {
 		rows++ // hunk header
 		rows += len(h.Lines)
@@ -160,6 +167,8 @@ func (m *PRDetailModel) descriptionLines(contentWidth int) []string {
 //
 // Returns 0 only when the diff is not loading and not loaded (truly absent).
 // Returns 1 for a loading placeholder or an empty loaded diff.
+// Caps at maxDiffDisplayRows+1 when the raw total exceeds the limit; the +1
+// reserves a row for the truncation banner.
 func (m *PRDetailModel) diffSectionRowCount() int {
 	if m.Diff == nil {
 		if m.DiffLoading {
@@ -176,6 +185,9 @@ func (m *PRDetailModel) diffSectionRowCount() int {
 	}
 	if total == 0 {
 		return 1 // safety
+	}
+	if total > maxDiffDisplayRows {
+		return maxDiffDisplayRows + 1 // cap + banner row
 	}
 	return total
 }
@@ -405,16 +417,17 @@ func (m *PRDetailModel) renderContentLines(
 
 // renderDiffSectionLines renders the diff section rows [localStart, localEnd).
 // Applies file-level virtualization: only files whose row ranges overlap
-// [localStart, localEnd) are processed.
+// [localStart, localEnd) are processed. Rendering stops at maxDiffDisplayRows;
+// a truncation banner is injected at that position when the diff is larger.
 //
-// Each DiffFile maps to display rows as follows (via diffFileDisplayRows):
+// Row layout per DiffFile (via diffFileDisplayRows):
 //
-//	row 0         : blank line (padding before separator)
-//	row 1         : dashed separator "╌╌╌╌╌" (muted)
-//	row 2         : file header bar  (Subtle bg, bold, full-width)
-//	row 3         : first hunk header  ("@@ … @@")
-//	rows 4..N     : diff lines from that hunk
-//	row N+1       : second hunk header (if any), then its lines, etc.
+//	row 0   : blank line (padding before separator)
+//	row 1   : dashed separator "╌╌╌╌╌" (muted)
+//	row 2   : file header bar  (Subtle bg, bold, full-width)
+//	row 3   : first hunk header "@@ … @@" (cyan+bold) — or binary placeholder
+//	rows 4+ : diff lines: additions (green), deletions (red), context (plain)
+//	          second hunk header if any, then its lines, etc.
 func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidth int) []string {
 	n := localEnd - localStart
 	out := make([]string, n)
@@ -432,46 +445,66 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 
 	cw := max(contentWidth, 1)
 
+	// Determine whether truncation is needed (recompute real total here).
+	realTotal := 0
+	for i := range m.Diff.Files {
+		realTotal += diffFileDisplayRows(&m.Diff.Files[i])
+	}
+	needsTruncation := realTotal > maxDiffDisplayRows
+
 	// Build themed styles once.
 	var separatorLine string
 	var fileHeaderStyle lipgloss.Style
-	var hunkHeaderStyle lipgloss.Style
+	var truncStyle lipgloss.Style
+
+	hunkHeaderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#22D3EE")).Bold(true)
+	additionStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#4ADE80"))
+	deletionStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444"))
 
 	dashStr := strings.Repeat("╌", cw)
 	if m.theme != nil {
+		hunkHeaderStyle = m.theme.DiffHunkHeader
+		additionStyle = m.theme.DiffAddition
+		deletionStyle = m.theme.DiffDeletion
 		separatorLine = m.theme.MutedTxt.Render(dashStr)
 		fileHeaderStyle = lipgloss.NewStyle().
 			Background(m.theme.Subtle).
 			Foreground(lipgloss.Color("#E2E8F0")).
 			Bold(true).
 			Width(cw)
-		hunkHeaderStyle = m.theme.MutedTxt
+		truncStyle = m.theme.MutedTxt
 	} else {
 		separatorLine = dashStr
 		fileHeaderStyle = lipgloss.NewStyle().Bold(true).Width(cw)
-		hunkHeaderStyle = lipgloss.NewStyle()
+		truncStyle = lipgloss.NewStyle()
 	}
 
 	outIdx := 0
 	fileRow := 0
 
 	for i := range m.Diff.Files {
+		// Stop iterating once we've passed the truncation boundary.
+		if fileRow >= maxDiffDisplayRows {
+			break
+		}
+
 		f := &m.Diff.Files[i]
 		dr := diffFileDisplayRows(f)
 
-		fileEnd := fileRow + dr
+		// Clamp the file's effective end to the truncation limit.
+		effectiveEnd := fileRow + dr
+		if effectiveEnd > maxDiffDisplayRows {
+			effectiveEnd = maxDiffDisplayRows
+		}
+
 		overlapStart := max(fileRow, localStart)
-		overlapEnd := min(fileEnd, localEnd)
+		overlapEnd := min(effectiveEnd, localEnd)
 		if overlapStart >= overlapEnd {
 			fileRow += dr
 			continue
 		}
 
 		// Build the flat display-row slice for this file.
-		//   row 0 : blank
-		//   row 1 : dashed separator
-		//   row 2 : file header bar
-		//   row 3+: hunk header, then diff lines (repeat per hunk)
 		type displayRow struct{ text string }
 		rows := make([]displayRow, 0, dr)
 
@@ -483,25 +516,38 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 
 		// row 2: file header bar
 		var label string
-		if f.IsBinary {
-			label = " ⊘ " + f.NewPath + " (binary)"
-		} else {
+		if f.Status == "renamed" && f.OldPath != "" && f.OldPath != f.NewPath {
+			label = " " + f.OldPath + " → " + f.NewPath
+		} else if f.NewPath != "" {
 			label = " " + f.NewPath
-			if f.Status == "renamed" && f.OldPath != "" && f.OldPath != f.NewPath {
-				label = " " + f.OldPath + " → " + f.NewPath
-			}
+		} else {
+			label = " " + f.OldPath
 		}
 		rows = append(rows, displayRow{fileHeaderStyle.Render(label)})
 
-		// rows 3+: hunk headers + diff lines
-		for _, hunk := range f.Hunks {
-			rows = append(rows, displayRow{hunkHeaderStyle.Render(hunk.Header)})
-			for _, dl := range hunk.Lines {
-				rows = append(rows, displayRow{dl.Raw})
+		if f.IsBinary {
+			// row 3: binary placeholder (no hunk content)
+			rows = append(rows, displayRow{truncStyle.Render("📄 Binary file (no diff available)")})
+		} else {
+			// rows 3+: hunk headers + diff lines
+			for _, hunk := range f.Hunks {
+				rows = append(rows, displayRow{hunkHeaderStyle.Render(hunk.Header)})
+				for _, dl := range hunk.Lines {
+					var s string
+					switch dl.Kind {
+					case "addition":
+						s = additionStyle.Render(dl.Raw)
+					case "deletion":
+						s = deletionStyle.Render(dl.Raw)
+					default: // context, unknown
+						s = dl.Raw
+					}
+					rows = append(rows, displayRow{s})
+				}
 			}
 		}
 
-		// Pad to dr if content is shorter (e.g. file with no hunks).
+		// Pad to dr if content is shorter (e.g. non-binary file with no hunks).
 		for len(rows) < dr {
 			rows = append(rows, displayRow{""})
 		}
@@ -520,6 +566,14 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 		}
 
 		fileRow += dr
+	}
+
+	// Inject truncation banner at row maxDiffDisplayRows if needed and in window.
+	if needsTruncation {
+		bannerIdx := maxDiffDisplayRows - localStart
+		if bannerIdx >= 0 && bannerIdx < n {
+			out[bannerIdx] = truncStyle.Render("… diff truncated (too large to display)")
+		}
 	}
 
 	return out

@@ -344,10 +344,10 @@ func TestRenderDiffSectionLinesDiffLineRaw(t *testing.T) {
 	if len(lines) < 6 {
 		t.Fatalf("expected 6 rows, got %d: %v", len(lines), lines)
 	}
-	if lines[4] != "-gone" {
+	if plainText(lines[4]) != "-gone" {
 		t.Errorf("expected '-gone' at row 4, got %q", lines[4])
 	}
-	if lines[5] != "+here" {
+	if plainText(lines[5]) != "+here" {
 		t.Errorf("expected '+here' at row 5, got %q", lines[5])
 	}
 }
