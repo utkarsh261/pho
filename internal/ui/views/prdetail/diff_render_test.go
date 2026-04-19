@@ -17,6 +17,11 @@ import (
 // color-assertion tests (TestDiffRender*Color, TestDiffRenderHunkHeaderColor)
 // work in headless CI environments where stdout is not a TTY.
 func TestMain(m *testing.M) {
+	// CI runners may export NO_COLOR, which disables ANSI even when a renderer
+	// profile is forced. Clear it so color-assertion tests remain deterministic.
+	_ = os.Unsetenv("NO_COLOR")
+	_ = os.Setenv("CLICOLOR_FORCE", "1")
+
 	r := lipgloss.NewRenderer(os.Stdout, termenv.WithProfile(termenv.ANSI), termenv.WithUnsafe())
 	lipgloss.SetDefaultRenderer(r)
 	os.Exit(m.Run())
