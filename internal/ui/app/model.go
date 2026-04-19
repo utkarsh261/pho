@@ -218,6 +218,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.prDetail != nil {
 			next, cmd := m.prDetail.Update(msg)
 			m.prDetail = next
+			m.syncStatus()
 			return m, cmd
 		}
 		return m, nil
@@ -226,6 +227,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.prDetail != nil {
 			next, cmd := m.prDetail.Update(msg)
 			m.prDetail = next
+			m.syncStatus()
 			return m, cmd
 		}
 		return m, nil
@@ -373,6 +375,7 @@ func (m *Model) forwardKey(msg tea.KeyMsg) tea.Cmd {
 		if m.prDetail != nil {
 			next, cmd := m.prDetail.Update(msg)
 			m.prDetail = next
+			m.syncStatus()
 			return cmd
 		}
 		return nil
@@ -1002,6 +1005,20 @@ func (m *Model) syncStatus() {
 	} else {
 		m.status.SelectedRepo = ""
 	}
+	m.syncPRDetailSearchStatus()
+}
+
+func (m *Model) syncPRDetailSearchStatus() {
+	if m.currentView() != domain.PrimaryViewPRDetail || m.prDetail == nil {
+		m.status.SetSearchState("", 0, 0)
+		return
+	}
+	query, matchIndex, matchCount, active := m.prDetail.SearchStatusState()
+	if !active {
+		m.status.SetSearchState("", 0, 0)
+		return
+	}
+	m.status.SetSearchState(query, matchIndex, matchCount)
 }
 
 // ViewStack methods
@@ -1326,6 +1343,7 @@ func (m *Model) openPRDetail() tea.Cmd {
 	if m.prDetail != nil && m.prDetail.Summary.Repo == current.Repo && m.prDetail.Summary.Number == current.Number {
 		m.logDebug("reusing existing pr detail model", "pr", m.prSlug(current.Repo, current.Number))
 		m.pushView(domain.PrimaryViewPRDetail)
+		m.syncStatus()
 		return nil
 	}
 
@@ -1336,6 +1354,7 @@ func (m *Model) openPRDetail() tea.Cmd {
 	m.prDetail.Width = m.layout.Current.Width
 	m.prDetail.Height = m.layout.Current.Height - 2 // minus status bar
 	m.pushView(domain.PrimaryViewPRDetail)
+	m.syncStatus()
 
 	return m.prDetail.Init()
 }

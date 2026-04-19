@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/utkarsh261/pho/internal/application/cmds"
 	diffmodel "github.com/utkarsh261/pho/internal/diff/model"
@@ -90,6 +89,8 @@ func pressKey(m *PRDetailModel, key string) *PRDetailModel {
 		msg = tea.KeyMsg{Type: tea.KeyCtrlD}
 	} else if key == "ctrl+u" {
 		msg = tea.KeyMsg{Type: tea.KeyCtrlU}
+	} else if key == "enter" {
+		msg = tea.KeyMsg{Type: tea.KeyEnter}
 	} else if len(key) == 1 {
 		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)}
 	}
@@ -99,9 +100,7 @@ func pressKey(m *PRDetailModel, key string) *PRDetailModel {
 
 // stripANSI removes ANSI escape sequences from s for plain-text assertions.
 func stripANSI(s string) string {
-	// Use lipgloss.Width on each line as a proxy; we just need printable chars.
-	// A simple approach: the visible content without colors.
-	return lipgloss.NewStyle().Render(s) // round-trip strips nothing, use for width
+	return ansiRe.ReplaceAllString(s, "")
 }
 
 // ─── truncatePathLeft unit tests ─────────────────────────────────────────────

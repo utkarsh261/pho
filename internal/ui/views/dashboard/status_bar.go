@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/utkarsh261/pho/internal/domain"
 	"github.com/utkarsh261/pho/internal/ui/theme"
 )
@@ -22,6 +22,11 @@ type StatusBarModel struct {
 	SelectedRepo string
 	theme        *theme.Theme
 	spinner      spinner.Model
+
+	searchActive bool
+	searchQuery  string
+	searchIndex  int
+	searchCount  int
 }
 
 func NewStatusBarModel() *StatusBarModel {
@@ -43,6 +48,23 @@ func (m *StatusBarModel) SetTheme(th *theme.Theme) {
 	if m.theme != nil {
 		m.spinner.Style = lipgloss.NewStyle().Foreground(m.theme.Warning)
 	}
+}
+
+// SetSearchState controls the temporary search text shown in the status bar.
+// SetSearchState("", 0, 0) clears search mode and restores normal help text.
+func (m *StatusBarModel) SetSearchState(query string, matchIndex, matchCount int) {
+	if query == "" && matchIndex == 0 && matchCount == 0 {
+		m.searchActive = false
+		m.searchQuery = ""
+		m.searchIndex = 0
+		m.searchCount = 0
+		return
+	}
+
+	m.searchActive = true
+	m.searchQuery = m.truncateSearchQuery(query)
+	m.searchIndex = max(0, matchIndex)
+	m.searchCount = max(0, matchCount)
 }
 
 func (m *StatusBarModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -72,9 +94,18 @@ func (m *StatusBarModel) View() string {
 		}
 	}
 
-	helpText := m.hintText()
+	helpText, searchError := m.searchHelpText()
 	if m.theme != nil {
-		helpText = m.theme.StatusHelp.Render(helpText)
+		if searchError {
+			helpText = m.theme.StatusError.Render(helpText)
+		} else if m.searchActive {
+			helpText = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#FDE047")).
+				Bold(true).
+				Render(helpText)
+		} else {
+			helpText = m.theme.StatusHelp.Render(helpText)
+		}
 	}
 
 	parts := []string{helpText}
@@ -120,6 +151,44 @@ func (m *StatusBarModel) hintText() string {
 	default:
 		return "Tab: Next panel | Ctrl+P: Search"
 	}
+}
+
+func (m *StatusBarModel) searchHelpText() (text string, isError bool) {
+	if !m.searchActive {
+		return m.hintText(), false
+	}
+	if m.searchQuery == "" {
+		return "/ _", false
+	}
+	if m.searchCount == 0 {
+		return fmt.Sprintf("/ %s  0 matches", m.searchQuery), true
+	}
+	idx := m.searchIndex
+	if idx <= 0 {
+		idx = 1
+	}
+	if idx > m.searchCount {
+		idx = m.searchCount
+	}
+	return fmt.Sprintf("/ %s  %d/%d matches", m.searchQuery, idx, m.searchCount), false
+}
+
+func (m *StatusBarModel) truncateSearchQuery(query string) string {
+	if query == "" {
+		return ""
+	}
+	budget := 32
+	if m.Width > 0 {
+		budget = max(8, m.Width/3)
+	}
+	r := []rune(query)
+	if len(r) <= budget {
+		return query
+	}
+	if budget <= 1 {
+		return "…"
+	}
+	return string(r[:budget-1]) + "…"
 }
 
 func (m *StatusBarModel) errorText() string {

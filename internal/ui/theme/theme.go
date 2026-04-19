@@ -55,6 +55,11 @@ type Theme struct {
 	Additions lipgloss.Style // emerald
 	Deletions lipgloss.Style // red
 
+	// ── diff line colors ───────────────────────────────────────────
+	DiffAddition   lipgloss.Style // bright green for + lines
+	DiffDeletion   lipgloss.Style // red for - lines
+	DiffHunkHeader lipgloss.Style // cyan + bold for @@ headers
+
 	// ── tab bar ────────────────────────────────────────────────────
 	TabActive   lipgloss.Style // violet bg + white text + padding
 	TabInactive lipgloss.Style // muted text + padding
@@ -149,6 +154,11 @@ func Default() *Theme {
 	// Diff stats.
 	t.Additions = lipgloss.NewStyle().Foreground(t.Success)
 	t.Deletions = lipgloss.NewStyle().Foreground(t.Error)
+
+	// Diff line colors.
+	t.DiffAddition = lipgloss.NewStyle().Foreground(lipgloss.Color("#4ADE80"))
+	t.DiffDeletion = lipgloss.NewStyle().Foreground(t.Error)
+	t.DiffHunkHeader = lipgloss.NewStyle().Foreground(lipgloss.Color("#22D3EE")).Bold(true)
 
 	// Tab bar.
 	t.TabActive = lipgloss.NewStyle().

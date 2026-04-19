@@ -14,6 +14,7 @@ import (
 
 	"github.com/utkarsh261/pho/internal/application/cmds"
 	"github.com/utkarsh261/pho/internal/diff/model"
+	diffsearch "github.com/utkarsh261/pho/internal/diff/search"
 	"github.com/utkarsh261/pho/internal/domain"
 	"github.com/utkarsh261/pho/internal/ui/theme"
 )
@@ -63,6 +64,13 @@ type PRDetailModel struct {
 	ContentScroll int
 
 	LastKey string
+
+	searchActive  bool
+	searchQuery   string
+	searchIndex   *diffsearch.DiffSearchIndex
+	searchMatches []diffsearch.Match
+	searchCursor  int
+	searchCommit  bool
 
 	leftPanel LeftPanelModel
 	spinner   spinner.Model
@@ -160,6 +168,9 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 				cmds.LoadDiffCmd(m.PRService, m.Repo, m.Summary.Number, m.Summary.HeadRefOID, true))
 		}
 		m.Diff = &msg.Diff
+		m.normalizeDiffRows()
+		m.searchIndex = nil
+		m.refreshSearchMatches()
 		// Sync files into left panel.
 		m.leftPanel.Files = m.Diff.Files
 		m.leftPanel.Loading = false
@@ -411,7 +422,18 @@ func (m *PRDetailModel) renderNarrowBody(width, height int) string {
 
 // handleKey routes keyboard input within the PR detail view.
 func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
+	if m.searchActive && m.handleSearchKey(msg) {
+		m.LastKey = ""
+		return m, nil
+	}
+
 	switch msg.String() {
+	case "/":
+		m.activateSearch()
+		return m, nil
+	case "n", "N":
+		// Search navigation is only meaningful while searchActive=true.
+		return m, nil
 	case "esc", "q":
 		return m, m.emitBackToDashboard()
 	case "r":
@@ -426,6 +448,10 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		m.scrollDown()
 	case "k", "up":
 		m.scrollUp()
+	case "enter":
+		if m.leftPanel.Focus == FocusFiles {
+			m.jumpToFile(m.leftPanel.FileIndex)
+		}
 	case "h", "left":
 		m.jumpPrevFile()
 	case "l", "right":
@@ -469,6 +495,26 @@ func (m *PRDetailModel) jumpToSection(num int) {
 		return
 	}
 	m.ContentScroll = sec.StartRow
+	m.leftPanel.Focus = FocusContent
+}
+
+// jumpToFile scrolls the content viewport so that file at index idx is at the top
+// and moves focus to the Content viewport. No-op when diff is absent or idx is out of range.
+func (m *PRDetailModel) jumpToFile(idx int) {
+	if m.Diff == nil || idx < 0 || idx >= len(m.Diff.Files) {
+		return
+	}
+	contentWidth := contentViewportWidth(m.rightPanelWidth())
+	sections := m.buildContentSections(contentWidth)
+	diffSec, ok := findSection(sections, domain.SectionDiff)
+	if !ok {
+		return
+	}
+	fileOffset := 0
+	for i := 0; i < idx; i++ {
+		fileOffset += diffFileDisplayRows(&m.Diff.Files[i])
+	}
+	m.ContentScroll = clamp(diffSec.StartRow+fileOffset, 0, m.maxContentScroll())
 	m.leftPanel.Focus = FocusContent
 }
 
@@ -690,6 +736,8 @@ func (m *PRDetailModel) handleRefresh() (*PRDetailModel, tea.Cmd) {
 	m.DetailLoading = true
 	m.DiffLoading = true
 	m.leftPanel.Loading = true
+	m.searchIndex = nil
+	m.refreshSearchMatches()
 	headSHA := m.Summary.HeadRefOID
 	return m, tea.Batch(
 		cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true),
@@ -707,7 +755,7 @@ func (m *PRDetailModel) emitOpenBrowser() tea.Cmd {
 	}
 }
 
-// BackToDashboard is emitted when the user presses Esc or q in PR detail.
+// BackToDashboard is emitted when the user presses q (or Esc while search is inactive) in PR detail.
 type BackToDashboard struct{}
 
 // OpenBrowserPR is emitted when the user presses 'o' in PR detail.
