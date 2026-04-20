@@ -290,6 +290,45 @@ func TestRefreshFailedPreservesStaleData(t *testing.T) {
 	}
 }
 
+// TestRefreshSelectedRepoShowsLoadingState verifies that refreshSelectedRepo
+// adds jobs to InFlight and does NOT clear PR data (stale data remains visible
+// if refresh fails, which is better than showing nothing).
+func TestRefreshSelectedRepoShowsLoadingState(t *testing.T) {
+	t.Parallel()
+
+	repo := testutil.Repo("acme/alpha")
+	m := newTestModel([]domain.Repository{repo}, nil)
+
+	_, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	_, _ = m.Update(cmdsReposDiscovered([]domain.Repository{repo}))
+	_, _ = m.Update(cmdsDashboardLoaded(repo.FullName, dashboardSnapshot(repo, pr(repo.FullName, 5, "Some PR")), false, nil))
+
+	// Verify initial data exists
+	initialPRs := len(m.State().Dashboard.PRsByTab[domain.TabMyPRs])
+	if initialPRs == 0 {
+		t.Fatal("expected initial PR data")
+	}
+
+	// Trigger refresh - this is the action being tested
+	cmd := m.refreshSelectedRepo(true)
+	if cmd == nil {
+		t.Fatal("expected refresh command")
+	}
+
+	// Verify: status shows loading by checking status.Loading field
+	// syncStatus() updates status.Loading from Jobs.InFlight
+	status := m.status
+	if !status.Loading {
+		t.Error("expected status.Loading = true during refresh")
+	}
+
+	// Verify: PR data is NOT cleared (stale data remains visible during refresh)
+	// This is critical - if refresh fails, user should still see stale data
+	if len(m.State().Dashboard.PRsByTab[domain.TabMyPRs]) != initialPRs {
+		t.Error("expected PR data to NOT be cleared during refresh")
+	}
+}
+
 func TestWindowSizeMsgRecalculatesLayout(t *testing.T) {
 	t.Parallel()
 

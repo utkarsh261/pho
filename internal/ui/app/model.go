@@ -577,6 +577,9 @@ func (m *Model) handleDashboardLoaded(msg cmds.DashboardLoaded) tea.Cmd {
 	m.state.Dashboard.FreshnessByTab[domain.TabNeedsReview] = freshnessFor(msg.Err)
 	m.rebuildDashboardTabs()
 	m.syncPaletteStats()
+
+	delete(m.state.Jobs.InFlight, jobKey(msg.Repo, "dashboard"))
+	m.logDebug("refresh completed", "repo", msg.Repo, "pr_count", len(msg.Snapshot.PRs), "err", msg.Err)
 	m.syncStatus()
 
 	var rebuild tea.Cmd
@@ -612,7 +615,11 @@ func (m *Model) handleInvolvingLoaded(msg cmds.InvolvingLoaded) tea.Cmd {
 	m.prList.Cursor = clampIndex(m.prList.Cursor, len(m.currentPRsForTab(m.prList.Active)))
 	m.state.Dashboard.SelectedIndex = m.prList.Cursor
 	m.syncPaletteStats()
+
+	delete(m.state.Jobs.InFlight, jobKey(msg.Repo, "involving"))
+	m.logDebug("refresh completed", "repo", msg.Repo, "pr_count", len(msg.Snapshot.PRs), "err", msg.Err)
 	m.syncStatus()
+
 	return m.syncCurrentSelection()
 }
 
@@ -638,7 +645,11 @@ func (m *Model) handleRecentLoaded(msg cmds.RecentLoaded) tea.Cmd {
 	m.state.Dashboard.LastRefreshAt[domain.TabRecent] = msg.Snapshot.FetchedAt
 	m.state.Dashboard.FreshnessByTab[domain.TabRecent] = freshnessFor(msg.Err)
 	m.syncPaletteStats()
+
+	delete(m.state.Jobs.InFlight, jobKey(msg.Repo, "recent"))
+	m.logDebug("refresh completed", "repo", msg.Repo, "item_count", len(msg.Snapshot.Items), "err", msg.Err)
 	m.syncStatus()
+
 	return nil
 }
 
@@ -875,6 +886,20 @@ func (m *Model) refreshSelectedRepo(force bool) tea.Cmd {
 	if !ok {
 		return nil
 	}
+
+	m.logDebug("refresh initiated", "repo", repo.FullName, "force", force)
+
+	// We do NOT clear PR data. if refresh fails, stale data remains visible
+	// which is better than showing nothing maybe.
+	m.state.Jobs.InFlight[jobKey(repo.FullName, "dashboard")] = true
+	m.state.Jobs.InFlight[jobKey(repo.FullName, "recent")] = true
+	if viewer := m.state.Session.ViewerByHost[repo.Host]; viewer != "" {
+		m.state.Jobs.InFlight[jobKey(repo.FullName, "involving")] = true
+	}
+
+	// Trigger status bar update to show loading spinner
+	m.syncStatus()
+
 	return batch(m.loadRepoCmds(repo, force)...)
 }
 
