@@ -27,7 +27,8 @@ $(go env GOPATH)/bin/pho ~/path/to/dir/containing/all/cloned/repositories
 ## Requirements
 
 - Go 1.25+
-- `just` (optional, for running justfile recipes)
+- Git
+- [GitHub CLI (`gh`)](https://cli.github.com) — run `gh auth login` to authenticate
 
 ## Build
 
