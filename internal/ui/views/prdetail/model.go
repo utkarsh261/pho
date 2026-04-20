@@ -93,7 +93,7 @@ func NewModel(summary domain.PullRequestSummary, repo domain.Repository, prServi
 		spinner:       s,
 	}
 	m.leftPanel.Loading = loading
-	m.leftPanel.Focus = FocusFiles
+	m.leftPanel.Focus = FocusContent
 	return m
 }
 
@@ -434,7 +434,14 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 	case "n", "N":
 		// Search navigation is only meaningful while searchActive=true.
 		return m, nil
-	case "esc", "q":
+	case "esc":
+		// Esc cycles: Content → Files → Dashboard
+		if m.leftPanel.Focus == FocusContent && m.Width >= MinWidthForSidebar {
+			m.leftPanel.Focus = FocusFiles
+		} else {
+			return m, m.emitBackToDashboard()
+		}
+	case "q":
 		return m, m.emitBackToDashboard()
 	case "r":
 		return m.handleRefresh()
@@ -453,8 +460,12 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 			m.jumpToFile(m.leftPanel.FileIndex)
 		}
 	case "h", "left":
-		m.jumpPrevFile()
+		m.jumpFileViewer()
 	case "l", "right":
+		m.jumpDiffViewer()
+	case "shift+h":
+		m.jumpPrevFile()
+	case "shift+l":
 		m.jumpNextFile()
 	case "1":
 		m.jumpToSection(1)
@@ -610,7 +621,19 @@ func (m *PRDetailModel) scrollUp() {
 	}
 }
 
-// jumpPrevFile moves the file cursor to the previous file (only when Files focused).
+func (m *PRDetailModel) jumpFileViewer() {
+	if m.leftPanel.Focus == FocusContent && m.Width >= MinWidthForSidebar {
+		m.leftPanel.Focus = FocusFiles
+	}
+}
+
+func (m *PRDetailModel) jumpDiffViewer() {
+	if m.leftPanel.Focus == FocusFiles && m.Width >= MinWidthForSidebar {
+		m.jumpToFile(m.leftPanel.FileIndex)
+	}
+}
+
+// jumpPrevFile moves to previous file (h in Files), or toggles to Files from Content.
 func (m *PRDetailModel) jumpPrevFile() {
 	if m.leftPanel.Focus != FocusFiles {
 		return
