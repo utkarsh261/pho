@@ -1,0 +1,3 @@
+See the documentation https://example.com/docs for details.                                                             
+                                                                                                                        
+Check the issue tracker https://github.com/example/repo/issues for known bugs.                                          

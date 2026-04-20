@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/utkarsh261/pho/internal/domain"
+	"github.com/utkarsh261/pho/internal/ui/markdown"
 	"github.com/utkarsh261/pho/internal/ui/theme"
 )
 
@@ -28,6 +29,7 @@ type PreviewPanelModel struct {
 	theme          *theme.Theme
 	spinner        spinner.Model
 	lastKey        string
+	mdRenderer     *markdown.Renderer
 }
 
 func NewPreviewPanelModel() *PreviewPanelModel {
@@ -36,6 +38,7 @@ func NewPreviewPanelModel() *PreviewPanelModel {
 	return &PreviewPanelModel{
 		DebounceDelay: 100 * time.Millisecond,
 		spinner:       s,
+		mdRenderer:    markdown.New(),
 	}
 }
 
@@ -179,10 +182,7 @@ func (m *PreviewPanelModel) View() string {
 	if m.Scroll > len(lines) {
 		m.Scroll = len(lines)
 	}
-	end := m.Scroll + m.Height
-	if end > len(lines) {
-		end = len(lines)
-	}
+	end := min(m.Scroll+m.Height, len(lines))
 	visible := append([]string(nil), lines[m.Scroll:end]...)
 	return padStyle.Render(renderBlock(visible, innerW, m.Height))
 }
@@ -200,7 +200,6 @@ func (m *PreviewPanelModel) buildLines() []string {
 
 	var lines []string
 
-	// Header = PR title as panel header (styled like other panel headers)
 	var header string
 	if m.theme != nil {
 		header = m.theme.Header.Width(m.Width).Render(snap.Title)
@@ -209,7 +208,6 @@ func (m *PreviewPanelModel) buildLines() []string {
 	}
 	lines = append(lines, header, "")
 
-	// Repo + Number
 	var repoNum string
 	if m.theme != nil {
 		repoNum = m.theme.SecondaryTxt.Render(fmt.Sprintf("%s  #%d", snap.Repo, snap.Number))
@@ -226,22 +224,28 @@ func (m *PreviewPanelModel) buildLines() []string {
 	lines = append(lines, "", m.createdLine(snap))
 	lines = append(lines, m.updatedLine(snap))
 
-	// Loading indicator (if body/preview not yet loaded)
 	if m.Loading && m.preview == nil {
 		lines = append(lines, "", m.spinner.View()+" Loading preview...")
 	}
 
-	// Body
 	if body := strings.TrimSpace(snap.BodyExcerpt); body != "" {
 		lines = append(lines, "", m.divider(), m.sectionHeader("Body:"))
-		wrapped := wrapParagraph(body, maxWidth(m.Width-2, 1))
-		lines = append(lines, wrapped...)
-		if !strings.HasSuffix(body, "...") {
-			lines = append(lines, "...")
+		if m.mdRenderer != nil {
+			const previewBodyCap = 15
+			rendered := m.mdRenderer.Render(body, maxWidth(m.Width-2, 1))
+			if len(rendered) > previewBodyCap {
+				rendered = append(rendered[:previewBodyCap], "...")
+			}
+			lines = append(lines, rendered...)
+		} else {
+			wrapped := wrapParagraph(body, maxWidth(m.Width-2, 1))
+			lines = append(lines, wrapped...)
+			if !strings.HasSuffix(body, "...") {
+				lines = append(lines, "...")
+			}
 		}
 	}
 
-	// Top files
 	if len(snap.TopFiles) > 0 {
 		lines = append(lines, "", m.divider(), m.sectionHeader("Top files:"))
 		for _, file := range snap.TopFiles {
@@ -258,7 +262,6 @@ func (m *PreviewPanelModel) buildLines() []string {
 		}
 	}
 
-	// Latest activity
 	if snap.LatestActivity != nil {
 		act := snap.LatestActivity
 		lines = append(lines, "", m.divider(), m.sectionHeader("Latest activity:"))
@@ -268,7 +271,6 @@ func (m *PreviewPanelModel) buildLines() []string {
 		}
 	}
 
-	// CI checks
 	if len(snap.Checks) > 0 {
 		lines = append(lines, "", m.divider(), m.sectionHeader("CI checks:"))
 		limit := len(snap.Checks)
@@ -331,10 +333,7 @@ func (m *PreviewPanelModel) updatedLine(snap domain.PRPreviewSnapshot) string {
 func (m *PreviewPanelModel) fileLine(file domain.PreviewFileStat) string {
 	statsWidth := 12
 	budget := m.Width - 2 // caller prefixes "  "
-	pathBudget := budget - statsWidth
-	if pathBudget < 5 {
-		pathBudget = 5
-	}
+	pathBudget := max(budget-statsWidth, 5)
 
 	path := truncatePathLeft(file.Path, pathBudget)
 	path = lipgloss.NewStyle().Width(pathBudget).Align(lipgloss.Left).Render(path)
@@ -417,10 +416,7 @@ func (m *PreviewPanelModel) clampScroll() {
 	if m.Scroll < 0 {
 		m.Scroll = 0
 	}
-	maxScroll := len(lines) - m.Height
-	if maxScroll < 0 {
-		maxScroll = 0
-	}
+	maxScroll := max(len(lines)-m.Height, 1)
 	if m.Scroll > maxScroll {
 		m.Scroll = maxScroll
 	}

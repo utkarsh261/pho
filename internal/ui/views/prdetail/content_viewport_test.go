@@ -1,6 +1,11 @@
 package prdetail
 
 import (
+	"flag"
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -8,6 +13,14 @@ import (
 	"github.com/utkarsh261/pho/internal/domain"
 	"github.com/utkarsh261/pho/internal/ui/theme"
 )
+
+var updateGolden = flag.Bool("update", false, "overwrite golden files with current output")
+
+var descAnsiRe = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+func descStripANSI(s string) string {
+	return descAnsiRe.ReplaceAllString(s, "")
+}
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -455,5 +468,58 @@ func TestViewportScrolledMidContent(t *testing.T) {
 
 	if len(lines) != contentH {
 		t.Errorf("expected exactly %d lines at mid-scroll, got %d", contentH, len(lines))
+	}
+}
+
+// ── descriptionLines golden tests ─────────────────────────────────────────────
+
+// descriptionBody is a realistic markdown PR description used for golden tests.
+const descriptionBody = `## Summary
+
+This PR integrates **glamour** as the markdown renderer for PR descriptions.
+
+## Changes
+
+- Added lazy-initializing ` + "`" + `Renderer` + "`" + ` wrapper in ` + "`" + `internal/ui/markdown` + "`" + `
+- Replaced plain ` + "`" + `wrapParagraph` + "`" + ` calls in description rendering
+
+## Notes
+
+> Regenerate golden files after bumping the glamour version.
+`
+
+// descGoldenWidths are the terminal widths tested, chosen to straddle the
+// MinWidthForSidebar=80 threshold that changes the right-panel content width.
+var descGoldenWidths = []int{79, 80, 120}
+
+func TestDescriptionLinesGolden(t *testing.T) {
+	for _, termW := range descGoldenWidths {
+		termW := termW
+		t.Run(fmt.Sprintf("w%d", termW), func(t *testing.T) {
+			t.Parallel()
+
+			m := makePRDetail(termW, 40, nil, nil)
+			m.Detail = makeDetailWithBody(descriptionBody)
+			cw := m.contentW()
+
+			lines := m.descriptionLines(cw)
+			got := descStripANSI(strings.Join(lines, "\n"))
+
+			goldenPath := filepath.Join("testdata", "golden", fmt.Sprintf("description_w%d.txt", termW))
+			if *updateGolden {
+				if err := os.WriteFile(goldenPath, []byte(got), 0644); err != nil {
+					t.Fatalf("write golden %s: %v", goldenPath, err)
+				}
+				return
+			}
+
+			data, err := os.ReadFile(goldenPath)
+			if err != nil {
+				t.Fatalf("read golden %s: %v (run with -update to generate)", goldenPath, err)
+			}
+			if got != string(data) {
+				t.Errorf("golden mismatch for description at width %d\ngot:\n%s\nwant:\n%s", termW, got, string(data))
+			}
+		})
 	}
 }

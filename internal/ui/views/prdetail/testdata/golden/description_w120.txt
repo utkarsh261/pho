@@ -1,0 +1,14 @@
+Description
+────────────────────────────────────────────────────────────────────────────
+## Summary                                                                  
+                                                                            
+This PR integrates glamour as the markdown renderer for PR descriptions.    
+                                                                            
+## Changes                                                                  
+                                                                            
+• Added lazy-initializing Renderer wrapper in internal/ui/markdown          
+• Replaced plain wrapParagraph calls in description rendering               
+                                                                            
+## Notes                                                                    
+                                                                            
+│ Regenerate golden files after bumping the glamour version.                

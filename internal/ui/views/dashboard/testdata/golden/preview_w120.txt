@@ -1,0 +1,29 @@
+ Improve dashboard rendering                                                                                            
+                                                                                                                        
+ utkarsh261/pho  #42                                                                                                    
+ Author: alice | State: open                                                                                            
+ CI: success | Review: approved                                                                                         
+                                                                                                                        
+ Created: 2026-04-09 12:30 IST                                                                                          
+ Updated: 2026-04-09 13:45 IST                                                                                          
+                                                                                                                        
+ ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
+ Body:                                                                                                                  
+ ## Summary                                                                                                             
+                                                                                                                        
+ This preview text demonstrates markdown rendering in the preview panel.                                                
+                                                                                                                        
+ ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
+ Top files:                                                                                                             
+   cmd/main.go                                                                                                 +120 -12 
+   internal/ui/views/dashboard/preview_panel.go                                                                  +40 -3 
+                                                                                                                        
+ ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
+ Latest activity:                                                                                                       
+   comment by bob at 2026-04-09 14:00 UTC                                                                               
+ Looks good to me                                                                                                       
+                                                                                                                        
+ ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
+ CI checks:                                                                                                             
+   ✓ check-1                                                                                                            
+   ✓ check-2

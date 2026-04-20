@@ -1,0 +1,9 @@
+Use inline code for short snippets.                                                                                     
+                                                                                                                        
+func main() {                                                                                                           
+    fmt.Println("hello world")                                                                                          
+}                                                                                                                       
+                                                                                                                        
+A shell example:                                                                                                        
+                                                                                                                        
+go test ./...                                                                                                           
