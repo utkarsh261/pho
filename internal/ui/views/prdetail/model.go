@@ -633,7 +633,7 @@ func (m *PRDetailModel) jumpDiffViewer() {
 	}
 }
 
-// jumpPrevFile moves to previous file (h in Files), or toggles to Files from Content.
+// jumpPrevFile moves to previous file
 func (m *PRDetailModel) jumpPrevFile() {
 	if m.leftPanel.Focus != FocusFiles {
 		return
@@ -642,7 +642,7 @@ func (m *PRDetailModel) jumpPrevFile() {
 	m.ensureFileVisible()
 }
 
-// jumpNextFile moves the file cursor to the next file (only when Files focused).
+// jumpNextFile moves the file cursor to the next file
 func (m *PRDetailModel) jumpNextFile() {
 	if m.leftPanel.Focus != FocusFiles {
 		return
