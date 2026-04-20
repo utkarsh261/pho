@@ -331,7 +331,7 @@ func newTestModel(repos []domain.Repository, dashboards map[string]domain.Dashbo
 		Now:       fixedNow,
 	}
 	model := NewModel(deps)
-	model.state.Session.Viewer = "octocat"
+	model.state.Session.ViewerByHost["github.com"] = "octocat"
 	return model
 }
 
