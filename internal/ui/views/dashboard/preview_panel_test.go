@@ -1,7 +1,11 @@
 package dashboard
 
 import (
+	"flag"
 	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +15,14 @@ import (
 	"github.com/utkarsh261/pho/internal/domain"
 	"github.com/utkarsh261/pho/internal/ui/theme"
 )
+
+var updatePreviewGolden = flag.Bool("update", false, "overwrite golden files with current output")
+
+var previewAnsiRe = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+func previewStripANSI(s string) string {
+	return previewAnsiRe.ReplaceAllString(s, "")
+}
 
 func TestPreviewPanelRenderSnapshot(t *testing.T) {
 	t.Parallel()
@@ -42,7 +54,7 @@ func TestPreviewPanelRenderSnapshot(t *testing.T) {
 	m.preview = &snap
 	m.SetRect(100, 30)
 
-	view := m.View()
+	view := previewStripANSI(m.View())
 	checks := []string{
 		"Improve dashboard rendering",
 		"org/repo  #42",
@@ -52,8 +64,8 @@ func TestPreviewPanelRenderSnapshot(t *testing.T) {
 		"Review: approved",
 		"2026-04-09 12:30 IST",
 		"2026-04-09 13:45 IST",
-		"...",
-		"cmd/main.go" + strings.Repeat(" ", 73) + "    +120 -12",
+		"This preview text is long enough to force truncation and show the marker",
+		"cmd/main.go",
 		"Latest activity:",
 		"comment by bob",
 	}
@@ -378,15 +390,11 @@ func TestPreviewPanelNoMoreFilesWhenUnderCap(t *testing.T) {
 }
 
 func TestPreviewPanelFullUIRender(t *testing.T) {
-	t.Parallel()
-
-	m := NewPreviewPanelModel()
-	m.SetTheme(theme.Default())
 	snap := domain.PRPreviewSnapshot{
 		Repo:           "utkarsh261/pho",
 		Number:         42,
 		Title:          "Improve dashboard rendering",
-		BodyExcerpt:    "This preview text is long enough to force truncation...",
+		BodyExcerpt:    "## Summary\n\nThis preview text demonstrates **markdown** rendering in the preview panel.\n",
 		Author:         "alice",
 		State:          domain.PRStateOpen,
 		CIStatus:       domain.CIStatusSuccess,
@@ -408,53 +416,37 @@ func TestPreviewPanelFullUIRender(t *testing.T) {
 			{Name: "check-2", State: "SUCCESS"},
 		},
 	}
-	m.preview = &snap
-	m.SetRect(80, 40)
 
-	expected := ` Improve dashboard rendering                                                    
-                                                                                
- utkarsh261/pho  #42                                                            
- Author: alice | State: open                                                    
- CI: success | Review: approved                                                 
-                                                                                
- Created: 2026-04-09 12:30 IST                                                  
- Updated: 2026-04-09 13:45 IST                                                  
-                                                                                
- ────────────────────────────────────────────────────────────────────────────── 
- Body:                                                                          
- This preview text is long enough to force truncation...                        
-                                                                                
- ────────────────────────────────────────────────────────────────────────────── 
- Top files:                                                                     
-   cmd/main.go                                                         +120 -12 
-   internal/ui/views/dashboard/preview_panel.go                          +40 -3 
-                                                                                
- ────────────────────────────────────────────────────────────────────────────── 
- Latest activity:                                                               
-   comment by bob at 2026-04-09 14:00 UTC                                       
- Looks good to me                                                               
-                                                                                
- ────────────────────────────────────────────────────────────────────────────── 
- CI checks:                                                                     
-   ✓ check-1                                                                    
-   ✓ check-2                                                                    
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                `
+	for _, w := range []int{60, 80, 120} {
+		w := w
+		t.Run(fmt.Sprintf("w%d", w), func(t *testing.T) {
+			t.Parallel()
 
-	out := lipgloss.NewStyle().Render(m.View())
-	if strings.TrimRight(out, " \n") != strings.TrimRight(expected, " \n") {
-		t.Fatalf("full UI render mismatch.\nExpected:\n%s\n\nGot:\n%s", expected, out)
+			m := NewPreviewPanelModel()
+			m.SetTheme(theme.Default())
+			m.preview = &snap
+			m.SetRect(w, 40)
+
+			out := previewStripANSI(lipgloss.NewStyle().Render(m.View()))
+			got := strings.TrimRight(out, " \n")
+
+			goldenPath := filepath.Join("testdata", "golden", fmt.Sprintf("preview_w%d.txt", w))
+			if *updatePreviewGolden {
+				if err := os.WriteFile(goldenPath, []byte(got), 0644); err != nil {
+					t.Fatalf("write golden %s: %v", goldenPath, err)
+				}
+				return
+			}
+
+			data, err := os.ReadFile(goldenPath)
+			if err != nil {
+				t.Fatalf("read golden %s: %v (run with -update to generate)", goldenPath, err)
+			}
+			want := strings.TrimRight(string(data), " \n")
+			if got != want {
+				t.Errorf("full UI render mismatch at width %d\ngot:\n%s\nwant:\n%s", w, got, want)
+			}
+		})
 	}
 }
 

@@ -531,12 +531,12 @@ func TestPreviewPanelRendersFullBodyAfterPreviewLoaded(t *testing.T) {
 		State:       domain.PRStateOpen,
 	}, false, nil))
 
-	got := m.View()
+	got := plainLine(m.View())
 	if !contains(got, "Add tests") {
-		t.Fatalf("expected title in view after preview load, got:\n%s", got)
+		t.Fatalf("expected title in view after preview load, got:\n%s", m.View())
 	}
 	if !contains(got, "short body") {
-		t.Fatalf("expected body excerpt in view after preview load, got:\n%s", got)
+		t.Fatalf("expected body excerpt in view after preview load, got:\n%s", m.View())
 	}
 }
 

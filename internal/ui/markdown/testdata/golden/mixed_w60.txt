@@ -1,0 +1,23 @@
+## Summary                                                  
+                                                            
+This PR adds glamour as the markdown renderer for PR        
+descriptions.                                               
+                                                            
+## Changes                                                  
+                                                            
+• Integrated charmbracelet/glamour with the tokyo-night     
+style                                                       
+• Added a lazy-initializing Renderer wrapper in             
+internal/ui/markdown                                        
+• Replaced plain wrapParagraph calls in description         
+rendering                                                   
+                                                            
+## Testing                                                  
+                                                            
+go test ./...                                               
+                                                            
+│ Note: golden files must be regenerated after bumping the  
+│ glamour version.                                          
+                                                            
+See the glamour docs                                        
+https://github.com/charmbracelet/glamour for style options. 

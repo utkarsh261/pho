@@ -16,6 +16,7 @@ import (
 	"github.com/utkarsh261/pho/internal/diff/model"
 	diffsearch "github.com/utkarsh261/pho/internal/diff/search"
 	"github.com/utkarsh261/pho/internal/domain"
+	"github.com/utkarsh261/pho/internal/ui/markdown"
 	"github.com/utkarsh261/pho/internal/ui/theme"
 )
 
@@ -75,7 +76,8 @@ type PRDetailModel struct {
 	leftPanel LeftPanelModel
 	spinner   spinner.Model
 
-	theme *theme.Theme
+	theme      *theme.Theme
+	mdRenderer *markdown.Renderer
 }
 
 // NewModel creates a new PRDetailModel for the given PR.
@@ -94,6 +96,7 @@ func NewModel(summary domain.PullRequestSummary, repo domain.Repository, prServi
 	}
 	m.leftPanel.Loading = loading
 	m.leftPanel.Focus = FocusContent
+	m.mdRenderer = markdown.New()
 	return m
 }
 

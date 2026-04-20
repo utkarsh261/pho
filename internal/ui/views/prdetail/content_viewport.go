@@ -156,8 +156,12 @@ func (m *PRDetailModel) descriptionLines(contentWidth int) []string {
 	}
 	lines = append(lines, divider)
 
-	// Word-wrapped body
-	lines = append(lines, wrapParagraph(body, cw)...)
+	// Markdown-rendered body
+	if m.mdRenderer != nil {
+		lines = append(lines, m.mdRenderer.Render(body, cw)...)
+	} else {
+		lines = append(lines, wrapParagraph(body, cw)...)
+	}
 	return lines
 }
 

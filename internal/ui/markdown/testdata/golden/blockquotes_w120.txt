@@ -1,0 +1,6 @@
+                                                                                                                        
+│ This is a blockquote. It can span multiple lines and should be visually distinct from regular text.                   
+                                                                                                                        
+Regular paragraph after the quote.                                                                                      
+                                                                                                                        
+│ Nested quotes are also possible.                                                                                      
