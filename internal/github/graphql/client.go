@@ -69,6 +69,7 @@ type graphQLResponse[T any] struct {
 
 // FetchViewer resolves the current viewer login for a host.
 func (c *Client) FetchViewer(ctx context.Context, host string) (string, error) {
+	c.log.Debug("fetch viewer", "host", host)
 	resp, err := queryGraphQL[model.ViewerData](c, ctx, host, func(profile githubpkg.GitHubHostProfile) string {
 		return buildViewerQuery()
 	}, nil)
@@ -80,6 +81,7 @@ func (c *Client) FetchViewer(ctx context.Context, host string) (string, error) {
 
 // FetchDashboardPRs loads the repo dashboard PR list.
 func (c *Client) FetchDashboardPRs(ctx context.Context, repo domain.Repository) ([]domain.PullRequestSummary, int, bool, string, error) {
+	c.log.Debug("fetch dashboard", "repo", repo.FullName, "host", repo.Host)
 	resp, err := queryGraphQL[model.DashboardData](c, ctx, repo.Host, func(profile githubpkg.GitHubHostProfile) string {
 		return buildDashboardQuery(profile)
 	}, map[string]any{
@@ -98,6 +100,7 @@ func (c *Client) FetchDashboardPRs(ctx context.Context, repo domain.Repository) 
 
 // FetchInvolvingPRs loads the repo-scoped involving search results.
 func (c *Client) FetchInvolvingPRs(ctx context.Context, repo domain.Repository, viewer string) ([]domain.PullRequestSummary, int, bool, error) {
+	c.log.Debug("fetch involving", "repo", repo.FullName, "host", repo.Host, "viewer", viewer)
 	resp, err := queryGraphQL[model.InvolvingData](c, ctx, repo.Host, func(profile githubpkg.GitHubHostProfile) string {
 		return buildInvolvingQuery(profile)
 	}, map[string]any{
@@ -115,6 +118,7 @@ func (c *Client) FetchInvolvingPRs(ctx context.Context, repo domain.Repository, 
 
 // FetchRecentActivity loads recent activity rows for the repository.
 func (c *Client) FetchRecentActivity(ctx context.Context, repo domain.Repository) ([]domain.ActivityItem, error) {
+	c.log.Debug("fetch recent", "repo", repo.FullName, "host", repo.Host)
 	resp, err := queryGraphQL[model.RecentData](c, ctx, repo.Host, func(profile githubpkg.GitHubHostProfile) string {
 		return buildRecentActivityQuery()
 	}, map[string]any{
@@ -133,6 +137,7 @@ func (c *Client) FetchRecentActivity(ctx context.Context, repo domain.Repository
 
 // FetchPreview loads the richer PR preview snapshot.
 func (c *Client) FetchPreview(ctx context.Context, repo domain.Repository, number int) (domain.PRPreviewSnapshot, error) {
+	c.log.Debug("fetch preview", "repo", repo.FullName, "host", repo.Host, "number", number)
 	resp, err := queryGraphQL[model.PreviewData](c, ctx, repo.Host, func(profile githubpkg.GitHubHostProfile) string {
 		return buildPreviewQuery(profile)
 	}, map[string]any{
@@ -154,18 +159,18 @@ func queryGraphQL[T any](c *Client, ctx context.Context, host string, build func
 	if idx := strings.IndexAny(query, " \t\n{("); idx > 0 {
 		queryType = query[:idx]
 	}
-	c.log.Debug("graphql request", "host", host, "query_type", queryType)
+	c.log.Debug("graphql request", "host", host, "graphql_url", profile.GraphQLURL, "query_type", queryType)
 
 	start := time.Now()
 	resp, err := doGraphQLQuery[T](c, ctx, profile, query, vars)
 	if err != nil {
-		c.log.Error("graphql request failed", "host", host, "err", err)
+		c.log.Error("graphql request failed", "host", host, "graphql_url", profile.GraphQLURL, "err", err)
 		var zero graphQLResponse[T]
 		return zero, err
 	}
 	ms := time.Since(start).Milliseconds()
 	if len(resp.Errors) == 0 {
-		c.log.Debug("graphql response ok", "host", host, gitlog.FieldDurationMS, ms)
+		c.log.Debug("graphql response ok", "host", host, "graphql_url", profile.GraphQLURL, gitlog.FieldDurationMS, ms)
 		return resp, nil
 	}
 
@@ -235,6 +240,8 @@ func (c *Client) profileForHost(host string) githubpkg.GitHubHostProfile {
 	if hs, ok := c.hosts[host]; ok {
 		return hs.profile
 	}
+	// No authenticated profile found - using default (no token)
+	c.log.Debug("using default host profile (not authenticated)", "host", host, "graphql_url", githubpkg.DefaultGraphQLURL(host))
 	return defaultProfileForHost(host)
 }
 
