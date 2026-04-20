@@ -322,7 +322,11 @@ func (m *PRDetailModel) commentLines(contentWidth ...int) []string {
 
 		if e.body != "" {
 			lines = append(lines, "") // blank after header
-			lines = append(lines, wrapParagraph(e.body, cw)...)
+			if m.mdRenderer != nil {
+				lines = append(lines, m.mdRenderer.Render(e.body, cw)...)
+			} else {
+				lines = append(lines, wrapParagraph(e.body, cw)...)
+			}
 		}
 
 		// Blank separator between blocks.
