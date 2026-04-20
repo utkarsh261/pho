@@ -261,10 +261,10 @@ type CacheMeta struct {
 // App state
 
 type SessionState struct {
-	Viewer     string
-	ActiveHost string
-	Offline    bool
-	StartedAt  time.Time
+	ViewerByHost map[string]string
+	ActiveHost   string
+	Offline      bool
+	StartedAt    time.Time
 }
 
 type RepoState struct {

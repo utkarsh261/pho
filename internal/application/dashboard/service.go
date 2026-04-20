@@ -87,7 +87,7 @@ func (s *Service) LoadRepo(ctx context.Context, repo domain.Repository, force bo
 			return cached, nil
 		}
 	} else {
-		_, _, found, _ = s.Cache.StaleWhileRevalidate(ctx, key, &cached, nil)
+		found = false
 	}
 
 	prs, total, truncated, cursor, err := s.Client.FetchDashboardPRs(ctx, repo)
@@ -133,7 +133,7 @@ func (s *Service) LoadInvolving(ctx context.Context, repo domain.Repository, vie
 			return cached, nil
 		}
 	} else {
-		_, _, found, _ = s.Cache.StaleWhileRevalidate(ctx, key, &cached, nil)
+		found = false
 	}
 
 	prs, total, truncated, err := s.Client.FetchInvolvingPRs(ctx, repo, viewer)
@@ -177,7 +177,7 @@ func (s *Service) LoadRecent(ctx context.Context, repo domain.Repository, force 
 			return cached, nil
 		}
 	} else {
-		_, _, found, _ = s.Cache.StaleWhileRevalidate(ctx, key, &cached, nil)
+		found = false
 	}
 
 	items, err := s.Client.FetchRecentActivity(ctx, repo)

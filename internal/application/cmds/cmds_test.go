@@ -26,8 +26,8 @@ func TestResolveViewerCmd(t *testing.T) {
 		if !ok {
 			t.Fatalf("message type = %T, want cmds.ViewerResolved", msg)
 		}
-		if got.Login != "octocat" || got.Err != nil {
-			t.Fatalf("message = %#v, want login and no error", got)
+		if got.Login != "octocat" || got.Err != nil || got.Host != "github.com" {
+			t.Fatalf("message = %#v, want login=octocat host=github.com and no error", got)
 		}
 	})
 

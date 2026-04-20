@@ -51,6 +51,7 @@ type DiffLoaded struct {
 }
 
 type ViewerResolved struct {
+	Host  string
 	Login string
 	Err   error
 }
@@ -110,7 +111,7 @@ type RefreshFailed struct {
 func ResolveViewerCmd(svc ViewerService, host string) tea.Cmd {
 	return func() tea.Msg {
 		login, err := svc.FetchViewer(context.Background(), host)
-		return ViewerResolved{Login: login, Err: err}
+		return ViewerResolved{Host: host, Login: login, Err: err}
 	}
 }
 

@@ -123,8 +123,9 @@ func NewModel(deps Dependencies) *Model {
 		previousFocus: domain.FocusRepoPanel,
 		state: domain.AppState{
 			Session: domain.SessionState{
-				ActiveHost: deps.Host,
-				StartedAt:  nowFn().UTC(),
+				ViewerByHost: make(map[string]string),
+				ActiveHost:   deps.Host,
+				StartedAt:    nowFn().UTC(),
 			},
 			Repos: domain.RepoState{
 				SelectedIndex: -1,
@@ -174,9 +175,6 @@ func (m *Model) Init() tea.Cmd {
 
 	m.logInfo("starting app", "root", m.deps.Root, "host", m.selectedHost())
 
-	if m.deps.Viewer != nil && strings.TrimSpace(m.selectedHost()) != "" {
-		cmdsOut = append(cmdsOut, cmds.ResolveViewerCmd(m.deps.Viewer, m.selectedHost()))
-	}
 	if m.deps.Discovery != nil {
 		root := m.deps.Root
 		if strings.TrimSpace(root) == "" {
@@ -484,15 +482,15 @@ func (m *Model) applyMessage(msg tea.Msg) tea.Cmd {
 
 func (m *Model) handleViewerResolved(msg cmds.ViewerResolved) tea.Cmd {
 	if msg.Err != nil {
-		m.logError("viewer resolve failed", "host", m.selectedHost(), "err", msg.Err)
+		m.logError("viewer resolve failed", "host", msg.Host, "err", msg.Err)
 		m.recordError(domain.ErrorKindAuth, msg.Err, m.selectedRepoName())
 		return nil
 	}
 	m.clearErrors()
-	m.state.Session.Viewer = msg.Login
-	m.logDebug("viewer resolved", "login", msg.Login)
+	m.state.Session.ViewerByHost[msg.Host] = msg.Login
+	m.logDebug("viewer resolved", "host", msg.Host, "login", msg.Login)
 	m.rebuildDashboardTabs()
-	if repo, ok := m.selectedRepo(); ok && strings.TrimSpace(msg.Login) != "" && m.deps.Dashboard != nil {
+	if repo, ok := m.selectedRepo(); ok && repo.Host == msg.Host && msg.Login != "" && m.deps.Dashboard != nil {
 		m.syncStatus()
 		return cmds.LoadInvolvingCmd(m.deps.Dashboard, repo, msg.Login, false)
 	}
@@ -579,6 +577,9 @@ func (m *Model) handleDashboardLoaded(msg cmds.DashboardLoaded) tea.Cmd {
 	m.state.Dashboard.FreshnessByTab[domain.TabNeedsReview] = freshnessFor(msg.Err)
 	m.rebuildDashboardTabs()
 	m.syncPaletteStats()
+
+	delete(m.state.Jobs.InFlight, jobKey(msg.Repo, "dashboard"))
+	m.logDebug("refresh completed", "repo", msg.Repo, "pr_count", len(msg.Snapshot.PRs), "err", msg.Err)
 	m.syncStatus()
 
 	var rebuild tea.Cmd
@@ -614,7 +615,11 @@ func (m *Model) handleInvolvingLoaded(msg cmds.InvolvingLoaded) tea.Cmd {
 	m.prList.Cursor = clampIndex(m.prList.Cursor, len(m.currentPRsForTab(m.prList.Active)))
 	m.state.Dashboard.SelectedIndex = m.prList.Cursor
 	m.syncPaletteStats()
+
+	delete(m.state.Jobs.InFlight, jobKey(msg.Repo, "involving"))
+	m.logDebug("refresh completed", "repo", msg.Repo, "pr_count", len(msg.Snapshot.PRs), "err", msg.Err)
 	m.syncStatus()
+
 	return m.syncCurrentSelection()
 }
 
@@ -640,7 +645,11 @@ func (m *Model) handleRecentLoaded(msg cmds.RecentLoaded) tea.Cmd {
 	m.state.Dashboard.LastRefreshAt[domain.TabRecent] = msg.Snapshot.FetchedAt
 	m.state.Dashboard.FreshnessByTab[domain.TabRecent] = freshnessFor(msg.Err)
 	m.syncPaletteStats()
+
+	delete(m.state.Jobs.InFlight, jobKey(msg.Repo, "recent"))
+	m.logDebug("refresh completed", "repo", msg.Repo, "item_count", len(msg.Snapshot.Items), "err", msg.Err)
 	m.syncStatus()
+
 	return nil
 }
 
@@ -877,6 +886,20 @@ func (m *Model) refreshSelectedRepo(force bool) tea.Cmd {
 	if !ok {
 		return nil
 	}
+
+	m.logDebug("refresh initiated", "repo", repo.FullName, "force", force)
+
+	// We do NOT clear PR data. if refresh fails, stale data remains visible
+	// which is better than showing nothing maybe.
+	m.state.Jobs.InFlight[jobKey(repo.FullName, "dashboard")] = true
+	m.state.Jobs.InFlight[jobKey(repo.FullName, "recent")] = true
+	if viewer := m.state.Session.ViewerByHost[repo.Host]; viewer != "" {
+		m.state.Jobs.InFlight[jobKey(repo.FullName, "involving")] = true
+	}
+
+	// Trigger status bar update to show loading spinner
+	m.syncStatus()
+
 	return batch(m.loadRepoCmds(repo, force)...)
 }
 
@@ -919,8 +942,8 @@ func (m *Model) selectRepoAt(index int, repo domain.Repository, force bool) tea.
 	m.syncStatus()
 
 	cmdsOut := []tea.Cmd{}
-	if m.deps.Viewer != nil && strings.TrimSpace(m.state.Session.ActiveHost) != "" {
-		cmdsOut = append(cmdsOut, cmds.ResolveViewerCmd(m.deps.Viewer, m.state.Session.ActiveHost))
+	if m.deps.Viewer != nil && repo.Host != "" {
+		cmdsOut = append(cmdsOut, cmds.ResolveViewerCmd(m.deps.Viewer, repo.Host))
 	}
 	// Always use cache first (force=false). The stale-while-revalidate
 	// mechanism will schedule a background refresh if data is stale.
@@ -933,8 +956,8 @@ func (m *Model) loadRepoCmds(repo domain.Repository, force bool) []tea.Cmd {
 		return nil
 	}
 	out := []tea.Cmd{cmds.LoadDashboardCmd(m.deps.Dashboard, repo, force), cmds.LoadRecentCmd(m.deps.Dashboard, repo, force)}
-	if strings.TrimSpace(m.state.Session.Viewer) != "" {
-		out = append(out, cmds.LoadInvolvingCmd(m.deps.Dashboard, repo, m.state.Session.Viewer, force))
+	if viewer := m.state.Session.ViewerByHost[repo.Host]; viewer != "" {
+		out = append(out, cmds.LoadInvolvingCmd(m.deps.Dashboard, repo, viewer, force))
 	}
 	return out
 }
@@ -1135,7 +1158,11 @@ func (m *Model) rebuildDashboardTabs() {
 	if isZeroDashboardSnapshot(m.currentDashboard) {
 		return
 	}
-	classified := m.classifier.Classify(m.state.Session.Viewer, m.currentDashboard.PRs)
+	viewer := ""
+	if repo, ok := m.selectedRepo(); ok {
+		viewer = m.state.Session.ViewerByHost[repo.Host]
+	}
+	classified := m.classifier.Classify(viewer, m.currentDashboard.PRs)
 	m.state.Dashboard.PRsByTab[domain.TabMyPRs] = append([]domain.PullRequestSummary(nil), classified[domain.TabMyPRs]...)
 	m.state.Dashboard.PRsByTab[domain.TabNeedsReview] = append([]domain.PullRequestSummary(nil), classified[domain.TabNeedsReview]...)
 	m.state.Dashboard.TotalCount = m.currentDashboard.TotalCount
