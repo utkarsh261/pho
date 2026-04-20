@@ -267,7 +267,12 @@ func (m *PreviewPanelModel) buildLines() []string {
 		lines = append(lines, "", m.divider(), m.sectionHeader("Latest activity:"))
 		lines = append(lines, "  "+m.activityLine(act))
 		if body := strings.TrimSpace(act.Body); body != "" {
-			lines = append(lines, wrapParagraph(body, maxWidth(m.Width-4, 1))...)
+			bodyW := maxWidth(m.Width-4, 1)
+			if m.mdRenderer != nil {
+				lines = append(lines, m.mdRenderer.Render(body, bodyW)...)
+			} else {
+				lines = append(lines, wrapParagraph(body, bodyW)...)
+			}
 		}
 	}
 
