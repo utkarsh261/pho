@@ -16,6 +16,14 @@ Or pin a specific version:
 go install github.com/utkarsh261/pho/cmd/pho@v0.1.0
 ```
 
+## Usage
+
+Right now, pho looks at only the repositories cloned in a parent directory, you can either open pho in that directory or:
+
+```
+$(go env GOPATH)/bin/pho ~/path/to/dir/containing/all/cloned/repositories
+```
+
 ## Requirements
 
 - Go 1.25+

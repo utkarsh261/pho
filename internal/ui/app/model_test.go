@@ -954,6 +954,8 @@ func TestEscFromPRDetailReturnsToDashboard(t *testing.T) {
 	if m.currentView() != domain.PrimaryViewPRDetail {
 		t.Fatalf("expected PR detail view, got %s", m.currentView())
 	}
+	// Set narrow width so Esc goes directly to Dashboard (bypasses Content→Files cycle)
+	m.prDetail.Width = 60
 
 	// Esc in prDetail returns a BackToDashboard cmd. Execute it to get the message,
 	// then feed it through root Update — the real dispatch path.
@@ -1224,6 +1226,8 @@ func TestDashboardRoundTripViaPRDetail(t *testing.T) {
 	if m.prDetail.Summary.Number != 2 {
 		t.Errorf("step 2: expected PR number 2, got %d", m.prDetail.Summary.Number)
 	}
+	// Set narrow width so Esc goes directly to Dashboard
+	m.prDetail.Width = 60
 
 	// Step 3: Esc → returns to dashboard via real dispatch path.
 	escFromDetail(t, m)
