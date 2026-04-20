@@ -188,10 +188,27 @@ func TestLoadPreviewCmd(t *testing.T) {
 			return domain.PRPreviewSnapshot{Repo: repo, Number: number}, nil
 		}}
 
-		msg := run(t, cmds.LoadPreviewCmd(svc, "org/a", 99))
+		msg := run(t, cmds.LoadPreviewCmd(svc, "org/a", 99, ""))
 		got := msg.(cmds.PreviewLoaded)
 		if got.Repo != "org/a" || got.Number != 99 || got.Err != nil {
 			t.Fatalf("message = %#v, want preview snapshot", got)
+		}
+	})
+
+	t.Run("with host", func(t *testing.T) {
+		svc := &dashboardService{loadPreviewFn: func(ctx context.Context, repo string, number int) (domain.PRPreviewSnapshot, error) {
+			// Should receive "host/org/a" format
+			if repo != "github.com/org/a" || number != 42 {
+				t.Fatalf("load args = %q #%d, want github.com/org/a #42", repo, number)
+			}
+			return domain.PRPreviewSnapshot{Repo: repo, Number: number}, nil
+		}}
+
+		msg := run(t, cmds.LoadPreviewCmd(svc, "org/a", 42, "github.com"))
+		got := msg.(cmds.PreviewLoaded)
+		// Message should contain clean repo "org/a", not "github.com/org/a"
+		if got.Repo != "org/a" || got.Number != 42 || got.Err != nil {
+			t.Fatalf("message = %#v, want org/a #42", got)
 		}
 	})
 
@@ -201,7 +218,7 @@ func TestLoadPreviewCmd(t *testing.T) {
 			return domain.PRPreviewSnapshot{}, wantErr
 		}}
 
-		msg := run(t, cmds.LoadPreviewCmd(svc, "org/a", 99))
+		msg := run(t, cmds.LoadPreviewCmd(svc, "org/a", 99, ""))
 		got := msg.(cmds.PreviewLoaded)
 		if !errors.Is(got.Err, wantErr) || got.Repo != "org/a" || got.Number != 99 {
 			t.Fatalf("message = %#v, want error and repo identity", got)

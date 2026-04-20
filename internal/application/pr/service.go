@@ -55,7 +55,7 @@ func NewService(cacheCoordinator *cache.Coordinator, client githubclient.GitHubC
 }
 
 func (s *PRService) LoadDetail(ctx context.Context, repo domain.Repository, number int, force bool) (domain.PRPreviewSnapshot, bool, error) {
-	key := previewCacheKey(s.Host, repoFullName(repo), number)
+	key := previewCacheKey(repo.Host, repoFullName(repo), number)
 
 	var cached domain.PRPreviewSnapshot
 	found := false
@@ -101,7 +101,7 @@ func (s *PRService) LoadDiff(ctx context.Context, repo domain.Repository, number
 }
 
 func (s *PRService) loadDiffInner(ctx context.Context, repo domain.Repository, number int, headSHA string, force bool) (model.DiffModel, bool, error) {
-	key := diffCacheKey(s.Host, repoFullName(repo), number, headSHA)
+	key := diffCacheKey(repo.Host, repoFullName(repo), number, headSHA)
 
 	var cached model.DiffModel
 	found := false
@@ -115,7 +115,7 @@ func (s *PRService) loadDiffInner(ctx context.Context, repo domain.Repository, n
 		_, _, found, _ = s.Cache.StaleWhileRevalidate(ctx, key, &cached, nil)
 	}
 
-	s.logDebug("fetching raw diff", "key", key, "number", number, "host", s.Host)
+	s.logDebug("fetching raw diff", "key", key, "number", number, "host", repo.Host)
 
 	rawDiff, err := s.REST.FetchRawDiff(ctx, s.ownerName(repo), s.RepoName(repo), number)
 	if err != nil {

@@ -143,9 +143,13 @@ func LoadRecentCmd(svc DashboardService, repo domain.Repository, force bool) tea
 	}
 }
 
-func LoadPreviewCmd(svc DashboardService, repo string, number int) tea.Cmd {
+func LoadPreviewCmd(svc DashboardService, repo string, number int, host string) tea.Cmd {
 	return func() tea.Msg {
-		snap, err := svc.LoadPreview(context.Background(), repo, number)
+		repoArg := repo
+		if host != "" {
+			repoArg = host + "/" + repo
+		}
+		snap, err := svc.LoadPreview(context.Background(), repoArg, number)
 		return PreviewLoaded{Repo: repo, Number: number, Preview: snap, Err: err}
 	}
 }
