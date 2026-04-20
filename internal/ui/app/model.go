@@ -765,11 +765,13 @@ func (m *Model) handlePreviewFetchMsg(msg dashboard.PreviewFetchMsg) tea.Cmd {
 		m.logDebug("preview fetch skipped: no dashboard service")
 		return nil
 	}
-	m.logDebug("preview fetch starting", "pr", m.prSlug(msg.Repo, msg.Number))
+	m.logDebug("preview fetch starting", "pr", m.prSlug(msg.Repo, msg.Number), "host", repo.Host)
 	key := jobKey(msg.Repo, "preview")
 	m.state.Jobs.InFlight[key] = true
 	m.syncStatus()
-	return cmds.LoadPreviewCmd(m.deps.Dashboard, msg.Repo, msg.Number)
+	// Pass full repo with host: "host/owner/repo" format for resolvePreviewRepo
+	repoWithHost := repo.Host + "/" + repo.FullName
+	return cmds.LoadPreviewCmd(m.deps.Dashboard, repoWithHost, msg.Number)
 }
 
 func (m *Model) handlePreviewLoadedMsg(repo string, number int, preview domain.PRPreviewSnapshot, err error) tea.Cmd {
