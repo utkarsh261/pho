@@ -127,7 +127,7 @@ func (m *RepoPanelModel) View() string {
 	if m.Width <= 0 || m.Height <= 0 {
 		return ""
 	}
-	header := "▸ REPOS"
+	header := "▸ REPOSITORIES"
 	if m.theme != nil {
 		header = m.theme.Header.Width(m.Width).Render(header)
 	} else {
