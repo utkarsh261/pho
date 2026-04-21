@@ -142,6 +142,8 @@ func (s *stubPRService) LoadDiff(ctx context.Context, repo domain.Repository, nu
 	return s.diffResult, s.diffFromCache, s.diffErr
 }
 
+func (s *stubPRService) PostComment(_ context.Context, _, _ string) error { return nil }
+
 func TestColdStartThenDashboardLoadedPopulates(t *testing.T) {
 	t.Parallel()
 
@@ -1029,15 +1031,15 @@ func TestRKeyRefiresBothCmdsWithForce(t *testing.T) {
 	stubPR.loadDetailCalls = 0
 	stubPR.loadDiffCalls = 0
 
-	// Send 'r' key.
-	_, cmd := m.prDetail.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	// Send 'R' key (refresh; 'r' is now reply-to-comment).
+	_, cmd := m.prDetail.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'R'}})
 
 	// Loading flags are set immediately by handleRefresh (before cmd fires).
 	if !m.prDetail.DetailLoading || !m.prDetail.DiffLoading {
-		t.Error("expected both loading flags to be true after 'r' refresh")
+		t.Error("expected both loading flags to be true after 'R' refresh")
 	}
 	if cmd == nil {
-		t.Fatal("expected non-nil cmd from 'r' refresh")
+		t.Fatal("expected non-nil cmd from 'R' refresh")
 	}
 
 	// Execute the cmd: it should fire both LoadPRDetailCmd and LoadDiffCmd.

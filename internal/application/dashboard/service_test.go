@@ -53,6 +53,8 @@ func (f *fakeGitHubClient) FetchPreview(ctx context.Context, repo domain.Reposit
 	return f.FetchPreviewFn(ctx, repo, number)
 }
 
+func (f *fakeGitHubClient) PostComment(_ context.Context, _, _, _ string) error { return nil }
+
 func newTestCoordinator(t *testing.T) *cache.Coordinator {
 	t.Helper()
 
