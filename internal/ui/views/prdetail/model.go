@@ -5,6 +5,8 @@ package prdetail
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -19,6 +21,15 @@ import (
 	"github.com/utkarsh261/pho/internal/ui/markdown"
 	"github.com/utkarsh261/pho/internal/ui/theme"
 )
+
+// composeSuccessDismissMsg is fired 1.5s after a comment is posted to close the compose pane.
+type composeSuccessDismissMsg struct{}
+
+// editorDoneMsg is fired when the external $EDITOR process exits.
+type editorDoneMsg struct {
+	path string
+	err  error
+}
 
 // rightPanelWidth returns the outer width of the right panel given the current terminal width.
 func (m *PRDetailModel) rightPanelWidth() int {
@@ -35,12 +46,21 @@ func contentViewportWidth(rightWidth int) int {
 	return max(innerW-2, 1)
 }
 
+// effectiveBodyH returns the body height available for the left/right panels,
+// accounting for the compose pane when it is open (3 rows: top border + 2 content rows).
+func (m *PRDetailModel) effectiveBodyH() int {
+	bodyH := max(m.Height-3, 1)
+	if m.compose.active {
+		return max(bodyH-3, 1)
+	}
+	return bodyH
+}
+
 // contentViewportHeight returns the number of visible rows in the content text area.
 // Derived from the terminal height by subtracting the header box, the tab headBox,
 // and body-box borders.
 func (m *PRDetailModel) contentViewportHeight() int {
-	bodyH := max(m.Height-3, 1)
-	innerH := max(bodyH-4, 1)
+	innerH := max(m.effectiveBodyH()-4, 1)
 	return max(innerH-2, 1)
 }
 
@@ -73,6 +93,11 @@ type PRDetailModel struct {
 	searchCursor  int
 	searchCommit  bool
 
+	commentCursor int // -1 = none, 0..n-1 = index of focused comment entry
+	postedComment bool
+
+	compose ComposeModel
+
 	leftPanel LeftPanelModel
 	spinner   spinner.Model
 
@@ -93,6 +118,8 @@ func NewModel(summary domain.PullRequestSummary, repo domain.Repository, prServi
 		DetailLoading: loading,
 		DiffLoading:   loading,
 		spinner:       s,
+		commentCursor: -1,
+		compose:       newComposeModel(nil),
 	}
 	m.leftPanel.Loading = loading
 	m.leftPanel.Focus = FocusContent
@@ -104,6 +131,7 @@ func NewModel(summary domain.PullRequestSummary, repo domain.Repository, prServi
 func (m *PRDetailModel) SetTheme(th *theme.Theme) {
 	m.theme = th
 	m.leftPanel.SetTheme(th)
+	m.compose.theme = th
 	if th != nil {
 		m.spinner.Style = lipgloss.NewStyle().Foreground(th.Warning)
 	}
@@ -128,11 +156,15 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 	var spinCmd tea.Cmd
 	m.spinner, spinCmd = m.spinner.Update(msg)
 
+	// Forward all messages to compose so textinput receives tick events for cursor blink.
+	var composeCmd tea.Cmd
+	m.compose, composeCmd = m.compose.Update(msg)
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.Width = msg.Width
 		m.Height = msg.Height
-		return m, spinCmd
+		return m, tea.Batch(spinCmd, composeCmd)
 
 	case cmds.PRDetailLoaded:
 		m.DetailLoading = false
@@ -140,15 +172,39 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 			if m.Detail == nil {
 				m.DetailLoading = true
 			}
-			return m, spinCmd
+			return m, tea.Batch(spinCmd, composeCmd)
 		}
 		m.Detail = &msg.Detail
 		m.DetailFromCache = msg.FromCache
+		m.resetCommentCursor()
 		// Sync checks into left panel.
 		m.leftPanel.Checks = msg.Detail.Checks
 
+		// Auto-scroll to the newly posted comment after a successful post.
+		if m.postedComment {
+			m.postedComment = false
+			cw := contentViewportWidth(m.rightPanelWidth())
+			sections := m.buildContentSections(cw)
+			if commentSec, ok := findSection(sections, domain.SectionComments); ok {
+				entries := m.commentEntries()
+				startRows := m.commentEntryStartRows(cw)
+				if len(startRows) > 0 {
+					lastIdx := len(startRows) - 1
+					lastAbsRow := commentSec.StartRow + startRows[lastIdx]
+					entryH := m.entryRowCount(entries[lastIdx], cw) + 2 // +2 for border
+					endAbsRow := lastAbsRow + entryH
+					vh := m.contentViewportHeight()
+					target := max(endAbsRow-vh+1, 0)
+					m.ContentScroll = target
+					m.clampContentScroll()
+					// Place cursor at the new comment so j/k starts from here.
+					m.commentCursor = lastIdx
+				}
+			}
+		}
+
 		var out []tea.Cmd
-		out = append(out, spinCmd)
+		out = append(out, spinCmd, composeCmd)
 		// Stale cache hit → schedule background revalidation.
 		if msg.FromCache {
 			out = append(out, cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true))
@@ -161,13 +217,13 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 			if m.Diff == nil {
 				m.DiffLoading = true
 			}
-			return m, spinCmd
+			return m, tea.Batch(spinCmd, composeCmd)
 		}
 		// Validate SHA if HeadRefOID is available.
 		if m.Summary.HeadRefOID != "" && msg.Diff.HeadSHA != "" && msg.Diff.HeadSHA != m.Summary.HeadRefOID {
 			// SHA mismatch — discard and refetch.
 			m.DiffLoading = true
-			return m, tea.Batch(spinCmd,
+			return m, tea.Batch(spinCmd, composeCmd,
 				cmds.LoadDiffCmd(m.PRService, m.Repo, m.Summary.Number, m.Summary.HeadRefOID, true))
 		}
 		m.Diff = &msg.Diff
@@ -177,14 +233,83 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		// Sync files into left panel.
 		m.leftPanel.Files = m.Diff.Files
 		m.leftPanel.Loading = false
-		return m, spinCmd
+		return m, tea.Batch(spinCmd, composeCmd)
+
+	case submitComposeMsg:
+		body := msg.body
+		if m.compose.mode == composeModeReply && m.commentCursor >= 0 {
+			entries := m.commentEntries()
+			if m.commentCursor < len(entries) {
+				body = buildReplyBody(entries[m.commentCursor], msg.body)
+			}
+		}
+		if m.PRService == nil {
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		return m, tea.Batch(spinCmd, composeCmd, cmds.PostCommentCmd(m.PRService, m.Summary.ID, body))
+
+	case openEditorComposeMsg:
+		editor := os.Getenv("VISUAL")
+		if editor == "" {
+			editor = os.Getenv("EDITOR")
+		}
+		if editor == "" {
+			editor = "vi"
+		}
+		tmpFile, err := os.CreateTemp("", "pho-comment-*.md")
+		if err != nil {
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		tmpPath := tmpFile.Name()
+		if _, werr := tmpFile.WriteString(msg.draft); werr != nil {
+			tmpFile.Close()
+			os.Remove(tmpPath)
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		tmpFile.Close()
+		return m, tea.Batch(spinCmd, composeCmd, tea.ExecProcess(
+			exec.Command(editor, tmpPath),
+			func(err error) tea.Msg { return editorDoneMsg{path: tmpPath, err: err} },
+		))
+
+	case editorDoneMsg:
+		if msg.err == nil {
+			if content, err := os.ReadFile(msg.path); err == nil {
+				m.compose.SetText(strings.TrimSpace(string(content)))
+			}
+		}
+		os.Remove(msg.path)
+		return m, tea.Batch(spinCmd, composeCmd)
+
+	case cmds.CommentPosted:
+		m.compose.status = composeStatusSuccess
+		return m, tea.Batch(spinCmd, composeCmd, tea.Tick(1500*time.Millisecond, func(time.Time) tea.Msg {
+			return composeSuccessDismissMsg{}
+		}))
+
+	case cmds.CommentFailed:
+		m.compose.status = composeStatusError
+		m.compose.errMsg = msg.Err.Error()
+		return m, tea.Batch(spinCmd, composeCmd)
+
+	case composeSuccessDismissMsg:
+		m.postedComment = true
+		m.compose.Close()
+		if m.PRService != nil {
+			return m, tea.Batch(spinCmd, composeCmd, cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true))
+		}
+		return m, tea.Batch(spinCmd, composeCmd)
 
 	case tea.KeyMsg:
+		if m.compose.active {
+			// Key already routed to compose.Update above; skip handleKey.
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
 		next, cmd := m.handleKey(msg)
-		return next, tea.Batch(spinCmd, cmd)
+		return next, tea.Batch(spinCmd, composeCmd, cmd)
 
 	default:
-		return m, spinCmd
+		return m, tea.Batch(spinCmd, composeCmd)
 	}
 }
 
@@ -195,7 +320,7 @@ func (m *PRDetailModel) View() string {
 
 	headerRow := m.renderHeader()
 
-	bodyH := max(m.Height-3, 1)
+	bodyH := m.effectiveBodyH()
 
 	var body string
 	if m.Width >= MinWidthForSidebar {
@@ -207,6 +332,9 @@ func (m *PRDetailModel) View() string {
 		body = m.renderNarrowBody(m.Width, bodyH)
 	}
 
+	if m.compose.active {
+		return headerRow + "\n" + body + "\n" + m.compose.View(m.Width)
+	}
 	return headerRow + "\n" + body
 }
 
@@ -423,6 +551,94 @@ func (m *PRDetailModel) renderNarrowBody(width, height int) string {
 	return top + "\n" + body
 }
 
+// isInCommentsSection reports whether the content viewport is currently showing
+// the Comments section. Returns true when the viewport bottom overlaps the
+// section, so natural scrolling to the bottom activates comment navigation even
+// when the comments section is shorter than the viewport height.
+func (m *PRDetailModel) isInCommentsSection() bool {
+	if m.leftPanel.Focus != FocusContent {
+		return false
+	}
+	cw := contentViewportWidth(m.rightPanelWidth())
+	sections := m.buildContentSections(cw)
+	commentSec, ok := findSection(sections, domain.SectionComments)
+	if !ok {
+		return false
+	}
+	vh := m.contentViewportHeight()
+	viewEnd := m.ContentScroll + vh
+	return m.ContentScroll >= commentSec.StartRow || viewEnd > commentSec.StartRow
+}
+
+// resetCommentCursor clears the comment cursor. Call whenever navigation leaves
+// the Comments section or data changes.
+func (m *PRDetailModel) resetCommentCursor() {
+	m.commentCursor = -1
+}
+
+// moveCursorNextComment advances the comment cursor by one entry, scrolling
+// the viewport to keep it visible. First call activates the cursor at entry 0.
+func (m *PRDetailModel) moveCursorNextComment() {
+	entries := m.commentEntries()
+	if len(entries) == 0 {
+		return
+	}
+	if m.commentCursor < 0 {
+		m.commentCursor = 0
+	} else if m.commentCursor < len(entries)-1 {
+		m.commentCursor++
+	}
+	m.scrollToCommentCursor()
+}
+
+// moveCursorPrevComment moves the comment cursor back one entry. At entry 0,
+// deactivates the cursor and scrolls up one line (exits comment nav mode).
+func (m *PRDetailModel) moveCursorPrevComment() {
+	if m.commentCursor <= 0 {
+		m.commentCursor = -1
+		// Fall through to normal line scroll.
+		m.ContentScroll--
+		m.clampContentScroll()
+		return
+	}
+	m.commentCursor--
+	m.scrollToCommentCursor()
+}
+
+// scrollToCommentCursor scrolls the minimum amount needed to make the focused
+// comment entry fully visible. No-op when the entry already fits in the viewport.
+func (m *PRDetailModel) scrollToCommentCursor() {
+	if m.commentCursor < 0 {
+		return
+	}
+	cw := contentViewportWidth(m.rightPanelWidth())
+	sections := m.buildContentSections(cw)
+	commentSec, ok := findSection(sections, domain.SectionComments)
+	if !ok {
+		return
+	}
+	startRows := m.commentEntryStartRows(cw)
+	if m.commentCursor >= len(startRows) {
+		return
+	}
+	entries := m.commentEntries()
+	entryTop := commentSec.StartRow + startRows[m.commentCursor]
+	entryBottom := entryTop + m.entryRowCount(entries[m.commentCursor], cw) + 2 // +2 for border
+	vh := m.contentViewportHeight()
+	viewTop := m.ContentScroll
+	viewBottom := viewTop + vh
+
+	switch {
+	case entryTop < viewTop:
+		// Entry top is above viewport: scroll up to show it.
+		m.ContentScroll = entryTop
+	case entryBottom > viewBottom:
+		// Entry bottom is below viewport: scroll down the minimum to show it.
+		m.ContentScroll = entryBottom - vh
+	}
+	m.clampContentScroll()
+}
+
 // handleKey routes keyboard input within the PR detail view.
 func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 	if m.searchActive && m.handleSearchKey(msg) {
@@ -441,23 +657,51 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		// Esc cycles: Content → Files → Dashboard
 		if m.leftPanel.Focus == FocusContent && m.Width >= MinWidthForSidebar {
 			m.leftPanel.Focus = FocusFiles
+			m.resetCommentCursor()
 		} else {
 			return m, m.emitBackToDashboard()
 		}
 	case "q":
 		return m, m.emitBackToDashboard()
-	case "r":
+	case "R":
 		return m.handleRefresh()
+	case "c":
+		if m.PRService != nil {
+			m.compose.Open(composeModeNew, commentEntry{})
+		}
+		return m, nil
+	case "r":
+		if m.PRService != nil && m.commentCursor >= 0 {
+			entries := m.commentEntries()
+			if m.commentCursor < len(entries) {
+				m.compose.Open(composeModeReply, entries[m.commentCursor])
+			}
+		}
+		return m, nil
 	case "o":
 		return m, m.emitOpenBrowser()
 	case "tab":
 		m.cycleForward()
+		m.resetCommentCursor()
 	case "shift+tab":
 		m.cycleBackward()
+		m.resetCommentCursor()
 	case "j", "down":
+		if m.isInCommentsSection() {
+			m.moveCursorNextComment()
+			return m, nil
+		}
 		m.scrollDown()
 	case "k", "up":
+		if m.isInCommentsSection() && m.commentCursor >= 0 {
+			// moveCursorPrevComment handles deactivation+scrollUp at entry 0.
+			m.moveCursorPrevComment()
+			return m, nil
+		}
 		m.scrollUp()
+		if !m.isInCommentsSection() {
+			m.resetCommentCursor()
+		}
 	case "enter":
 		if m.leftPanel.Focus == FocusFiles {
 			m.jumpToFile(m.leftPanel.FileIndex)
@@ -472,9 +716,12 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		m.jumpNextFile()
 	case "1":
 		m.jumpToSection(1)
+		m.resetCommentCursor()
 	case "2":
 		m.jumpToSection(2)
+		m.resetCommentCursor()
 	case "3":
+		m.resetCommentCursor()
 		m.jumpToSection(3)
 	case "g":
 		if m.LastKey == "g" {

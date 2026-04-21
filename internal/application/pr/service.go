@@ -92,6 +92,11 @@ func (s *PRService) LoadDetail(ctx context.Context, repo domain.Repository, numb
 	return preview, false, nil
 }
 
+// PostComment posts a PR-level comment via the GitHub client.
+func (s *PRService) PostComment(ctx context.Context, prID string, body string) error {
+	return s.Client.PostComment(ctx, s.Host, prID, body)
+}
+
 func (s *PRService) LoadDiff(ctx context.Context, repo domain.Repository, number int, headSHA string, force bool) (model.DiffModel, bool, error) {
 	if headSHA == "" {
 		// No SHA available — use a placeholder key. Validation will be skipped.

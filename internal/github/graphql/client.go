@@ -67,6 +67,17 @@ type graphQLResponse[T any] struct {
 	Errors []graphQLError `json:"errors,omitempty"`
 }
 
+// PostComment posts a PR-level comment using the GraphQL addComment mutation.
+func (c *Client) PostComment(ctx context.Context, host, pullRequestID, body string) error {
+	_, err := queryGraphQL[model.AddCommentData](c, ctx, host, func(_ githubpkg.GitHubHostProfile) string {
+		return buildAddCommentMutation()
+	}, map[string]any{
+		"subjectId": pullRequestID,
+		"body":      body,
+	})
+	return err
+}
+
 // FetchViewer resolves the current viewer login for a host.
 func (c *Client) FetchViewer(ctx context.Context, host string) (string, error) {
 	c.log.Debug("fetch viewer", "host", host)

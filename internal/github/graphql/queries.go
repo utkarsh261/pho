@@ -8,6 +8,16 @@ import (
 	githubpkg "github.com/utkarsh261/pho/internal/github"
 )
 
+func buildAddCommentMutation() string {
+	return `mutation AddComment($subjectId: ID!, $body: String!) {
+  addComment(input: {subjectId: $subjectId, body: $body}) {
+    subject {
+      id
+    }
+  }
+}`
+}
+
 func buildViewerQuery() string {
 	return `query ViewerQuery {
   viewer {
@@ -186,7 +196,7 @@ func pullRequestPreviewSelection(profile githubpkg.GitHubHostProfile) string {
 		"reviews(first: 20) { nodes { author { login avatarUrl } state submittedAt body } }",
 		"comments(first: 20) { nodes { author { login } body createdAt } }",
 		"files(first: 20) { nodes { path additions deletions } }",
-		"timelineItems(last: 1) { nodes { ... on PullRequestCommit { __typename id commit { oid messageHeadline committedDate author { user { login } name } } } ... on IssueComment { __typename id body createdAt author { login } } ... on PullRequestReview { __typename id state body submittedAt author { login } } ... on MergedEvent { __typename id createdAt actor { login } commit { oid } mergeRefName } } }",
+		"timelineItems(last: 1, itemTypes: [PULL_REQUEST_COMMIT, ISSUE_COMMENT, PULL_REQUEST_REVIEW, MERGED_EVENT]) { nodes { ... on PullRequestCommit { __typename id commit { oid messageHeadline committedDate author { user { login } name } } } ... on IssueComment { __typename id body createdAt author { login } } ... on PullRequestReview { __typename id state body submittedAt author { login } } ... on MergedEvent { __typename id createdAt actor { login } commit { oid } mergeRefName } } }",
 		"repository { nameWithOwner }",
 	)
 	if profile.SupportsHeadRefOID {

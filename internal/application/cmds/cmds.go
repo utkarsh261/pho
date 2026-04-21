@@ -32,6 +32,7 @@ type SearchService interface {
 type PRService interface {
 	LoadDetail(ctx context.Context, repo domain.Repository, number int, force bool) (domain.PRPreviewSnapshot, bool, error)
 	LoadDiff(ctx context.Context, repo domain.Repository, number int, headSHA string, force bool) (model.DiffModel, bool, error)
+	PostComment(ctx context.Context, prID string, body string) error
 }
 
 type PRDetailLoaded struct {
@@ -94,6 +95,12 @@ type SearchIndexRebuilt struct {
 	Repo string
 	Err  error
 }
+
+// CommentPosted is emitted when a PR comment has been successfully posted.
+type CommentPosted struct{}
+
+// CommentFailed is emitted when posting a PR comment fails.
+type CommentFailed struct{ Err error }
 
 type RefreshStarted struct {
 	Key string
@@ -176,6 +183,15 @@ func repoKey(repo domain.Repository) string {
 		return repo.Owner + "/" + repo.Name
 	}
 	return repo.Name
+}
+
+func PostCommentCmd(svc PRService, prID, body string) tea.Cmd {
+	return func() tea.Msg {
+		if err := svc.PostComment(context.Background(), prID, body); err != nil {
+			return CommentFailed{Err: err}
+		}
+		return CommentPosted{}
+	}
 }
 
 func LoadPRDetailCmd(svc PRService, repo domain.Repository, number int, force bool) tea.Cmd {

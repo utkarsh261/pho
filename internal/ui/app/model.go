@@ -229,12 +229,32 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		return m, nil
+	case cmds.CommentPosted, cmds.CommentFailed:
+		if m.prDetail != nil {
+			next, cmd := m.prDetail.Update(msg)
+			m.prDetail = next
+			m.syncStatus()
+			return m, cmd
+		}
+		return m, nil
 	default:
 		// Always route unknown messages through applyMessage so dashboard state
 		// (preview debounce, background loads) continues updating regardless of
 		// which view is active. PR-detail-specific messages (PRDetailLoaded,
-		// DiffLoaded) have explicit cases above.
-		return m, m.applyMessage(msg)
+		// DiffLoaded, CommentPosted, CommentFailed) have explicit cases above.
+		// Also forward to prDetail while it is the active view so compose-internal
+		// messages (submitComposeMsg, openEditorComposeMsg, editorDoneMsg,
+		// composeSuccessDismissMsg) reach it. The view guard prevents prDetail's
+		// spinner from ticking forever after the user navigates back to the dashboard.
+		var outCmds []tea.Cmd
+		if m.prDetail != nil && m.currentView() == domain.PrimaryViewPRDetail {
+			next, cmd := m.prDetail.Update(msg)
+			m.prDetail = next
+			m.syncStatus()
+			outCmds = append(outCmds, cmd)
+		}
+		outCmds = append(outCmds, m.applyMessage(msg))
+		return m, tea.Batch(outCmds...)
 	}
 }
 

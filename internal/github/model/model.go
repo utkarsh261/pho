@@ -50,6 +50,15 @@ type PreviewData struct {
 	Repository RepositoryNode `json:"repository"`
 }
 
+// AddCommentData is the data object returned by the addComment mutation.
+type AddCommentData struct {
+	AddComment struct {
+		Subject struct {
+			ID string `json:"id"`
+		} `json:"subject"`
+	} `json:"addComment"`
+}
+
 // ViewerNode identifies the authenticated viewer.
 type ViewerNode struct {
 	Login string `json:"login"`

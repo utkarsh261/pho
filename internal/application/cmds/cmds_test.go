@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/utkarsh261/pho/internal/application/cmds"
+	diffmodel "github.com/utkarsh261/pho/internal/diff/model"
 	"github.com/utkarsh261/pho/internal/domain"
 )
 
@@ -291,6 +292,38 @@ func TestRebuildRepoIndexCmd(t *testing.T) {
 	})
 }
 
+func TestPostCommentCmd(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		svc := &prService{postCommentFn: func(ctx context.Context, prID, body string) error {
+			if prID != "PR_abc123" || body != "hello" {
+				t.Fatalf("postComment args prID=%q body=%q", prID, body)
+			}
+			return nil
+		}}
+
+		msg := run(t, cmds.PostCommentCmd(svc, "PR_abc123", "hello"))
+		if _, ok := msg.(cmds.CommentPosted); !ok {
+			t.Fatalf("message type = %T, want cmds.CommentPosted", msg)
+		}
+	})
+
+	t.Run("failure", func(t *testing.T) {
+		wantErr := errors.New("403 Forbidden")
+		svc := &prService{postCommentFn: func(ctx context.Context, prID, body string) error {
+			return wantErr
+		}}
+
+		msg := run(t, cmds.PostCommentCmd(svc, "PR_abc123", "hello"))
+		got, ok := msg.(cmds.CommentFailed)
+		if !ok {
+			t.Fatalf("message type = %T, want cmds.CommentFailed", msg)
+		}
+		if !errors.Is(got.Err, wantErr) {
+			t.Fatalf("err = %v, want %v", got.Err, wantErr)
+		}
+	})
+}
+
 func run(t *testing.T, cmd tea.Cmd) tea.Msg {
 	t.Helper()
 	return cmd()
@@ -351,6 +384,25 @@ func (s *searchService) BuildRepoIndex(repos []domain.Repository) error {
 func repo(full string) domain.Repository {
 	owner, name, _ := splitRepo(full)
 	return domain.Repository{FullName: full, Owner: owner, Name: name, LocalPath: "/tmp/" + name}
+}
+
+type prService struct {
+	postCommentFn func(ctx context.Context, prID, body string) error
+}
+
+func (s *prService) LoadDetail(_ context.Context, _ domain.Repository, _ int, _ bool) (domain.PRPreviewSnapshot, bool, error) {
+	return domain.PRPreviewSnapshot{}, false, nil
+}
+
+func (s *prService) LoadDiff(_ context.Context, _ domain.Repository, _ int, _ string, _ bool) (diffmodel.DiffModel, bool, error) {
+	return diffmodel.DiffModel{}, false, nil
+}
+
+func (s *prService) PostComment(ctx context.Context, prID, body string) error {
+	if s.postCommentFn == nil {
+		panic("prService.PostComment called but postCommentFn is nil")
+	}
+	return s.postCommentFn(ctx, prID, body)
 }
 
 func splitRepo(full string) (string, string, bool) {

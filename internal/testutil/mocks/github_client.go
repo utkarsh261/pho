@@ -19,10 +19,12 @@ type MockGitHubClient struct {
 	FetchInvolvingPRsFn   func(ctx context.Context, repo domain.Repository, viewer string) ([]domain.PullRequestSummary, int, bool, error)
 	FetchRecentActivityFn func(ctx context.Context, repo domain.Repository) ([]domain.ActivityItem, error)
 	FetchPreviewFn        func(ctx context.Context, repo domain.Repository, number int) (domain.PRPreviewSnapshot, error)
+	PostCommentFn         func(ctx context.Context, host, pullRequestID, body string) error
 
 	// Call counters — incremented on each call.
 	FetchDashboardPRsCalls int
 	FetchPreviewCalls      int
+	PostCommentCalls       int
 }
 
 func (m *MockGitHubClient) FetchViewer(ctx context.Context, host string) (string, error) {
@@ -60,4 +62,12 @@ func (m *MockGitHubClient) FetchPreview(ctx context.Context, repo domain.Reposit
 	}
 	m.FetchPreviewCalls++
 	return m.FetchPreviewFn(ctx, repo, number)
+}
+
+func (m *MockGitHubClient) PostComment(ctx context.Context, host, pullRequestID, body string) error {
+	if m.PostCommentFn == nil {
+		panic("MockGitHubClient.PostComment called but PostCommentFn is nil")
+	}
+	m.PostCommentCalls++
+	return m.PostCommentFn(ctx, host, pullRequestID, body)
 }

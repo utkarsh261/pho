@@ -14,4 +14,5 @@ type GitHubClient interface {
 	FetchInvolvingPRs(ctx context.Context, repo domain.Repository, viewer string) ([]domain.PullRequestSummary, int, bool, error)
 	FetchRecentActivity(ctx context.Context, repo domain.Repository) ([]domain.ActivityItem, error)
 	FetchPreview(ctx context.Context, repo domain.Repository, number int) (domain.PRPreviewSnapshot, error)
+	PostComment(ctx context.Context, host, pullRequestID, body string) error
 }
