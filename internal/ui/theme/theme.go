@@ -31,13 +31,13 @@ type Theme struct {
 	NormalRow   lipgloss.Style // no decoration
 
 	// ── text styles ────────────────────────────────────────────────
-	Title       lipgloss.Style // bold
-	Header      lipgloss.Style // panel heading bar (inverted bg + bold label)
-	Bold        lipgloss.Style // bold, normal fg
-	MutedTxt    lipgloss.Style // muted fg
-	PrimaryTxt  lipgloss.Style // primary fg colour
+	Title        lipgloss.Style // bold
+	Header       lipgloss.Style // panel heading bar (inverted bg + bold label)
+	Bold         lipgloss.Style // bold, normal fg
+	MutedTxt     lipgloss.Style // muted fg
+	PrimaryTxt   lipgloss.Style // primary fg colour
 	SecondaryTxt lipgloss.Style // secondary fg + bold
-	Number      lipgloss.Style // secondary fg + bold (for #123 PR numbers)
+	Number       lipgloss.Style // secondary fg + bold (for #123 PR numbers)
 
 	// ── CI / Review status icons ───────────────────────────────────
 	CISuccess lipgloss.Style // emerald
@@ -73,14 +73,22 @@ type Theme struct {
 	StatusSep     lipgloss.Style // border colour
 
 	// ── overlay / command palette ──────────────────────────────────
-	BoxBorder   lipgloss.Style // centred box with primary border
+	BoxBorder   lipgloss.Style // centred box with primary border + dark bg
 	BoxTitle    lipgloss.Style // centred, bold, primary
-	BoxQuery    lipgloss.Style // bold text
+	BoxQuery    lipgloss.Style // near-white query text
 	BoxCursor   lipgloss.Style // primary cursor marker
-	BoxSelected lipgloss.Style // primary fg + bold
-	BoxNormal   lipgloss.Style // muted
+	BoxSelected lipgloss.Style // full-row violet highlight (charm-style)
+	BoxNormal   lipgloss.Style // readable light text for unselected rows
 	BoxFooter   lipgloss.Style // muted, faint
 	BoxDiv      lipgloss.Style // border colour divider
+
+	// PR result part styles (per-column on unselected rows)
+	BoxGlyphOpen   lipgloss.Style // violet  — open PR
+	BoxGlyphMerged lipgloss.Style // emerald — merged PR
+	BoxGlyphClosed lipgloss.Style // muted   — closed PR
+	BoxGlyphDraft  lipgloss.Style // border  — draft PR
+	BoxPRNum       lipgloss.Style // cyan + bold for #1234
+	BoxPRAuthor    lipgloss.Style // muted for @author
 }
 
 // Default constructs a Theme with the standard "Terminal Workshop" palette.
@@ -198,20 +206,24 @@ func Default() *Theme {
 		BorderForeground(t.Primary)
 
 	t.BoxTitle = lipgloss.NewStyle().
-		Foreground(t.Primary).
-		Bold(true)
+		Background(t.Primary).
+		Foreground(lipgloss.Color("#FFFFFF")).
+		Bold(true).
+		Padding(0, 1)
 
-	t.BoxQuery = lipgloss.NewStyle().Bold(true)
+	t.BoxQuery = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#F8FAFC"))
 
 	t.BoxCursor = lipgloss.NewStyle().
 		Foreground(t.Primary)
 
 	t.BoxSelected = lipgloss.NewStyle().
-		Foreground(t.Primary).
+		Background(t.Primary).
+		Foreground(lipgloss.Color("#FFFFFF")).
 		Bold(true)
 
 	t.BoxNormal = lipgloss.NewStyle().
-		Foreground(t.Muted)
+		Foreground(lipgloss.Color("#CBD5E1"))
 
 	t.BoxFooter = lipgloss.NewStyle().
 		Foreground(t.Muted).
@@ -219,6 +231,13 @@ func Default() *Theme {
 
 	t.BoxDiv = lipgloss.NewStyle().
 		Foreground(t.Border)
+
+	t.BoxGlyphOpen = lipgloss.NewStyle().Foreground(t.Primary)
+	t.BoxGlyphMerged = lipgloss.NewStyle().Foreground(t.Success)
+	t.BoxGlyphClosed = lipgloss.NewStyle().Foreground(t.Muted)
+	t.BoxGlyphDraft = lipgloss.NewStyle().Foreground(t.Border)
+	t.BoxPRNum = lipgloss.NewStyle().Foreground(t.Secondary).Bold(true)
+	t.BoxPRAuthor = lipgloss.NewStyle().Foreground(t.Muted)
 
 	return t
 }

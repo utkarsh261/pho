@@ -15,7 +15,11 @@ type SearchService interface {
 	BuildPRIndex(repo domain.Repository, snap domain.DashboardSnapshot) error
 	BuildRepoIndex(repos []domain.Repository) error
 	SearchPRs(query string, limit int) []domain.SearchResult
+	SearchPRsForRepo(query, repo string, limit int) []domain.SearchResult
 	SearchRepos(query string, limit int) []domain.SearchResult
+	AppendJumpPRs(repo string, prs []domain.PullRequestSummary)
+	IsJumpIndexComplete(repo string) bool
+	SetJumpIndexComplete(repo string)
 }
 
 type Service struct {
@@ -29,9 +33,11 @@ type Service struct {
 }
 
 type prIndex struct {
-	repo      domain.Repository
-	fetchedAt time.Time
-	entries   []prEntry
+	repo          domain.Repository
+	fetchedAt     time.Time
+	entries       []prEntry
+	jumpComplete  bool
+	entryByNumber map[int]struct{} // for O(1) dedup in AppendJumpPRs
 }
 
 type prEntry struct {
@@ -40,6 +46,8 @@ type prEntry struct {
 	title     string
 	branch    string
 	author    string
+	state     domain.PRState
+	isDraft   bool
 	updatedAt time.Time
 	tabs      map[domain.DashboardTab]bool
 }
@@ -140,9 +148,10 @@ func (s *Service) BuildPRIndex(repo domain.Repository, snap domain.DashboardSnap
 	}
 
 	index := &prIndex{
-		repo:      effectiveRepo,
-		fetchedAt: snap.FetchedAt,
-		entries:   make([]prEntry, 0, len(snap.PRs)),
+		repo:          effectiveRepo,
+		fetchedAt:     snap.FetchedAt,
+		entries:       make([]prEntry, 0, len(snap.PRs)),
+		entryByNumber: make(map[int]struct{}, len(snap.PRs)),
 	}
 
 	s.mu.RLock()
@@ -156,6 +165,8 @@ func (s *Service) BuildPRIndex(repo domain.Repository, snap domain.DashboardSnap
 			title:     pr.Title,
 			branch:    pr.HeadRefName,
 			author:    pr.Author,
+			state:     pr.State,
+			isDraft:   pr.IsDraft,
 			updatedAt: pr.UpdatedAt,
 			tabs:      defaultTabFlags(pr),
 		}
@@ -168,6 +179,7 @@ func (s *Service) BuildPRIndex(repo domain.Repository, snap domain.DashboardSnap
 			}
 		}
 		index.entries = append(index.entries, entry)
+		index.entryByNumber[pr.Number] = struct{}{}
 	}
 
 	s.mu.Lock()
@@ -228,13 +240,15 @@ func (s *Service) SearchPRs(query string, limit int) []domain.SearchResult {
 			}
 			results = append(results, scoredPR{
 				result: domain.SearchResult{
-					Kind:   domain.SearchResultPR,
-					Repo:   entry.repo,
-					Number: entry.number,
-					Title:  entry.title,
-					Branch: entry.branch,
-					Author: entry.author,
-					Score:  score,
+					Kind:    domain.SearchResultPR,
+					Repo:    entry.repo,
+					Number:  entry.number,
+					Title:   entry.title,
+					Branch:  entry.branch,
+					Author:  entry.author,
+					Score:   score,
+					State:   entry.state,
+					IsDraft: entry.isDraft,
 				},
 				updated: entry.updatedAt,
 			})
@@ -305,6 +319,131 @@ func (s *Service) SearchRepos(query string, limit int) []domain.SearchResult {
 	return out
 }
 
+// AppendJumpPRs adds new PRs to the jump index for a repo without replacing existing entries.
+// Existing entries win on dedup (preserves open-PR data from BuildPRIndex).
+func (s *Service) AppendJumpPRs(repo string, prs []domain.PullRequestSummary) {
+	key := canonicalRepoKey(repo)
+	if key == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ensureMapsLocked()
+
+	idx, ok := s.prIndexes[key]
+	if !ok {
+		idx = &prIndex{
+			entries:       make([]prEntry, 0, len(prs)),
+			entryByNumber: make(map[int]struct{}, len(prs)),
+		}
+		s.prIndexes[key] = idx
+	}
+	if idx.entryByNumber == nil {
+		idx.entryByNumber = make(map[int]struct{}, len(idx.entries))
+		for _, e := range idx.entries {
+			idx.entryByNumber[e.number] = struct{}{}
+		}
+	}
+
+	for _, pr := range prs {
+		if _, exists := idx.entryByNumber[pr.Number]; exists {
+			continue
+		}
+		entry := prEntry{
+			repo:      repo,
+			number:    pr.Number,
+			title:     pr.Title,
+			branch:    pr.HeadRefName,
+			author:    pr.Author,
+			state:     pr.State,
+			isDraft:   pr.IsDraft,
+			updatedAt: pr.UpdatedAt,
+		}
+		idx.entries = append(idx.entries, entry)
+		idx.entryByNumber[pr.Number] = struct{}{}
+	}
+}
+
+// SearchPRsForRepo returns ranked PR results scoped to one repo.
+// Empty query returns entries sorted by updatedAt desc.
+func (s *Service) SearchPRsForRepo(query, repo string, limit int) []domain.SearchResult {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if limit <= 0 {
+		return nil
+	}
+
+	key := canonicalRepoKey(repo)
+	idx, ok := s.prIndexes[key]
+	if !ok {
+		return nil
+	}
+
+	q := normalizeQuery(query)
+	now := time.Now()
+	currentTab := s.currentTab
+
+	results := make([]scoredPR, 0, len(idx.entries))
+	for _, entry := range idx.entries {
+		if q != "" && !matchesPR(entry, q) {
+			continue
+		}
+		score := scorePRForRepo(entry, q, currentTab, now)
+		results = append(results, scoredPR{
+			result: domain.SearchResult{
+				Kind:    domain.SearchResultPR,
+				Repo:    entry.repo,
+				Number:  entry.number,
+				Title:   entry.title,
+				Branch:  entry.branch,
+				Author:  entry.author,
+				Score:   score,
+				State:   entry.state,
+				IsDraft: entry.isDraft,
+			},
+			updated: entry.updatedAt,
+		})
+	}
+
+	sort.SliceStable(results, func(i, j int) bool {
+		if results[i].result.Score != results[j].result.Score {
+			return results[i].result.Score > results[j].result.Score
+		}
+		if !results[i].updated.Equal(results[j].updated) {
+			return results[i].updated.After(results[j].updated)
+		}
+		return results[i].result.Number > results[j].result.Number
+	})
+
+	return scoredPRResults(results, limit)
+}
+
+// IsJumpIndexComplete reports whether the full jump index for a repo has been loaded.
+func (s *Service) IsJumpIndexComplete(repo string) bool {
+	key := canonicalRepoKey(repo)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if idx, ok := s.prIndexes[key]; ok {
+		return idx.jumpComplete
+	}
+	return false
+}
+
+// SetJumpIndexComplete marks the jump index for a repo as fully loaded.
+func (s *Service) SetJumpIndexComplete(repo string) {
+	key := canonicalRepoKey(repo)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ensureMapsLocked()
+	if _, ok := s.prIndexes[key]; !ok {
+		s.prIndexes[key] = &prIndex{
+			entries:       []prEntry{},
+			entryByNumber: map[int]struct{}{},
+		}
+	}
+	s.prIndexes[key].jumpComplete = true
+}
+
 func scoredPRResults(results []scoredPR, limit int) []domain.SearchResult {
 	out := make([]domain.SearchResult, 0, min(limit, len(results)))
 	for _, res := range results {
@@ -357,6 +496,43 @@ func scorePR(entry prEntry, query, currentRepo string, currentTab domain.Dashboa
 
 	if currentRepo != "" && canonicalRepoKey(entry.repo) == currentRepo {
 		score += currentRepoBoost
+	}
+	if currentTab != "" && entry.tabs != nil && entry.tabs[currentTab] {
+		score += currentTabBoost
+	}
+	return score
+}
+
+func scorePRForRepo(entry prEntry, query string, currentTab domain.DashboardTab, now time.Time) float64 {
+	score := 0.0
+	if query == "" {
+		score += recencyScore(entry.updatedAt, now)
+	} else {
+		if n, err := strconv.Atoi(query); err == nil && n == entry.number {
+			score += exactPRNumberBoost
+		}
+		title := normalizeQuery(entry.title)
+		branch := normalizeQuery(entry.branch)
+		author := normalizeQuery(entry.author)
+
+		switch {
+		case strings.HasPrefix(title, query):
+			score += titlePrefixBoost
+		case strings.Contains(title, query):
+			score += titleSubstringBoost
+		}
+		switch {
+		case strings.HasPrefix(branch, query):
+			score += branchPrefixBoost
+		case strings.Contains(branch, query):
+			score += branchSubstringBoost
+		}
+		if strings.Contains(author, query) {
+			score += authorSubstringBoost
+		}
+		if strings.Contains(title, query) || strings.Contains(branch, query) || strings.Contains(author, query) {
+			score += recencyScore(entry.updatedAt, now)
+		}
 	}
 	if currentTab != "" && entry.tabs != nil && entry.tabs[currentTab] {
 		score += currentTabBoost

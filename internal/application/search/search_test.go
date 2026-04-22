@@ -139,6 +139,143 @@ func TestService_SearchPRsPerformance500(t *testing.T) {
 	}
 }
 
+func TestSearchService_AppendJumpPRsAddsToIndex(t *testing.T) {
+	svc := search.New()
+	repo := makeRepo("org/repo")
+	extra := domain.PullRequestSummary{
+		Number: 99, Title: "Closed old", State: domain.PRStateClosed, UpdatedAt: time.Now().Add(-24 * time.Hour),
+	}
+	svc.AppendJumpPRs(repo.FullName, []domain.PullRequestSummary{extra})
+
+	got := svc.SearchPRsForRepo("Closed", repo.FullName, 10)
+	if len(got) != 1 || got[0].Number != 99 {
+		t.Fatalf("expected #99 in jump results, got %#v", got)
+	}
+	if got[0].State != domain.PRStateClosed {
+		t.Fatalf("expected State=CLOSED, got %q", got[0].State)
+	}
+}
+
+func TestSearchService_AppendJumpPRsDeduplicates(t *testing.T) {
+	svc := search.New()
+	repo := makeRepo("org/repo")
+	svc.AppendJumpPRs(repo.FullName, []domain.PullRequestSummary{
+		{Number: 1, Title: "first"},
+		{Number: 2, Title: "second"},
+	})
+	svc.AppendJumpPRs(repo.FullName, []domain.PullRequestSummary{
+		{Number: 2, Title: "second-dup"},
+		{Number: 3, Title: "third"},
+	})
+
+	got := svc.SearchPRsForRepo("", repo.FullName, 100)
+	found := map[int]bool{}
+	for _, r := range got {
+		found[r.Number] = true
+	}
+	if len(found) != 3 {
+		t.Fatalf("expected 3 unique PRs, got %d: %v", len(found), got)
+	}
+}
+
+func TestSearchService_ExistingEntryWinsOnDedup(t *testing.T) {
+	svc := search.New()
+	repo := makeRepo("org/repo")
+	mustBuildPRIndex(t, svc, repo, prSnap(repo, pr(5, "original title", "branch", time.Now())))
+	svc.AppendJumpPRs(repo.FullName, []domain.PullRequestSummary{
+		{Number: 5, Title: "overwritten title"},
+	})
+
+	got := svc.SearchPRsForRepo("original", repo.FullName, 10)
+	if len(got) == 0 || got[0].Number != 5 || got[0].Title != "original title" {
+		t.Fatalf("expected existing entry to win, got %#v", got)
+	}
+}
+
+func TestSearchService_SearchPRsForRepoScopedToRepo(t *testing.T) {
+	svc := search.New()
+	repoA := makeRepo("org/alpha")
+	repoB := makeRepo("org/beta")
+	mustBuildPRIndex(t, svc, repoA, prSnap(repoA, pr(1, "feature A", "feature/a", time.Now())))
+	mustBuildPRIndex(t, svc, repoB, prSnap(repoB, pr(2, "feature B", "feature/b", time.Now())))
+
+	got := svc.SearchPRsForRepo("feature", repoA.FullName, 10)
+	for _, r := range got {
+		if r.Repo != repoA.FullName {
+			t.Fatalf("expected results scoped to %s, got result from %s", repoA.FullName, r.Repo)
+		}
+	}
+	if len(got) != 1 || got[0].Number != 1 {
+		t.Fatalf("expected 1 result from repoA, got %#v", got)
+	}
+}
+
+func TestSearchService_EmptyQueryReturnsByRecency(t *testing.T) {
+	svc := search.New()
+	repo := makeRepo("org/repo")
+	now := time.Now()
+	mustBuildPRIndex(t, svc, repo, prSnap(repo,
+		pr(1, "oldest", "branch/old", now.Add(-48*time.Hour)),
+		pr(2, "newest", "branch/new", now.Add(-1*time.Hour)),
+		pr(3, "middle", "branch/mid", now.Add(-12*time.Hour)),
+	))
+
+	got := svc.SearchPRsForRepo("", repo.FullName, 10)
+	if len(got) < 2 {
+		t.Fatalf("expected at least 2 results, got %d", len(got))
+	}
+	if got[0].Number != 2 {
+		t.Fatalf("expected most recent PR first, got #%d", got[0].Number)
+	}
+}
+
+func TestSearchService_ExactNumberMatch(t *testing.T) {
+	svc := search.New()
+	repo := makeRepo("org/repo")
+	mustBuildPRIndex(t, svc, repo, prSnap(repo,
+		pr(123, "some unrelated title", "branch/x", time.Now().Add(-1*time.Hour)),
+		pr(456, "another PR", "branch/y", time.Now()),
+	))
+
+	got := svc.SearchPRsForRepo("123", repo.FullName, 10)
+	if len(got) == 0 || got[0].Number != 123 {
+		t.Fatalf("expected exact number match first, got %#v", got)
+	}
+}
+
+func TestSearchService_IsJumpIndexComplete(t *testing.T) {
+	svc := search.New()
+	repo := makeRepo("org/repo")
+
+	if svc.IsJumpIndexComplete(repo.FullName) {
+		t.Fatal("expected index incomplete before SetJumpIndexComplete")
+	}
+	svc.SetJumpIndexComplete(repo.FullName)
+	if !svc.IsJumpIndexComplete(repo.FullName) {
+		t.Fatal("expected index complete after SetJumpIndexComplete")
+	}
+}
+
+func TestSearchService_StateAndIsDraftInResult(t *testing.T) {
+	svc := search.New()
+	repo := makeRepo("org/repo")
+	merged := domain.PullRequestSummary{Number: 10, Title: "merged PR", State: domain.PRStateMerged, UpdatedAt: time.Now()}
+	draft := domain.PullRequestSummary{Number: 11, Title: "draft PR", State: domain.PRStateOpen, IsDraft: true, UpdatedAt: time.Now()}
+	svc.AppendJumpPRs(repo.FullName, []domain.PullRequestSummary{merged, draft})
+
+	got := svc.SearchPRsForRepo("", repo.FullName, 10)
+	byNum := map[int]domain.SearchResult{}
+	for _, r := range got {
+		byNum[r.Number] = r
+	}
+	if byNum[10].State != domain.PRStateMerged {
+		t.Fatalf("expected State=MERGED for #10, got %q", byNum[10].State)
+	}
+	if !byNum[11].IsDraft {
+		t.Fatal("expected IsDraft=true for #11")
+	}
+}
+
 func mustBuildPRIndex(t *testing.T, svc *search.Service, repo domain.Repository, snap domain.DashboardSnapshot) {
 	t.Helper()
 	if err := svc.BuildPRIndex(repo, snap); err != nil {

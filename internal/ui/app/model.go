@@ -27,6 +27,9 @@ import (
 type SearchService interface {
 	overlay.SearchService
 	cmds.SearchService
+	AppendJumpPRs(repo string, prs []domain.PullRequestSummary)
+	IsJumpIndexComplete(repo string) bool
+	SetJumpIndexComplete(repo string)
 }
 
 // Dependencies wires the root model to application services.
@@ -39,6 +42,8 @@ type Dependencies struct {
 
 	Root string
 	Host string
+
+	MaxJumpPRs int
 
 	Classifier achdashboard.SummaryTabClassifier
 	Now        func() time.Time
@@ -76,8 +81,9 @@ type Model struct {
 	currentInvolving domain.InvolvingSnapshot
 	currentRecent    domain.RecentSnapshot
 
-	hydratedRepos map[string]struct{}
-	theme         *theme.Theme
+	hydratedRepos     map[string]struct{}
+	hydrationInFlight map[string]bool
+	theme             *theme.Theme
 }
 
 var dashboardFocusCycle = []domain.FocusTarget{
@@ -111,8 +117,9 @@ func NewModel(deps Dependencies) *Model {
 		deps:          deps,
 		log:           log,
 		classifier:    classifier,
-		hydratedRepos: map[string]struct{}{},
-		layout:        layout.NewLayoutState(0, 0),
+		hydratedRepos:     map[string]struct{}{},
+		hydrationInFlight: map[string]bool{},
+		layout:            layout.NewLayoutState(0, 0),
 		viewStack:     []domain.PrimaryView{domain.PrimaryViewDashboard},
 		repoPanel:     dashboard.NewRepoPanelModel(nil),
 		prList:        dashboard.NewPRListPanelModel(),
@@ -260,7 +267,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *Model) View() string {
 	if m.state.Search.OverlayOpen {
-		return m.palette.View()
+		return m.palette.ViewOver(m.renderDashboard())
 	}
 	switch m.currentView() {
 	case domain.PrimaryViewPRDetail:
@@ -485,8 +492,11 @@ func (m *Model) applyMessage(msg tea.Msg) tea.Cmd {
 		return m.handleOverlayDispatch(msg)
 	case overlay.SelectRepo:
 		return m.selectRepoByFullName(msg.Repo, false)
+	case cmds.AllPRsPageLoaded:
+		return m.handleAllPRsPage(msg)
 	case overlay.OpenPR:
-		return openBrowserForPRCmd(m.selectedRepoForURL(msg.Repo), msg.Repo, msg.Number)
+		m.closePalette()
+		return m.openPRDetailForJump(msg.Summary)
 	case overlay.CloseCmdPalette:
 		return m.closePalette()
 	case browserOpenFailed:
@@ -862,10 +872,14 @@ func (m *Model) togglePalette() tea.Cmd {
 	m.state.Search.OverlayOpen = true
 	m.focus = domain.FocusCmdPalette
 	m.palette = overlay.NewModel(m.deps.Search)
+	m.palette.SetTheme(m.theme)
 	m.palette.SetActiveRepo(m.selectedRepoName())
+	// Apply current terminal size so View() renders immediately (not blank).
+	m.palette, _ = m.palette.Update(tea.WindowSizeMsg{Width: m.layout.Width, Height: m.layout.Height})
 	m.syncPaletteStats()
+	m.palette.RefreshResults()
 	m.syncStatus()
-	return nil
+	return m.startJumpHydrationIfNeeded()
 }
 
 func (m *Model) closePalette() tea.Cmd {
@@ -1088,12 +1102,6 @@ func (m *Model) currentView() domain.PrimaryView {
 
 func (m *Model) syncPaletteStats() {
 	m.palette.SetActiveRepo(m.selectedRepoName())
-	total := len(m.state.Repos.Discovered)
-	hydrated := len(m.hydratedRepos)
-	if hydrated > total {
-		hydrated = total
-	}
-	m.palette.SetRepoHydrationStats(total, hydrated)
 }
 
 func (m *Model) syncPaletteState() {
@@ -1370,6 +1378,101 @@ func derivedPreview(summary domain.PullRequestSummary) domain.PRPreviewSnapshot 
 		CreatedAt:      summary.CreatedAt,
 		UpdatedAt:      summary.UpdatedAt,
 	}
+}
+
+func (m *Model) startJumpHydrationIfNeeded() tea.Cmd {
+	repo, ok := m.selectedRepo()
+	if !ok || m.deps.Dashboard == nil || m.deps.Search == nil {
+		return nil
+	}
+	repoName := repo.FullName
+	if m.deps.Search.IsJumpIndexComplete(repoName) {
+		return nil
+	}
+	if m.hydrationInFlight[repoName] {
+		m.palette.SetHydrating(true)
+		return nil
+	}
+	m.hydrationInFlight[repoName] = true
+	m.palette.SetHydrating(true)
+	return cmds.FetchAllPRsPageCmd(m.deps.Dashboard, repo, "", m.maxJumpPagesLeft())
+}
+
+func (m *Model) maxJumpPagesLeft() int {
+	maxPRs := m.deps.MaxJumpPRs
+	if maxPRs <= 0 {
+		maxPRs = 300
+	}
+	pages := (maxPRs + 99) / 100
+	if pages <= 1 {
+		return 0
+	}
+	return pages - 1
+}
+
+func (m *Model) handleAllPRsPage(msg cmds.AllPRsPageLoaded) tea.Cmd {
+	if msg.Err != nil {
+		m.logError("all-PRs page failed", "repo", msg.Repo, "err", msg.Err)
+		delete(m.hydrationInFlight, msg.Repo)
+		if m.state.Search.OverlayOpen {
+			m.palette.SetHydrating(false)
+		}
+		return nil
+	}
+
+	if m.deps.Search != nil && len(msg.Entries) > 0 {
+		m.deps.Search.AppendJumpPRs(msg.Repo, msg.Entries)
+	}
+
+	if m.state.Search.OverlayOpen {
+		m.palette.RefreshResults()
+	}
+
+	if msg.HasMore && msg.PagesLeft > 0 {
+		if repo, ok := m.findRepoByFullName(msg.Repo); ok && m.deps.Dashboard != nil {
+			return cmds.FetchAllPRsPageCmd(m.deps.Dashboard, repo, msg.NextCursor, msg.PagesLeft-1)
+		}
+	}
+
+	delete(m.hydrationInFlight, msg.Repo)
+	if m.deps.Search != nil {
+		m.deps.Search.SetJumpIndexComplete(msg.Repo)
+	}
+	if m.state.Search.OverlayOpen {
+		m.palette.SetHydrating(false)
+		m.palette.RefreshResults()
+	}
+	return nil
+}
+
+func (m *Model) openPRDetailForJump(summary domain.PullRequestSummary) tea.Cmd {
+	repo, ok := m.findRepoByFullName(summary.Repo)
+	if !ok {
+		repo = m.selectedRepoForURL(summary.Repo)
+	}
+
+	if m.prDetail != nil && m.prDetail.Summary.Repo == summary.Repo && m.prDetail.Summary.Number == summary.Number {
+		m.pushView(domain.PrimaryViewPRDetail)
+		m.syncStatus()
+		return nil
+	}
+
+	m.prDetail = prdetail.NewModel(summary, repo, m.deps.PR)
+	m.prDetail.SetTheme(m.theme)
+	m.prDetail.Width = m.layout.Current.Width
+	m.prDetail.Height = m.layout.Current.Height - 2
+	m.pushView(domain.PrimaryViewPRDetail)
+	m.syncStatus()
+	return m.prDetail.Init()
+}
+
+func (m *Model) findRepoByFullName(fullName string) (domain.Repository, bool) {
+	for _, r := range m.state.Repos.Discovered {
+		if sameRepo(r.FullName, fullName) {
+			return r, true
+		}
+	}
+	return domain.Repository{}, false
 }
 
 func (m *Model) openPRDetail() tea.Cmd {

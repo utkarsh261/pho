@@ -292,13 +292,15 @@ type DashboardState struct {
 }
 
 type SearchResult struct {
-	Kind   SearchResultKind
-	Repo   string
-	Number int
-	Title  string
-	Branch string
-	Author string
-	Score  float64
+	Kind    SearchResultKind
+	Repo    string
+	Number  int
+	Title   string
+	Branch  string
+	Author  string
+	Score   float64
+	State   PRState
+	IsDraft bool
 }
 
 type SearchResultKind string

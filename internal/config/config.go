@@ -54,6 +54,9 @@ type rawConfig struct {
 		File  string `toml:"file"`
 		Level string `toml:"level"`
 	} `toml:"logging"`
+	Palette struct {
+		MaxPRs int `toml:"max_prs"`
+	} `toml:"palette"`
 }
 
 // Config is the fully-resolved application configuration.
@@ -80,6 +83,9 @@ type Config struct {
 	Logging struct {
 		File  string
 		Level string
+	}
+	Palette struct {
+		MaxPRs int
 	}
 }
 
@@ -141,6 +147,7 @@ func defaults() Config {
 	cfg.Cache.DiscoveryTTL = 1 * time.Hour
 	cfg.Cache.SearchIndexTTL = 2 * time.Minute
 	cfg.Logging.Level = "info"
+	cfg.Palette.MaxPRs = 300
 	return cfg
 }
 
@@ -172,6 +179,9 @@ func applyDefaults(cfg *Config, def Config) {
 	}
 	if cfg.Logging.Level == "" {
 		cfg.Logging.Level = def.Logging.Level
+	}
+	if cfg.Palette.MaxPRs == 0 {
+		cfg.Palette.MaxPRs = def.Palette.MaxPRs
 	}
 }
 
@@ -224,6 +234,7 @@ func Load(path string) (Config, error) {
 	cfg.Cache.SearchIndexTTL = raw.Cache.SearchIndexTTL.Duration
 	cfg.Logging.File = raw.Logging.File
 	cfg.Logging.Level = raw.Logging.Level
+	cfg.Palette.MaxPRs = raw.Palette.MaxPRs
 
 	// Fill zero-value fields with defaults.
 	applyDefaults(&cfg, def)

@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/utkarsh261/pho/internal/domain"
 	"github.com/utkarsh261/pho/internal/ui/theme"
@@ -21,7 +22,7 @@ const (
 
 // SearchService provides the results shown by the command palette.
 type SearchService interface {
-	SearchPRs(query string, limit int) []domain.SearchResult
+	SearchPRsForRepo(query, repo string, limit int) []domain.SearchResult
 	SearchRepos(query string, limit int) []domain.SearchResult
 }
 
@@ -30,10 +31,11 @@ type SelectRepo struct {
 	Repo string
 }
 
-// OpenPR asks the root model to open a pull request in the browser.
+// OpenPR asks the root model to open a pull request in the TUI detail view.
 type OpenPR struct {
-	Repo   string
-	Number int
+	Repo    string
+	Number  int
+	Summary domain.PullRequestSummary
 }
 
 // CloseCmdPalette dismisses the overlay.
@@ -60,8 +62,7 @@ type Model struct {
 	width  int
 	height int
 
-	totalRepos    int
-	hydratedRepos int
+	hydrating bool
 
 	limit int
 }
@@ -82,19 +83,14 @@ func (m *Model) SetTheme(th *theme.Theme) {
 	m.theme = th
 }
 
-// SetRepoHydrationStats updates the footer hint counts.
-func (m *Model) SetRepoHydrationStats(totalRepos, hydratedRepos int) {
-	if totalRepos < 0 {
-		totalRepos = 0
-	}
-	if hydratedRepos < 0 {
-		hydratedRepos = 0
-	}
-	if hydratedRepos > totalRepos {
-		hydratedRepos = totalRepos
-	}
-	m.totalRepos = totalRepos
-	m.hydratedRepos = hydratedRepos
+// SetHydrating sets the loading indicator state.
+func (m *Model) SetHydrating(hydrating bool) {
+	m.hydrating = hydrating
+}
+
+// RefreshResults re-queries the search service and updates displayed results.
+func (m *Model) RefreshResults() {
+	m.refreshResults()
 }
 
 // SetResults is a test/helper hook for supplying results directly.
@@ -201,23 +197,30 @@ func (m *Model) refreshResults() {
 		return
 	}
 
-	results := append([]domain.SearchResult(nil), m.search.SearchRepos(m.query, m.limit)...)
-	results = append(results, m.search.SearchPRs(m.query, m.limit)...)
-	sort.SliceStable(results, func(i, j int) bool {
-		if results[i].Score != results[j].Score {
-			return results[i].Score > results[j].Score
+	var results []domain.SearchResult
+	if m.query == "" {
+		results = append([]domain.SearchResult(nil), m.search.SearchPRsForRepo("", m.activeRepo, m.limit)...)
+	} else {
+		prResults := m.search.SearchPRsForRepo(m.query, m.activeRepo, m.limit)
+		repoResults := m.search.SearchRepos(m.query, m.limit)
+		results = append(append([]domain.SearchResult(nil), prResults...), repoResults...)
+		sort.SliceStable(results, func(i, j int) bool {
+			if results[i].Score != results[j].Score {
+				return results[i].Score > results[j].Score
+			}
+			if results[i].Kind != results[j].Kind {
+				return results[i].Kind < results[j].Kind
+			}
+			if results[i].Repo != results[j].Repo {
+				return results[i].Repo < results[j].Repo
+			}
+			return results[i].Number < results[j].Number
+		})
+		if len(results) > m.limit {
+			results = results[:m.limit]
 		}
-		if results[i].Kind != results[j].Kind {
-			return results[i].Kind < results[j].Kind
-		}
-		if results[i].Repo != results[j].Repo {
-			return results[i].Repo < results[j].Repo
-		}
-		return results[i].Number < results[j].Number
-	})
-	if len(results) > m.limit {
-		results = results[:m.limit]
 	}
+
 	m.results = results
 	m.selectedIndex = clampIndex(0, len(m.results))
 	m.scrollOffset = 0
@@ -276,6 +279,7 @@ func (m Model) dispatchSelection() tea.Cmd {
 			return DispatchMsg{
 				Messages: []tea.Msg{
 					SelectRepo{Repo: selected.Repo},
+					CloseCmdPalette{},
 				},
 			}
 		}
@@ -284,7 +288,16 @@ func (m Model) dispatchSelection() tea.Cmd {
 		if selected.Repo != "" && selected.Repo != m.activeRepo {
 			messages = append(messages, SelectRepo{Repo: selected.Repo})
 		}
-		messages = append(messages, OpenPR{Repo: selected.Repo, Number: selected.Number})
+		summary := domain.PullRequestSummary{
+			Repo:        selected.Repo,
+			Number:      selected.Number,
+			Title:       selected.Title,
+			Author:      selected.Author,
+			State:       selected.State,
+			IsDraft:     selected.IsDraft,
+			HeadRefName: selected.Branch,
+		}
+		messages = append(messages, OpenPR{Repo: selected.Repo, Number: selected.Number, Summary: summary})
 		return func() tea.Msg {
 			return DispatchMsg{Messages: messages}
 		}
@@ -293,7 +306,7 @@ func (m Model) dispatchSelection() tea.Cmd {
 	}
 }
 
-// View renders the centered overlay box.
+// View renders the centered overlay box on a blank background.
 func (m Model) View() string {
 	boxW, boxH := m.boxSize()
 	if boxW <= 0 || boxH <= 0 {
@@ -301,6 +314,45 @@ func (m Model) View() string {
 	}
 	box := m.renderBox(boxW, boxH)
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
+}
+
+// ViewOver composites the overlay box onto bg.
+// Non-box rows and the columns left/right of the box on box rows all show
+// the background content unchanged — only the box footprint is replaced.
+func (m Model) ViewOver(bg string) string {
+	boxW, boxH := m.boxSize()
+	if boxW <= 0 || boxH <= 0 {
+		return bg
+	}
+	box := m.renderBox(boxW, boxH)
+
+	bgLines := strings.Split(bg, "\n")
+	boxLines := strings.Split(box, "\n")
+
+	startRow := (m.height - boxH) / 2
+	if startRow < 0 {
+		startRow = 0
+	}
+	startCol := (m.width - boxW) / 2
+	if startCol < 0 {
+		startCol = 0
+	}
+
+	result := make([]string, len(bgLines))
+	copy(result, bgLines)
+
+	for i, boxLine := range boxLines {
+		rowIdx := startRow + i
+		if rowIdx < 0 || rowIdx >= len(result) {
+			continue
+		}
+		bgLine := result[rowIdx]
+		// Keep bg columns left and right of the box; replace only the box columns.
+		left := ansi.Cut(bgLine, 0, startCol)
+		right := ansi.Cut(bgLine, startCol+boxW, m.width)
+		result[rowIdx] = left + boxLine + right
+	}
+	return strings.Join(result, "\n")
 }
 
 func (m Model) renderBox(boxW, boxH int) string {
@@ -311,7 +363,9 @@ func (m Model) renderBox(boxW, boxH int) string {
 
 	if m.theme != nil {
 		innerContent := strings.Join(content, "\n")
-		return m.theme.BoxBorder.Width(boxW).Height(boxH).Render(innerContent)
+		// Width/Height are CONTENT dimensions in lipgloss — use innerW/innerH so the
+		// rendered box is exactly boxW × boxH (inner + 2 border chars each side).
+		return m.theme.BoxBorder.Width(innerW).Height(innerH).Render(innerContent)
 	}
 
 	lines := make([]string, 0, boxH)
@@ -324,32 +378,25 @@ func (m Model) renderBox(boxW, boxH int) string {
 }
 
 func (m Model) bodyLines(innerW, innerH int) []string {
-	title := centerText("Command Palette", innerW)
+	if m.theme == nil {
+		return m.bodyLinesPlain(innerW, innerH)
+	}
+
+	badge := m.theme.BoxTitle.Render("Go to")
+	title := lipgloss.PlaceHorizontal(innerW, lipgloss.Center, badge)
 	query := m.queryLine(innerW)
-	if m.theme != nil {
-		title = m.theme.BoxTitle.Render(title)
-		query = m.theme.BoxQuery.Render(query)
-	}
-	lines := []string{
-		title,
-		query,
-		"",
-	}
+	divider := m.theme.BoxDiv.Render(strings.Repeat("─", innerW))
+	lines := []string{title, query, divider}
 
 	visible := m.visibleResultsForBox(innerH)
 	for i, result := range visible {
 		absoluteIndex := m.scrollOffset + i
-		prefix := "  "
-		if absoluteIndex == m.selectedIndex {
-			prefix = "> "
-		}
-		line := prefix + formatResult(result, innerW-2)
-		if m.theme != nil {
-			if absoluteIndex == m.selectedIndex {
-				line = m.theme.BoxSelected.Render(line)
-			} else {
-				line = m.theme.BoxNormal.Render(line)
-			}
+		isSelected := absoluteIndex == m.selectedIndex
+		var line string
+		if isSelected {
+			line = m.theme.BoxSelected.Width(innerW).Render("  " + formatResult(result, innerW-2))
+		} else {
+			line = "  " + m.formatResultStyled(result, innerW-2)
 		}
 		lines = append(lines, line)
 	}
@@ -357,11 +404,36 @@ func (m Model) bodyLines(innerW, innerH int) []string {
 	footer := m.footerHint()
 	if footer != "" {
 		lines = append(lines, "")
-		footerLine := truncate(footer, innerW)
-		if m.theme != nil {
-			footerLine = m.theme.BoxFooter.Render(footerLine)
-		}
-		lines = append(lines, footerLine)
+		lines = append(lines, m.theme.BoxFooter.Render(truncate(footer, innerW)))
+	}
+
+	if len(lines) > innerH {
+		lines = lines[:innerH]
+	}
+	for len(lines) < innerH {
+		lines = append(lines, "")
+	}
+	return lines
+}
+
+func (m Model) bodyLinesPlain(innerW, innerH int) []string {
+	title := centerText("Go to", innerW)
+	query := m.queryLine(innerW)
+	divider := strings.Repeat("─", innerW)
+	lines := []string{title, query, divider}
+
+	visible := m.visibleResultsForBox(innerH)
+	for i, result := range visible {
+		absoluteIndex := m.scrollOffset + i
+		line := "  " + formatResult(result, innerW-2)
+		_ = absoluteIndex
+		lines = append(lines, line)
+	}
+
+	footer := m.footerHint()
+	if footer != "" {
+		lines = append(lines, "")
+		lines = append(lines, truncate(footer, innerW))
 	}
 
 	if len(lines) > innerH {
@@ -393,24 +465,26 @@ func (m Model) visibleResultsForBox(innerH int) []domain.SearchResult {
 }
 
 func (m Model) queryLine(innerW int) string {
-	prefix := "Query: "
-	cursorMarker := ""
-	if m.cursor == len(m.query) {
-		cursorMarker = "▏"
-	}
-	line := prefix + m.query[:minInt(m.cursor, len(m.query))] + cursorMarker
+	beforeCursor := m.query[:minInt(m.cursor, len(m.query))]
+	afterCursor := ""
 	if m.cursor < len(m.query) {
-		line += m.query[m.cursor:]
+		afterCursor = m.query[m.cursor:]
 	}
+	var cursorMark string
+	if m.theme != nil {
+		cursorMark = m.theme.BoxCursor.Render("▏")
+	} else {
+		cursorMark = "▏"
+	}
+	line := "  " + beforeCursor + cursorMark + afterCursor
 	return truncate(line, innerW)
 }
 
 func (m Model) footerHint() string {
-	if m.totalRepos <= 0 || m.hydratedRepos >= m.totalRepos {
-		return ""
+	if m.hydrating {
+		return "  Loading…"
 	}
-	unhydrated := m.totalRepos - m.hydratedRepos
-	return fmt.Sprintf("%d of %d repos still hydrating; results may be incomplete", unhydrated, m.totalRepos)
+	return ""
 }
 
 func (m Model) boxSize() (int, int) {
@@ -434,26 +508,161 @@ func (m Model) boxSize() (int, int) {
 	return boxW, boxH
 }
 
-func formatResult(result domain.SearchResult, width int) string {
-	var text string
+func prStateGlyph(state domain.PRState, isDraft bool) string {
+	if isDraft {
+		return "○"
+	}
+	switch state {
+	case domain.PRStateOpen:
+		return "◆"
+	case domain.PRStateMerged:
+		return "✓"
+	case domain.PRStateClosed:
+		return "✕"
+	default:
+		return "◆"
+	}
+}
+
+func (m Model) glyphStyle(state domain.PRState, isDraft bool) lipgloss.Style {
+	if m.theme == nil {
+		return lipgloss.NewStyle()
+	}
+	if isDraft {
+		return m.theme.BoxGlyphDraft
+	}
+	switch state {
+	case domain.PRStateOpen:
+		return m.theme.BoxGlyphOpen
+	case domain.PRStateMerged:
+		return m.theme.BoxGlyphMerged
+	case domain.PRStateClosed:
+		return m.theme.BoxGlyphClosed
+	default:
+		return m.theme.BoxGlyphOpen
+	}
+}
+
+// formatResultStyled renders a result row with per-column theme colours (normal/unselected rows only).
+func (m Model) formatResultStyled(result domain.SearchResult, width int) string {
+	if m.theme == nil {
+		return formatResult(result, width)
+	}
 	switch result.Kind {
 	case domain.SearchResultRepo:
-		text = fmt.Sprintf("REPO %s", result.Repo)
-		if result.Title != "" {
-			text += " - " + result.Title
-		}
+		return m.theme.BoxGlyphOpen.Render(truncate(result.Repo, width))
 	case domain.SearchResultPR:
-		text = fmt.Sprintf("PR #%d %s", result.Number, result.Repo)
-		if result.Title != "" {
-			text += " - " + result.Title
-		}
+		return m.formatPRResultStyled(result, width)
 	default:
-		text = result.Title
+		text := result.Title
 		if text == "" {
 			text = result.Repo
 		}
+		return m.theme.BoxNormal.Render(truncate(text, width))
 	}
-	return truncate(text, width)
+}
+
+func (m Model) formatPRResultStyled(result domain.SearchResult, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	glyph := prStateGlyph(result.State, result.IsDraft)
+	numPadded := fmt.Sprintf("%-5d", result.Number)
+
+	// Layout: glyph(1) + " #"(2) + numPadded(5) + "  "(2) = 10 cells prefix
+	prefixCells := 10
+	remaining := width - prefixCells
+	if remaining < 0 {
+		remaining = 0
+	}
+
+	authorMax := remaining / 4
+	if authorMax > 12 {
+		authorMax = 12
+	}
+	if authorMax < 0 {
+		authorMax = 0
+	}
+
+	titleMax := remaining
+	authorStr := ""
+	sepStr := ""
+	if authorMax > 0 && result.Author != "" {
+		authorStr = truncate(result.Author, authorMax)
+		sepStr = "  @"
+		titleMax = remaining - 3 - authorMax
+		if titleMax < 0 {
+			titleMax = 0
+		}
+	}
+	titleStr := padRight(truncate(result.Title, titleMax), titleMax)
+
+	coloredGlyph := m.glyphStyle(result.State, result.IsDraft).Render(glyph)
+	coloredNum := m.theme.BoxPRNum.Render("#" + numPadded)
+	coloredTitle := m.theme.BoxNormal.Render(titleStr)
+
+	line := coloredGlyph + " " + coloredNum + "  " + coloredTitle
+	if authorStr != "" {
+		line += m.theme.BoxPRAuthor.Render(sepStr+authorStr)
+	}
+	return line
+}
+
+func formatResult(result domain.SearchResult, width int) string {
+	switch result.Kind {
+	case domain.SearchResultRepo:
+		return truncate(result.Repo, width)
+	case domain.SearchResultPR:
+		return formatPRResult(result, width)
+	default:
+		text := result.Title
+		if text == "" {
+			text = result.Repo
+		}
+		return truncate(text, width)
+	}
+}
+
+func formatPRResult(result domain.SearchResult, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	glyph := prStateGlyph(result.State, result.IsDraft)
+	// glyph is 1 terminal cell but len(glyph) may be 3 bytes for multi-byte UTF-8 chars
+	byteOverhead := len(glyph) - 1
+
+	numStr := fmt.Sprintf("%-5d", result.Number)
+	// prefix cells: glyph(1) + " #"(2) + numStr(5) + "  "(2) = 10
+	prefixCells := 10
+	remaining := width - prefixCells
+	if remaining < 0 {
+		remaining = 0
+	}
+
+	authorMax := remaining / 4
+	if authorMax > 12 {
+		authorMax = 12
+	}
+	if authorMax < 0 {
+		authorMax = 0
+	}
+
+	titleMax := remaining
+	sepPart := ""
+	authorPart := ""
+	if authorMax > 0 && result.Author != "" {
+		sepPart = "  @"
+		authorPart = truncate(result.Author, authorMax)
+		titleMax = remaining - 3 - authorMax
+		if titleMax < 0 {
+			titleMax = 0
+		}
+	}
+
+	titlePart := padRight(truncate(result.Title, titleMax), titleMax)
+	line := glyph + " #" + numStr + "  " + titlePart + sepPart + authorPart
+	// compensate for the extra bytes of the multi-byte glyph when truncating
+	return truncate(line, width+byteOverhead)
 }
 
 func centerText(text string, width int) string {

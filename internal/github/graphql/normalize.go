@@ -81,6 +81,21 @@ func normalizePreviewResponse(repo domain.Repository, number int, resp model.Pre
 	return snapshot, nil
 }
 
+func normalizeAllPRsResponse(repo domain.Repository, resp model.DashboardData) ([]domain.PullRequestSummary, bool, string, error) {
+	root := resp.Repository
+	hasNext := root.PullRequests.PageInfo.HasNextPage
+	cursor := root.PullRequests.PageInfo.EndCursor
+	out := make([]domain.PullRequestSummary, 0, len(root.PullRequests.Nodes))
+	for _, node := range root.PullRequests.Nodes {
+		summary, err := normalizePullRequestSummary(repo, node)
+		if err != nil {
+			return nil, false, "", err
+		}
+		out = append(out, summary)
+	}
+	return out, hasNext, cursor, nil
+}
+
 func normalizePullRequestSummary(repo domain.Repository, node model.PullRequestNode) (domain.PullRequestSummary, error) {
 	createdAt, err := parseGraphQLTime(node.CreatedAt)
 	if err != nil {

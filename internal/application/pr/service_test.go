@@ -64,6 +64,10 @@ func (f *fakeGitHubClient) PostComment(_ context.Context, _, _, _ string) error 
 	return nil
 }
 
+func (f *fakeGitHubClient) FetchAllPRs(_ context.Context, _ domain.Repository, _ string) ([]domain.PullRequestSummary, bool, string, error) {
+	return nil, false, "", nil
+}
+
 // frozenNow is the fixed time used for both service.Now and coord.Now in tests.
 // Entries seeded at this time with a 2-minute TTL are fresh; entries seeded
 // at 2020 are still stale, so stale-path tests remain valid.

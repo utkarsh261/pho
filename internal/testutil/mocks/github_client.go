@@ -20,6 +20,7 @@ type MockGitHubClient struct {
 	FetchRecentActivityFn func(ctx context.Context, repo domain.Repository) ([]domain.ActivityItem, error)
 	FetchPreviewFn        func(ctx context.Context, repo domain.Repository, number int) (domain.PRPreviewSnapshot, error)
 	PostCommentFn         func(ctx context.Context, host, pullRequestID, body string) error
+	FetchAllPRsFn         func(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
 
 	// Call counters — incremented on each call.
 	FetchDashboardPRsCalls int
@@ -70,4 +71,11 @@ func (m *MockGitHubClient) PostComment(ctx context.Context, host, pullRequestID,
 	}
 	m.PostCommentCalls++
 	return m.PostCommentFn(ctx, host, pullRequestID, body)
+}
+
+func (m *MockGitHubClient) FetchAllPRs(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error) {
+	if m.FetchAllPRsFn == nil {
+		return nil, false, "", nil
+	}
+	return m.FetchAllPRsFn(ctx, repo, cursor)
 }

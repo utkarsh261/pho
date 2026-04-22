@@ -134,6 +134,32 @@ func buildPreviewQuery(profile githubpkg.GitHubHostProfile) string {
 }`, pullRequestPreviewSelection(profile))
 }
 
+func buildAllPRsQuery(owner, name, after string) string {
+	afterClause := ""
+	if after != "" {
+		afterClause = fmt.Sprintf(`, after: "%s"`, after)
+	}
+	return fmt.Sprintf(`query AllPRsQuery {
+  repository(owner: "%s", name: "%s") {
+    pullRequests(first: 100%s, orderBy: {field: UPDATED_AT, direction: DESC}) {
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+      nodes {
+        number
+        title
+        state
+        isDraft
+        updatedAt
+        headRefName
+        author { __typename login }
+      }
+    }
+  }
+}`, owner, name, afterClause)
+}
+
 func buildInvolvingSearchQuery(repo domain.Repository, viewer string) string {
 	if full := repoFullName(repo); full != "" {
 		return strings.TrimSpace(fmt.Sprintf("repo:%s is:pr is:open involves:%s", full, viewer))
