@@ -872,6 +872,7 @@ func (m *Model) togglePalette() tea.Cmd {
 	m.state.Search.OverlayOpen = true
 	m.focus = domain.FocusCmdPalette
 	m.palette = overlay.NewModel(m.deps.Search)
+	m.palette.SetTheme(m.theme)
 	m.palette.SetActiveRepo(m.selectedRepoName())
 	// Apply current terminal size so View() renders immediately (not blank).
 	m.palette, _ = m.palette.Update(tea.WindowSizeMsg{Width: m.layout.Width, Height: m.layout.Height})

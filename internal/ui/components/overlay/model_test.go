@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/utkarsh261/pho/internal/domain"
+	"github.com/utkarsh261/pho/internal/ui/theme"
 )
 
 type mockSearchService struct {
@@ -377,4 +378,118 @@ func TestOverlayPRResultsRender(t *testing.T) {
 	assertContains(t, view, "✓")
 	assertContains(t, view, "✕")
 	assertContains(t, view, "○")
+}
+
+// TestThemedBoxDimensions verifies the rendered box is exactly boxW × boxH when a theme is set.
+// Previously Width(boxW)/Height(boxH) used content dimensions, making the box 2 chars wider
+// and 2 lines taller than expected, which broke ViewOver compositing.
+func TestThemedBoxDimensions(t *testing.T) {
+	m := NewModel(nil)
+	m.SetTheme(theme.Default())
+	m.width = 80
+	m.height = 24
+
+	boxW, boxH := m.boxSize()
+	box := m.renderBox(boxW, boxH)
+
+	lines := strings.Split(box, "\n")
+	if len(lines) != boxH {
+		t.Errorf("box height: want %d lines, got %d", boxH, len(lines))
+	}
+}
+
+// TestThemedBoxContent verifies key strings appear inside the themed box.
+func TestThemedBoxContent(t *testing.T) {
+	m := NewModel(nil)
+	m.SetTheme(theme.Default())
+	m.width = 80
+	m.height = 24
+	m.SetResults([]domain.SearchResult{
+		{Kind: domain.SearchResultPR, Repo: "org/x", Number: 1234, Title: "Fix flaky test", State: domain.PRStateOpen, Author: "alice"},
+		{Kind: domain.SearchResultRepo, Repo: "org/backend"},
+	})
+
+	view := m.View()
+
+	// Rounded border (from theme's RoundedBorder)
+	assertContains(t, view, "╭")
+	assertContains(t, view, "╰")
+
+	// Title
+	assertContains(t, view, "Go to")
+
+	// PR result parts
+	assertContains(t, view, "◆")
+	assertContains(t, view, "1234")
+	assertContains(t, view, "Fix flaky test")
+	assertContains(t, view, "alice")
+
+	// Repo result — no "REPO" prefix
+	assertContains(t, view, "org/backend")
+	if strings.Contains(view, "REPO") {
+		t.Fatal("expected no REPO prefix in themed view")
+	}
+
+	// No > selection prefix
+	if strings.Contains(view, "> ") {
+		t.Fatal("expected no '> ' prefix in themed view")
+	}
+}
+
+// TestSelectedRowHasBackground verifies the selected row carries a different ANSI styling
+// than normal rows — specifically that selected rows have a background (highlight) and that
+// selected vs normal rows produce distinct output.
+func TestSelectedRowHasBackground(t *testing.T) {
+	t.Setenv("CLICOLOR_FORCE", "1")
+	t.Setenv("COLORTERM", "truecolor")
+
+	m := NewModel(nil)
+	m.SetTheme(theme.Default())
+	m.width = 80
+	m.height = 24
+	m.SetResults([]domain.SearchResult{
+		{Kind: domain.SearchResultPR, Repo: "org/x", Number: 42, Title: "Selected PR", State: domain.PRStateOpen},
+		{Kind: domain.SearchResultPR, Repo: "org/x", Number: 99, Title: "Normal PR", State: domain.PRStateOpen},
+	})
+	// selectedIndex == 0 by default (Selected PR is first)
+
+	boxW, boxH := m.boxSize()
+	innerW := maxInt(0, boxW-2)
+	innerH := maxInt(0, boxH-2)
+	lines := m.bodyLines(innerW, innerH)
+
+	var selectedLine, normalLine string
+	for _, l := range lines {
+		if strings.Contains(l, "Selected PR") {
+			selectedLine = l
+		}
+		if strings.Contains(l, "Normal PR") {
+			normalLine = l
+		}
+	}
+	if selectedLine == "" {
+		t.Fatal("could not find selected row in body lines")
+	}
+	if normalLine == "" {
+		t.Fatal("could not find normal row in body lines")
+	}
+
+	// When ANSI is enabled, the two rows must have distinct styling sequences.
+	if strings.Contains(selectedLine, "\x1b[") || strings.Contains(normalLine, "\x1b[") {
+		// At least one has ANSI; they must differ (different bg = different escape sequences).
+		if selectedLine == normalLine {
+			t.Error("selected and normal rows have identical output — highlight not applied")
+		}
+		// Selected row must include bold (\\x1b[1m or combined bold code).
+		if !strings.Contains(selectedLine, "1m") && !strings.Contains(selectedLine, ";1;") && !strings.Contains(selectedLine, "1;") {
+			t.Error("selected row: expected bold in ANSI sequence")
+		}
+		// Both rows must have some background escape sequence.
+		if !strings.Contains(selectedLine, "\x1b[") {
+			t.Error("selected row: missing ANSI escape sequence")
+		}
+		if !strings.Contains(normalLine, "\x1b[") {
+			t.Error("normal row: missing ANSI escape sequence (dark bg not applied)")
+		}
+	}
 }

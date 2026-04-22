@@ -356,7 +356,9 @@ func (m Model) renderBox(boxW, boxH int) string {
 
 	if m.theme != nil {
 		innerContent := strings.Join(content, "\n")
-		return m.theme.BoxBorder.Width(boxW).Height(boxH).Render(innerContent)
+		// Width/Height are CONTENT dimensions in lipgloss — use innerW/innerH so the
+		// rendered box is exactly boxW × boxH (inner + 2 border chars each side).
+		return m.theme.BoxBorder.Width(innerW).Height(innerH).Render(innerContent)
 	}
 
 	lines := make([]string, 0, boxH)
@@ -369,44 +371,67 @@ func (m Model) renderBox(boxW, boxH int) string {
 }
 
 func (m Model) bodyLines(innerW, innerH int) []string {
-	title := centerText("Go to", innerW)
-	query := m.queryLine(innerW)
-	if m.theme != nil {
-		title = m.theme.BoxTitle.Render(title)
-		query = m.theme.BoxQuery.Render(query)
+	if m.theme == nil {
+		return m.bodyLinesPlain(innerW, innerH)
 	}
-	lines := []string{
-		title,
-		query,
-		"",
-	}
+
+	// Dark background applied to each line individually so it is never overridden
+	// by an outer lipgloss style (which would also clobber the selected-row violet bg).
+	bg := lipgloss.NewStyle().Background(lipgloss.Color("#0D1117")).Width(innerW)
+	fill := func(s string) string { return bg.Render(s) }
+
+	title := fill(m.theme.BoxTitle.Render(centerText("Go to", innerW)))
+	query := fill(m.queryLine(innerW))
+	divider := fill(m.theme.BoxDiv.Render(strings.Repeat("─", innerW)))
+	lines := []string{title, query, divider}
 
 	visible := m.visibleResultsForBox(innerH)
 	for i, result := range visible {
 		absoluteIndex := m.scrollOffset + i
-		prefix := "  "
-		if absoluteIndex == m.selectedIndex {
-			prefix = "> "
-		}
-		line := prefix + formatResult(result, innerW-2)
-		if m.theme != nil {
-			if absoluteIndex == m.selectedIndex {
-				line = m.theme.BoxSelected.Render(line)
-			} else {
-				line = m.theme.BoxNormal.Render(line)
-			}
+		isSelected := absoluteIndex == m.selectedIndex
+		var line string
+		if isSelected {
+			// Full-width violet highlight — plain text so violet bg reads cleanly.
+			line = m.theme.BoxSelected.Width(innerW).Render("  " + formatResult(result, innerW-2))
+		} else {
+			line = fill("  " + m.formatResultStyled(result, innerW-2))
 		}
 		lines = append(lines, line)
 	}
 
 	footer := m.footerHint()
 	if footer != "" {
+		lines = append(lines, fill(""))
+		lines = append(lines, fill(m.theme.BoxFooter.Render(truncate(footer, innerW))))
+	}
+
+	if len(lines) > innerH {
+		lines = lines[:innerH]
+	}
+	for len(lines) < innerH {
+		lines = append(lines, fill(""))
+	}
+	return lines
+}
+
+func (m Model) bodyLinesPlain(innerW, innerH int) []string {
+	title := centerText("Go to", innerW)
+	query := m.queryLine(innerW)
+	divider := strings.Repeat("─", innerW)
+	lines := []string{title, query, divider}
+
+	visible := m.visibleResultsForBox(innerH)
+	for i, result := range visible {
+		absoluteIndex := m.scrollOffset + i
+		line := "  " + formatResult(result, innerW-2)
+		_ = absoluteIndex
+		lines = append(lines, line)
+	}
+
+	footer := m.footerHint()
+	if footer != "" {
 		lines = append(lines, "")
-		footerLine := truncate(footer, innerW)
-		if m.theme != nil {
-			footerLine = m.theme.BoxFooter.Render(footerLine)
-		}
-		lines = append(lines, footerLine)
+		lines = append(lines, truncate(footer, innerW))
 	}
 
 	if len(lines) > innerH {
@@ -438,16 +463,18 @@ func (m Model) visibleResultsForBox(innerH int) []domain.SearchResult {
 }
 
 func (m Model) queryLine(innerW int) string {
-	cursorMarker := ""
-	if m.cursor == len(m.query) {
-		cursorMarker = "▏"
-	}
 	beforeCursor := m.query[:minInt(m.cursor, len(m.query))]
 	afterCursor := ""
 	if m.cursor < len(m.query) {
 		afterCursor = m.query[m.cursor:]
 	}
-	line := "  " + beforeCursor + cursorMarker + afterCursor
+	var cursorMark string
+	if m.theme != nil {
+		cursorMark = m.theme.BoxCursor.Render("▏")
+	} else {
+		cursorMark = "▏"
+	}
+	line := "  " + beforeCursor + cursorMark + afterCursor
 	return truncate(line, innerW)
 }
 
@@ -493,6 +520,90 @@ func prStateGlyph(state domain.PRState, isDraft bool) string {
 	default:
 		return "◆"
 	}
+}
+
+func (m Model) glyphStyle(state domain.PRState, isDraft bool) lipgloss.Style {
+	if m.theme == nil {
+		return lipgloss.NewStyle()
+	}
+	if isDraft {
+		return m.theme.BoxGlyphDraft
+	}
+	switch state {
+	case domain.PRStateOpen:
+		return m.theme.BoxGlyphOpen
+	case domain.PRStateMerged:
+		return m.theme.BoxGlyphMerged
+	case domain.PRStateClosed:
+		return m.theme.BoxGlyphClosed
+	default:
+		return m.theme.BoxGlyphOpen
+	}
+}
+
+// formatResultStyled renders a result row with per-column theme colours (normal/unselected rows only).
+func (m Model) formatResultStyled(result domain.SearchResult, width int) string {
+	if m.theme == nil {
+		return formatResult(result, width)
+	}
+	switch result.Kind {
+	case domain.SearchResultRepo:
+		return m.theme.BoxGlyphOpen.Render(truncate(result.Repo, width))
+	case domain.SearchResultPR:
+		return m.formatPRResultStyled(result, width)
+	default:
+		text := result.Title
+		if text == "" {
+			text = result.Repo
+		}
+		return m.theme.BoxNormal.Render(truncate(text, width))
+	}
+}
+
+func (m Model) formatPRResultStyled(result domain.SearchResult, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	glyph := prStateGlyph(result.State, result.IsDraft)
+	numPadded := fmt.Sprintf("%-5d", result.Number)
+
+	// Layout: glyph(1) + " #"(2) + numPadded(5) + "  "(2) = 10 cells prefix
+	prefixCells := 10
+	remaining := width - prefixCells
+	if remaining < 0 {
+		remaining = 0
+	}
+
+	authorMax := remaining / 4
+	if authorMax > 12 {
+		authorMax = 12
+	}
+	if authorMax < 0 {
+		authorMax = 0
+	}
+
+	titleMax := remaining
+	authorStr := ""
+	sepStr := ""
+	if authorMax > 0 && result.Author != "" {
+		authorStr = truncate(result.Author, authorMax)
+		sepStr = "  @"
+		titleMax = remaining - 3 - authorMax
+		if titleMax < 0 {
+			titleMax = 0
+		}
+	}
+	titleStr := padRight(truncate(result.Title, titleMax), titleMax)
+
+	coloredGlyph := m.glyphStyle(result.State, result.IsDraft).Render(glyph)
+	coloredNum := m.theme.BoxPRNum.Render("#" + numPadded)
+	coloredTitle := m.theme.BoxNormal.Render(titleStr)
+
+	line := coloredGlyph + " " + coloredNum + "  " + coloredTitle
+	if authorStr != "" {
+		line += m.theme.BoxPRAuthor.Render(sepStr+authorStr)
+	}
+	return line
 }
 
 func formatResult(result domain.SearchResult, width int) string {
