@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/utkarsh261/pho/internal/domain"
 	"github.com/utkarsh261/pho/internal/ui/theme"
@@ -315,35 +316,41 @@ func (m Model) View() string {
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
 }
 
-// ViewOver renders the overlay box composited on top of bg.
-// Rows outside the box show the background content; box rows show the overlay.
+// ViewOver composites the overlay box onto bg.
+// Non-box rows and the columns left/right of the box on box rows all show
+// the background content unchanged — only the box footprint is replaced.
 func (m Model) ViewOver(bg string) string {
 	boxW, boxH := m.boxSize()
 	if boxW <= 0 || boxH <= 0 {
 		return bg
 	}
 	box := m.renderBox(boxW, boxH)
-	fg := lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
 
 	bgLines := strings.Split(bg, "\n")
-	fgLines := strings.Split(fg, "\n")
+	boxLines := strings.Split(box, "\n")
 
-	// lipgloss.Center places the box at (height-boxH)/2 from the top.
 	startRow := (m.height - boxH) / 2
 	if startRow < 0 {
 		startRow = 0
 	}
-	endRow := startRow + boxH
+	startCol := (m.width - boxW) / 2
+	if startCol < 0 {
+		startCol = 0
+	}
 
-	result := make([]string, len(fgLines))
-	for i, fgLine := range fgLines {
-		if i >= startRow && i < endRow {
-			result[i] = fgLine // box row — use overlay
-		} else if i < len(bgLines) {
-			result[i] = bgLines[i] // non-box row — show dashboard
-		} else {
-			result[i] = fgLine
+	result := make([]string, len(bgLines))
+	copy(result, bgLines)
+
+	for i, boxLine := range boxLines {
+		rowIdx := startRow + i
+		if rowIdx < 0 || rowIdx >= len(result) {
+			continue
 		}
+		bgLine := result[rowIdx]
+		// Keep bg columns left and right of the box; replace only the box columns.
+		left := ansi.Cut(bgLine, 0, startCol)
+		right := ansi.Cut(bgLine, startCol+boxW, m.width)
+		result[rowIdx] = left + boxLine + right
 	}
 	return strings.Join(result, "\n")
 }
@@ -375,14 +382,9 @@ func (m Model) bodyLines(innerW, innerH int) []string {
 		return m.bodyLinesPlain(innerW, innerH)
 	}
 
-	// Dark background applied to each line individually so it is never overridden
-	// by an outer lipgloss style (which would also clobber the selected-row violet bg).
-	bg := lipgloss.NewStyle().Background(lipgloss.Color("#0D1117")).Width(innerW)
-	fill := func(s string) string { return bg.Render(s) }
-
-	title := fill(m.theme.BoxTitle.Render(centerText("Go to", innerW)))
-	query := fill(m.queryLine(innerW))
-	divider := fill(m.theme.BoxDiv.Render(strings.Repeat("─", innerW)))
+	title := m.theme.BoxTitle.Render(centerText("Go to", innerW))
+	query := m.queryLine(innerW)
+	divider := m.theme.BoxDiv.Render(strings.Repeat("─", innerW))
 	lines := []string{title, query, divider}
 
 	visible := m.visibleResultsForBox(innerH)
@@ -391,25 +393,24 @@ func (m Model) bodyLines(innerW, innerH int) []string {
 		isSelected := absoluteIndex == m.selectedIndex
 		var line string
 		if isSelected {
-			// Full-width violet highlight — plain text so violet bg reads cleanly.
 			line = m.theme.BoxSelected.Width(innerW).Render("  " + formatResult(result, innerW-2))
 		} else {
-			line = fill("  " + m.formatResultStyled(result, innerW-2))
+			line = "  " + m.formatResultStyled(result, innerW-2)
 		}
 		lines = append(lines, line)
 	}
 
 	footer := m.footerHint()
 	if footer != "" {
-		lines = append(lines, fill(""))
-		lines = append(lines, fill(m.theme.BoxFooter.Render(truncate(footer, innerW))))
+		lines = append(lines, "")
+		lines = append(lines, m.theme.BoxFooter.Render(truncate(footer, innerW)))
 	}
 
 	if len(lines) > innerH {
 		lines = lines[:innerH]
 	}
 	for len(lines) < innerH {
-		lines = append(lines, fill(""))
+		lines = append(lines, "")
 	}
 	return lines
 }

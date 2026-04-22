@@ -31,13 +31,13 @@ type Theme struct {
 	NormalRow   lipgloss.Style // no decoration
 
 	// ── text styles ────────────────────────────────────────────────
-	Title       lipgloss.Style // bold
-	Header      lipgloss.Style // panel heading bar (inverted bg + bold label)
-	Bold        lipgloss.Style // bold, normal fg
-	MutedTxt    lipgloss.Style // muted fg
-	PrimaryTxt  lipgloss.Style // primary fg colour
+	Title        lipgloss.Style // bold
+	Header       lipgloss.Style // panel heading bar (inverted bg + bold label)
+	Bold         lipgloss.Style // bold, normal fg
+	MutedTxt     lipgloss.Style // muted fg
+	PrimaryTxt   lipgloss.Style // primary fg colour
 	SecondaryTxt lipgloss.Style // secondary fg + bold
-	Number      lipgloss.Style // secondary fg + bold (for #123 PR numbers)
+	Number       lipgloss.Style // secondary fg + bold (for #123 PR numbers)
 
 	// ── CI / Review status icons ───────────────────────────────────
 	CISuccess lipgloss.Style // emerald
@@ -201,13 +201,9 @@ func Default() *Theme {
 		Foreground(t.Border)
 
 	// Command palette overlay.
-	// Background is applied per-line in bodyLines so inner bg (selected row) is never overridden.
-	// BorderBackground gives the border chars the same dark feel.
-	boxBg := lipgloss.Color("#0D1117")
 	t.BoxBorder = lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(t.Primary).
-		BorderBackground(boxBg)
+		BorderForeground(t.Primary)
 
 	t.BoxTitle = lipgloss.NewStyle().
 		Foreground(t.Primary).
