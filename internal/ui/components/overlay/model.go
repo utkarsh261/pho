@@ -382,7 +382,8 @@ func (m Model) bodyLines(innerW, innerH int) []string {
 		return m.bodyLinesPlain(innerW, innerH)
 	}
 
-	title := m.theme.BoxTitle.Render(centerText("Go to", innerW))
+	badge := m.theme.BoxTitle.Render("Go to")
+	title := lipgloss.PlaceHorizontal(innerW, lipgloss.Center, badge)
 	query := m.queryLine(innerW)
 	divider := m.theme.BoxDiv.Render(strings.Repeat("─", innerW))
 	lines := []string{title, query, divider}

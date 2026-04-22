@@ -206,8 +206,10 @@ func Default() *Theme {
 		BorderForeground(t.Primary)
 
 	t.BoxTitle = lipgloss.NewStyle().
-		Foreground(t.Primary).
-		Bold(true)
+		Background(t.Primary).
+		Foreground(lipgloss.Color("#FFFFFF")).
+		Bold(true).
+		Padding(0, 1)
 
 	t.BoxQuery = lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#F8FAFC"))
