@@ -10,11 +10,11 @@ import (
 )
 
 type mockSearchService struct {
-	searchReposFn func(query string, limit int) []domain.SearchResult
-	searchPRsFn   func(query string, limit int) []domain.SearchResult
+	searchReposFn      func(query string, limit int) []domain.SearchResult
+	searchPRsForRepoFn func(query, repo string, limit int) []domain.SearchResult
 
-	searchRepoQueries []string
-	searchPRQueries   []string
+	searchRepoQueries      []string
+	searchPRForRepoQueries []string
 }
 
 func (m *mockSearchService) SearchRepos(query string, limit int) []domain.SearchResult {
@@ -25,12 +25,64 @@ func (m *mockSearchService) SearchRepos(query string, limit int) []domain.Search
 	return nil
 }
 
-func (m *mockSearchService) SearchPRs(query string, limit int) []domain.SearchResult {
-	m.searchPRQueries = append(m.searchPRQueries, query)
-	if m.searchPRsFn != nil {
-		return m.searchPRsFn(query, limit)
+func (m *mockSearchService) SearchPRsForRepo(query, repo string, limit int) []domain.SearchResult {
+	m.searchPRForRepoQueries = append(m.searchPRForRepoQueries, query)
+	if m.searchPRsForRepoFn != nil {
+		return m.searchPRsForRepoFn(query, repo, limit)
 	}
 	return nil
+}
+
+func TestModel_TitleIsGoTo(t *testing.T) {
+	m := NewModel(nil)
+	m.width = 80
+	m.height = 24
+	view := m.View()
+	assertContains(t, view, "Go to")
+}
+
+func TestModel_QueryLineHasNoPrefix(t *testing.T) {
+	svc := &mockSearchService{}
+	m := NewModel(svc)
+	m.width = 80
+	m.height = 24
+	m, _ = m.Update(keyRuneMsg("fix"))
+	view := m.View()
+	assertContains(t, view, "fix")
+	if strings.Contains(view, "Query:") {
+		t.Fatalf("expected no 'Query:' prefix in view, got:\n%s", view)
+	}
+}
+
+func TestModel_EmptyQueryCallsOnlyPRSearch(t *testing.T) {
+	svc := &mockSearchService{}
+	m := NewModel(svc)
+	m.SetActiveRepo("org/alpha")
+	m.width = 80
+	m.height = 24
+	m.RefreshResults()
+	if len(svc.searchRepoQueries) > 0 {
+		t.Fatalf("expected no repo search calls for empty query, got: %v", svc.searchRepoQueries)
+	}
+	if len(svc.searchPRForRepoQueries) == 0 {
+		t.Fatal("expected SearchPRsForRepo to be called for empty query")
+	}
+}
+
+func TestModel_NonEmptyQueryCallsBoth(t *testing.T) {
+	svc := &mockSearchService{}
+	m := NewModel(svc)
+	m.SetActiveRepo("org/alpha")
+	m.width = 80
+	m.height = 24
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m, _ = m.Update(keyRuneMsg("fix"))
+	if len(svc.searchPRForRepoQueries) == 0 {
+		t.Fatal("expected SearchPRsForRepo to be called for non-empty query")
+	}
+	if len(svc.searchRepoQueries) == 0 {
+		t.Fatal("expected SearchRepos to be called for non-empty query")
+	}
 }
 
 func TestModel_RenderShowsInputAndResults(t *testing.T) {
@@ -41,15 +93,13 @@ func TestModel_RenderShowsInputAndResults(t *testing.T) {
 			}
 			return []domain.SearchResult{
 				{
-					Kind:   domain.SearchResultRepo,
-					Repo:   "org/alpha",
-					Title:  "Alpha repository",
-					Score:  9.7,
-					Branch: "main",
+					Kind:  domain.SearchResultRepo,
+					Repo:  "org/alpha",
+					Score: 9.7,
 				},
 			}
 		},
-		searchPRsFn: func(query string, limit int) []domain.SearchResult {
+		searchPRsForRepoFn: func(query, repo string, limit int) []domain.SearchResult {
 			if query != "g" {
 				t.Fatalf("unexpected pr query %q", query)
 			}
@@ -67,7 +117,6 @@ func TestModel_RenderShowsInputAndResults(t *testing.T) {
 
 	model := NewModel(svc)
 	model.SetActiveRepo("org/alpha")
-	model.SetRepoHydrationStats(5, 2)
 
 	var cmd tea.Cmd
 	model, cmd = model.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
@@ -79,10 +128,10 @@ func TestModel_RenderShowsInputAndResults(t *testing.T) {
 	if cmd != nil {
 		t.Fatalf("expected no command from query update, got %T", cmd)
 	}
-	if got := svc.searchRepoQueries; len(got) != 1 || got[0] != "g" {
+	if got := svc.searchRepoQueries; len(got) == 0 || got[len(got)-1] != "g" {
 		t.Fatalf("unexpected repo queries: %#v", got)
 	}
-	if got := svc.searchPRQueries; len(got) != 1 || got[0] != "g" {
+	if got := svc.searchPRForRepoQueries; len(got) == 0 || got[len(got)-1] != "g" {
 		t.Fatalf("unexpected pr queries: %#v", got)
 	}
 
@@ -90,56 +139,132 @@ func TestModel_RenderShowsInputAndResults(t *testing.T) {
 	if !containsLineWithPrefix(view, 20) {
 		t.Fatalf("expected centered overlay with left padding, got:\n%s", view)
 	}
-	assertContains(t, view, "Command Palette")
-	assertContains(t, view, "Query: g")
-	assertContains(t, view, "REPO org/alpha")
-	assertContains(t, view, "PR #7 org/beta - Fix login flow")
+	assertContains(t, view, "Go to")
+	assertContains(t, view, "g")
+	assertContains(t, view, "org/alpha")
+	assertContains(t, view, "#7")
+	assertContains(t, view, "Fix login flow")
 }
 
-func TestModel_EnterDispatchesSelectRepoThenOpenPR(t *testing.T) {
-	model := NewModel(nil)
-	model.SetActiveRepo("org/alpha")
-	model.SetResults([]domain.SearchResult{
+func TestModel_PRResultRowFormat(t *testing.T) {
+	m := NewModel(nil)
+	m.width = 80
+	m.height = 24
+	m.SetResults([]domain.SearchResult{
+		{Kind: domain.SearchResultPR, Repo: "org/beta", Number: 7, Title: "Fix login flow", State: domain.PRStateOpen},
+	})
+	view := m.View()
+	assertContains(t, view, "◆")
+	assertContains(t, view, "#7")
+	assertContains(t, view, "Fix login flow")
+}
+
+func TestModel_RepoResultNoPrefix(t *testing.T) {
+	m := NewModel(nil)
+	m.width = 80
+	m.height = 24
+	m.SetResults([]domain.SearchResult{
+		{Kind: domain.SearchResultRepo, Repo: "org/alpha"},
+	})
+	view := m.View()
+	assertContains(t, view, "org/alpha")
+	if strings.Contains(view, "REPO") {
+		t.Fatalf("expected no 'REPO' prefix in repo result, got:\n%s", view)
+	}
+}
+
+func TestModel_HydrationFooterShown(t *testing.T) {
+	m := NewModel(nil)
+	m.SetHydrating(true)
+	m.width = 100
+	m.height = 40
+	view := m.View()
+	assertContains(t, view, "Loading")
+}
+
+func TestModel_HydrationFooterHidden(t *testing.T) {
+	m := NewModel(nil)
+	m.SetHydrating(false)
+	m.width = 100
+	m.height = 40
+	view := m.View()
+	if strings.Contains(view, "Loading") {
+		t.Fatalf("expected no Loading indicator when not hydrating, got:\n%s", view)
+	}
+}
+
+func TestModel_EnterOnPRDispatchesSummary(t *testing.T) {
+	m := NewModel(nil)
+	m.SetActiveRepo("org/alpha")
+	m.SetResults([]domain.SearchResult{
 		{
 			Kind:   domain.SearchResultPR,
 			Repo:   "org/beta",
 			Number: 42,
 			Title:  "Fix flaky test",
+			State:  domain.PRStateOpen,
 		},
 	})
 
-	_, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	msg := runCmd(t, cmd)
 
 	dispatch, ok := msg.(DispatchMsg)
 	if !ok {
 		t.Fatalf("expected DispatchMsg, got %T", msg)
 	}
-	if len(dispatch.Messages) != 2 {
-		t.Fatalf("expected 2 messages, got %d", len(dispatch.Messages))
+
+	var found OpenPR
+	for _, item := range dispatch.Messages {
+		if pr, ok := item.(OpenPR); ok {
+			found = pr
+			break
+		}
+	}
+	if found.Repo != "org/beta" || found.Number != 42 {
+		t.Fatalf("unexpected OpenPR payload: %+v", found)
+	}
+	if found.Summary.Title != "Fix flaky test" {
+		t.Fatalf("expected Summary.Title = 'Fix flaky test', got %q", found.Summary.Title)
+	}
+}
+
+func TestModel_EnterOnRepoDispatchesCloseAndSelect(t *testing.T) {
+	m := NewModel(nil)
+	m.SetActiveRepo("org/alpha")
+	m.SetResults([]domain.SearchResult{
+		{Kind: domain.SearchResultRepo, Repo: "org/other"},
+	})
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	msg := runCmd(t, cmd)
+
+	dispatch, ok := msg.(DispatchMsg)
+	if !ok {
+		t.Fatalf("expected DispatchMsg, got %T", msg)
 	}
 
-	selectRepo, ok := dispatch.Messages[0].(SelectRepo)
-	if !ok {
-		t.Fatalf("expected first message SelectRepo, got %T", dispatch.Messages[0])
+	var hasSelectRepo, hasClosePalette bool
+	for _, item := range dispatch.Messages {
+		switch item.(type) {
+		case SelectRepo:
+			hasSelectRepo = true
+		case CloseCmdPalette:
+			hasClosePalette = true
+		}
 	}
-	if selectRepo.Repo != "org/beta" {
-		t.Fatalf("unexpected repo %q", selectRepo.Repo)
+	if !hasSelectRepo {
+		t.Fatal("expected SelectRepo in dispatch messages")
 	}
-
-	openPR, ok := dispatch.Messages[1].(OpenPR)
-	if !ok {
-		t.Fatalf("expected second message OpenPR, got %T", dispatch.Messages[1])
-	}
-	if openPR.Repo != "org/beta" || openPR.Number != 42 {
-		t.Fatalf("unexpected open PR payload: %+v", openPR)
+	if !hasClosePalette {
+		t.Fatal("expected CloseCmdPalette in dispatch messages")
 	}
 }
 
 func TestModel_EscDismissesOverlay(t *testing.T) {
-	model := NewModel(nil)
+	m := NewModel(nil)
 
-	_, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	msg := runCmd(t, cmd)
 
 	if _, ok := msg.(CloseCmdPalette); !ok {
@@ -147,36 +272,26 @@ func TestModel_EscDismissesOverlay(t *testing.T) {
 	}
 }
 
-func TestModel_FooterHintForUnhydratedRepos(t *testing.T) {
-	model := NewModel(nil)
-	model.SetRepoHydrationStats(5, 2)
-	model.width = 100
-	model.height = 40
-
-	view := model.View()
-	assertContains(t, view, "3 of 5 repos still hydrating; results may be incomplete")
-}
-
 func TestModel_SelectionMovesWithJAndK(t *testing.T) {
-	model := NewModel(nil)
-	model.SetResults([]domain.SearchResult{
+	m := NewModel(nil)
+	m.SetResults([]domain.SearchResult{
 		{Kind: domain.SearchResultRepo, Repo: "org/a"},
 		{Kind: domain.SearchResultRepo, Repo: "org/b"},
 		{Kind: domain.SearchResultRepo, Repo: "org/c"},
 	})
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyDown})
-	if got := model.selectedIndex; got != 1 {
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if got := m.selectedIndex; got != 1 {
 		t.Fatalf("expected selected index 1, got %d", got)
 	}
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyDown})
-	if got := model.selectedIndex; got != 2 {
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if got := m.selectedIndex; got != 2 {
 		t.Fatalf("expected selected index 2, got %d", got)
 	}
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyUp})
-	if got := model.selectedIndex; got != 1 {
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	if got := m.selectedIndex; got != 1 {
 		t.Fatalf("expected selected index 1, got %d", got)
 	}
 }
@@ -211,12 +326,7 @@ func containsLineWithPrefix(text string, spaces int) bool {
 	return false
 }
 
-// TestOverlayFullUIRender locks the structural bounds of the overlay View output:
-// box borders are present, the title is centered, results are rendered, and the
-// box is horizontally indented by the correct left-padding amount.
-// Assertions are substring-based so they hold both before and after the
-// lipgloss.Place centering refactoring (which changes right/bottom padding but
-// not box content or left alignment).
+// TestOverlayFullUIRender locks the structural bounds of the overlay View output.
 func TestOverlayFullUIRender(t *testing.T) {
 	m := NewModel(nil)
 	m.width = 80
@@ -232,17 +342,39 @@ func TestOverlayFullUIRender(t *testing.T) {
 	assertContains(t, view, "┌──────────────────────────────────────────────┐")
 	assertContains(t, view, "└──────────────────────────────────────────────┘")
 
-	// Title is centered within the 46-char box interior:
-	// "Command Palette" is 15 chars → 15 left-pad + 16 right-pad.
-	assertContains(t, view, "│               Command Palette                │")
+	// Title is "Go to".
+	assertContains(t, view, "Go to")
 
-	// Query prefix and results.
-	assertContains(t, view, "Query:")
-	assertContains(t, view, "REPO org/alpha - Alpha repo")
-	assertContains(t, view, "PR #7 org/beta - Fix login flow")
+	// Repo result: no "REPO" prefix.
+	assertContains(t, view, "org/alpha")
+	if strings.Contains(view, "REPO") {
+		t.Fatalf("expected no 'REPO' prefix, got:\n%s", view)
+	}
+
+	// PR result: glyph and number present.
+	assertContains(t, view, "#7")
 
 	// Box must be horizontally centered: leftPad = (80-48)/2 = 16 spaces.
 	if !containsLineWithPrefix(view, 16) {
 		t.Fatalf("expected box lines to carry 16-space left indent, view:\n%s", view)
 	}
+}
+
+// TestOverlayPRResultsRender verifies all four PR state glyphs render correctly.
+func TestOverlayPRResultsRender(t *testing.T) {
+	m := NewModel(nil)
+	m.width = 80
+	m.height = 40
+	m.SetResults([]domain.SearchResult{
+		{Kind: domain.SearchResultPR, Repo: "org/x", Number: 1, Title: "Open PR", State: domain.PRStateOpen},
+		{Kind: domain.SearchResultPR, Repo: "org/x", Number: 2, Title: "Merged PR", State: domain.PRStateMerged},
+		{Kind: domain.SearchResultPR, Repo: "org/x", Number: 3, Title: "Closed PR", State: domain.PRStateClosed},
+		{Kind: domain.SearchResultPR, Repo: "org/x", Number: 4, Title: "Draft PR", IsDraft: true},
+	})
+
+	view := m.View()
+	assertContains(t, view, "◆")
+	assertContains(t, view, "✓")
+	assertContains(t, view, "✕")
+	assertContains(t, view, "○")
 }

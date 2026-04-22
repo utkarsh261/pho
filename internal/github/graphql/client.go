@@ -146,6 +146,22 @@ func (c *Client) FetchRecentActivity(ctx context.Context, repo domain.Repository
 	return items, nil
 }
 
+// FetchAllPRs loads one page of all PRs (any state) for the jump index.
+func (c *Client) FetchAllPRs(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error) {
+	c.log.Debug("fetch all prs", "repo", repo.FullName, "host", repo.Host, "cursor", cursor)
+	resp, err := queryGraphQL[model.DashboardData](c, ctx, repo.Host, func(_ githubpkg.GitHubHostProfile) string {
+		return buildAllPRsQuery(repoOwner(repo), repoName(repo), cursor)
+	}, nil)
+	if err != nil {
+		return nil, false, "", err
+	}
+	summaries, hasMore, nextCursor, err := normalizeAllPRsResponse(repo, resp.Data)
+	if err != nil {
+		return nil, false, "", err
+	}
+	return summaries, hasMore, nextCursor, nil
+}
+
 // FetchPreview loads the richer PR preview snapshot.
 func (c *Client) FetchPreview(ctx context.Context, repo domain.Repository, number int) (domain.PRPreviewSnapshot, error) {
 	c.log.Debug("fetch preview", "repo", repo.FullName, "host", repo.Host, "number", number)

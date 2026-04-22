@@ -182,7 +182,7 @@ func dispatchCmdPalette(msg tea.KeyMsg) Result {
 	case tea.KeyEsc:
 		return Result{Action: CloseCmdPalette{}}
 	case tea.KeyEnter:
-		return Result{Action: SelectPR{}}
+		return Result{PassThrough: true}
 	case tea.KeyCtrlP:
 		return Result{Action: ToggleCmdPalette{}}
 	case tea.KeyTab:

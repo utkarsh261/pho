@@ -28,6 +28,7 @@ type DashboardService interface {
 	LoadInvolving(ctx context.Context, repo domain.Repository, viewer string, force bool) (domain.InvolvingSnapshot, error)
 	LoadRecent(ctx context.Context, repo domain.Repository, force bool) (domain.RecentSnapshot, error)
 	LoadPreview(ctx context.Context, repo string, number int) (domain.PRPreviewSnapshot, error)
+	LoadAllPRsPage(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
 }
 
 type Service struct {
@@ -246,6 +247,13 @@ func (s *Service) loadPreview(ctx context.Context, parsedRepo domain.Repository,
 		return out, err
 	}
 	return out, nil
+}
+
+func (s *Service) LoadAllPRsPage(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error) {
+	if err := s.ensureReady(); err != nil {
+		return nil, false, "", err
+	}
+	return s.Client.FetchAllPRs(ctx, normalizeRepository(repo), cursor)
 }
 
 func (s *Service) resolvePreviewRepo(raw string) (domain.Repository, error) {

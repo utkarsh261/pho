@@ -324,6 +324,70 @@ func TestPostCommentCmd(t *testing.T) {
 	})
 }
 
+func TestFetchAllPRsPageCmd(t *testing.T) {
+	repoArg := repo("org/myrepo")
+	entries := []domain.PullRequestSummary{
+		{Number: 1, Title: "PR one", State: domain.PRStateOpen},
+		{Number: 2, Title: "PR two", State: domain.PRStateMerged},
+	}
+
+	t.Run("success with more pages", func(t *testing.T) {
+		svc := &dashboardService{
+			loadAllPRsPage: func(_ context.Context, r domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error) {
+				if r.FullName != repoArg.FullName {
+					t.Fatalf("repo = %q, want %q", r.FullName, repoArg.FullName)
+				}
+				if cursor != "" {
+					t.Fatalf("cursor = %q, want empty", cursor)
+				}
+				return entries, true, "cursor123", nil
+			},
+		}
+
+		msg := run(t, cmds.FetchAllPRsPageCmd(svc, repoArg, "", 2))
+		got, ok := msg.(cmds.AllPRsPageLoaded)
+		if !ok {
+			t.Fatalf("message type = %T, want AllPRsPageLoaded", msg)
+		}
+		if got.Err != nil {
+			t.Fatalf("unexpected error: %v", got.Err)
+		}
+		if !got.HasMore || got.NextCursor != "cursor123" {
+			t.Fatalf("HasMore=%v NextCursor=%q", got.HasMore, got.NextCursor)
+		}
+		if got.PagesLeft != 2 {
+			t.Fatalf("PagesLeft = %d, want 2", got.PagesLeft)
+		}
+		if len(got.Entries) != 2 {
+			t.Fatalf("len(Entries) = %d, want 2", len(got.Entries))
+		}
+		if got.Repo != repoArg.FullName {
+			t.Fatalf("Repo = %q, want %q", got.Repo, repoArg.FullName)
+		}
+	})
+
+	t.Run("failure", func(t *testing.T) {
+		wantErr := errors.New("graphql timeout")
+		svc := &dashboardService{
+			loadAllPRsPage: func(_ context.Context, _ domain.Repository, _ string) ([]domain.PullRequestSummary, bool, string, error) {
+				return nil, false, "", wantErr
+			},
+		}
+
+		msg := run(t, cmds.FetchAllPRsPageCmd(svc, repoArg, "", 1))
+		got, ok := msg.(cmds.AllPRsPageLoaded)
+		if !ok {
+			t.Fatalf("message type = %T, want AllPRsPageLoaded", msg)
+		}
+		if !errors.Is(got.Err, wantErr) {
+			t.Fatalf("err = %v, want %v", got.Err, wantErr)
+		}
+		if got.HasMore || len(got.Entries) != 0 {
+			t.Fatalf("unexpected fields on error: %#v", got)
+		}
+	})
+}
+
 func run(t *testing.T, cmd tea.Cmd) tea.Msg {
 	t.Helper()
 	return cmd()
@@ -350,6 +414,7 @@ type dashboardService struct {
 	loadInvolvingFn func(context.Context, domain.Repository, string, bool) (domain.InvolvingSnapshot, error)
 	loadRecentFn    func(context.Context, domain.Repository, bool) (domain.RecentSnapshot, error)
 	loadPreviewFn   func(context.Context, string, int) (domain.PRPreviewSnapshot, error)
+	loadAllPRsPage  func(context.Context, domain.Repository, string) ([]domain.PullRequestSummary, bool, string, error)
 }
 
 func (s *dashboardService) LoadRepo(ctx context.Context, repo domain.Repository, force bool) (domain.DashboardSnapshot, error) {
@@ -366,6 +431,13 @@ func (s *dashboardService) LoadRecent(ctx context.Context, repo domain.Repositor
 
 func (s *dashboardService) LoadPreview(ctx context.Context, repo string, number int) (domain.PRPreviewSnapshot, error) {
 	return s.loadPreviewFn(ctx, repo, number)
+}
+
+func (s *dashboardService) LoadAllPRsPage(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error) {
+	if s.loadAllPRsPage != nil {
+		return s.loadAllPRsPage(ctx, repo, cursor)
+	}
+	return nil, false, "", nil
 }
 
 type searchService struct {

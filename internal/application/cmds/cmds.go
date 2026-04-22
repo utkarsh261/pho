@@ -22,6 +22,7 @@ type DashboardService interface {
 	LoadInvolving(ctx context.Context, repo domain.Repository, viewer string, force bool) (domain.InvolvingSnapshot, error)
 	LoadRecent(ctx context.Context, repo domain.Repository, force bool) (domain.RecentSnapshot, error)
 	LoadPreview(ctx context.Context, repo string, number int) (domain.PRPreviewSnapshot, error)
+	LoadAllPRsPage(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
 }
 
 type SearchService interface {
@@ -94,6 +95,16 @@ type PreviewLoaded struct {
 type SearchIndexRebuilt struct {
 	Repo string
 	Err  error
+}
+
+// AllPRsPageLoaded is emitted when a background all-PRs page fetch completes.
+type AllPRsPageLoaded struct {
+	Repo       string
+	Entries    []domain.PullRequestSummary
+	HasMore    bool
+	NextCursor string
+	PagesLeft  int
+	Err        error
 }
 
 // CommentPosted is emitted when a PR comment has been successfully posted.
@@ -172,6 +183,21 @@ func RebuildRepoIndexCmd(svc SearchService, repos []domain.Repository) tea.Cmd {
 	return func() tea.Msg {
 		err := svc.BuildRepoIndex(repos)
 		return SearchIndexRebuilt{Err: err}
+	}
+}
+
+// FetchAllPRsPageCmd fires a background all-PRs page fetch for the jump index.
+func FetchAllPRsPageCmd(svc DashboardService, repo domain.Repository, cursor string, pagesLeft int) tea.Cmd {
+	return func() tea.Msg {
+		entries, hasMore, nextCursor, err := svc.LoadAllPRsPage(context.Background(), repo, cursor)
+		return AllPRsPageLoaded{
+			Repo:       repoKey(repo),
+			Entries:    entries,
+			HasMore:    hasMore,
+			NextCursor: nextCursor,
+			PagesLeft:  pagesLeft,
+			Err:        err,
+		}
 	}
 }
 

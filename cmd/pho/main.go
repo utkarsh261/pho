@@ -162,14 +162,15 @@ func main() {
 	prSvc.Log = logger
 
 	deps := app.Dependencies{
-		Viewer:    ghClient,
-		Discovery: discoverySvc,
-		Dashboard: dashboardSvc,
-		Search:    searchSvc,
-		PR:        prSvc,
-		Root:      rootDir,
-		Host:      profiles[0].Host,
-		Logger:    logger,
+		Viewer:     ghClient,
+		Discovery:  discoverySvc,
+		Dashboard:  dashboardSvc,
+		Search:     searchSvc,
+		PR:         prSvc,
+		Root:       rootDir,
+		Host:       profiles[0].Host,
+		MaxJumpPRs: cfg.Palette.MaxPRs,
+		Logger:     logger,
 	}
 	model := app.NewModel(deps)
 

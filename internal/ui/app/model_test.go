@@ -97,6 +97,10 @@ func (s *stubDashboardService) LoadPreview(ctx context.Context, repo string, num
 	return domain.PRPreviewSnapshot{Repo: repo, Number: number, Title: "Preview"}, nil
 }
 
+func (s *stubDashboardService) LoadAllPRsPage(_ context.Context, _ domain.Repository, _ string) ([]domain.PullRequestSummary, bool, string, error) {
+	return nil, false, "", nil
+}
+
 type stubSearchService struct {
 	buildPRCalls   int
 	buildRepoCalls int
@@ -112,13 +116,19 @@ func (s *stubSearchService) BuildRepoIndex(repos []domain.Repository) error {
 	return nil
 }
 
-func (s *stubSearchService) SearchPRs(query string, limit int) []domain.SearchResult {
+func (s *stubSearchService) SearchPRsForRepo(query, repo string, limit int) []domain.SearchResult {
 	return nil
 }
 
 func (s *stubSearchService) SearchRepos(query string, limit int) []domain.SearchResult {
 	return nil
 }
+
+func (s *stubSearchService) AppendJumpPRs(repo string, prs []domain.PullRequestSummary) {}
+
+func (s *stubSearchService) IsJumpIndexComplete(repo string) bool { return false }
+
+func (s *stubSearchService) SetJumpIndexComplete(repo string) {}
 
 // stubPRService implements cmds.PRService for testing.
 type stubPRService struct {
