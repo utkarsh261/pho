@@ -248,6 +248,12 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		}
 		return m, tea.Batch(spinCmd, composeCmd, cmds.PostCommentCmd(m.PRService, m.Summary.ID, body))
 
+	case submitApproveMsg:
+		if m.PRService == nil {
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		return m, tea.Batch(spinCmd, composeCmd, cmds.ApprovePRCmd(m.PRService, m.Summary.ID, msg.body))
+
 	case openEditorComposeMsg:
 		editor := os.Getenv("VISUAL")
 		if editor == "" {
@@ -288,6 +294,17 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		}))
 
 	case cmds.CommentFailed:
+		m.compose.status = composeStatusError
+		m.compose.errMsg = msg.Err.Error()
+		return m, tea.Batch(spinCmd, composeCmd)
+
+	case cmds.ApprovalPosted:
+		m.compose.status = composeStatusSuccess
+		return m, tea.Batch(spinCmd, composeCmd, tea.Tick(1500*time.Millisecond, func(time.Time) tea.Msg {
+			return composeSuccessDismissMsg{}
+		}))
+
+	case cmds.ApprovalFailed:
 		m.compose.status = composeStatusError
 		m.compose.errMsg = msg.Err.Error()
 		return m, tea.Batch(spinCmd, composeCmd)
@@ -668,6 +685,11 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 	case "c":
 		if m.PRService != nil {
 			m.compose.Open(composeModeNew, commentEntry{})
+		}
+		return m, nil
+	case "a":
+		if m.PRService != nil {
+			m.compose.Open(composeModeApprove, commentEntry{})
 		}
 		return m, nil
 	case "r":

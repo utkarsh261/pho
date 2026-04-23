@@ -18,6 +18,16 @@ func buildAddCommentMutation() string {
 }`
 }
 
+func buildApprovePullRequestMutation() string {
+	return `mutation ApprovePullRequest($pullRequestId: ID!, $body: String) {
+  addPullRequestReview(input: {pullRequestId: $pullRequestId, event: APPROVE, body: $body}) {
+    pullRequestReview {
+      id
+    }
+  }
+}`
+}
+
 func buildViewerQuery() string {
 	return `query ViewerQuery {
   viewer {

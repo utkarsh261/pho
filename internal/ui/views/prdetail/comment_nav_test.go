@@ -330,3 +330,4 @@ func (s *prServiceStub) LoadDiff(_ context.Context, _ domain.Repository, _ int, 
 	return diffmodel.DiffModel{}, false, nil
 }
 func (s *prServiceStub) PostComment(_ context.Context, _, _ string) error { return nil }
+func (s *prServiceStub) ApprovePR(_ context.Context, _, _ string) error  { return nil }

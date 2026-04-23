@@ -477,6 +477,8 @@ func (s *prService) PostComment(ctx context.Context, prID, body string) error {
 	return s.postCommentFn(ctx, prID, body)
 }
 
+func (s *prService) ApprovePR(_ context.Context, _, _ string) error { return nil }
+
 func splitRepo(full string) (string, string, bool) {
 	for i := 0; i < len(full); i++ {
 		if full[i] == '/' {

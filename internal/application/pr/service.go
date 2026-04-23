@@ -97,6 +97,11 @@ func (s *PRService) PostComment(ctx context.Context, prID string, body string) e
 	return s.Client.PostComment(ctx, s.Host, prID, body)
 }
 
+// ApprovePR submits a PR review with APPROVE decision via the GitHub client.
+func (s *PRService) ApprovePR(ctx context.Context, prID string, body string) error {
+	return s.Client.ApprovePullRequest(ctx, s.Host, prID, body)
+}
+
 func (s *PRService) LoadDiff(ctx context.Context, repo domain.Repository, number int, headSHA string, force bool) (model.DiffModel, bool, error) {
 	if headSHA == "" {
 		// No SHA available — use a placeholder key. Validation will be skipped.

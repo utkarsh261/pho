@@ -34,6 +34,7 @@ type PRService interface {
 	LoadDetail(ctx context.Context, repo domain.Repository, number int, force bool) (domain.PRPreviewSnapshot, bool, error)
 	LoadDiff(ctx context.Context, repo domain.Repository, number int, headSHA string, force bool) (model.DiffModel, bool, error)
 	PostComment(ctx context.Context, prID string, body string) error
+	ApprovePR(ctx context.Context, prID string, body string) error
 }
 
 type PRDetailLoaded struct {
@@ -112,6 +113,12 @@ type CommentPosted struct{}
 
 // CommentFailed is emitted when posting a PR comment fails.
 type CommentFailed struct{ Err error }
+
+// ApprovalPosted is emitted when a PR review approval has been successfully submitted.
+type ApprovalPosted struct{}
+
+// ApprovalFailed is emitted when submitting a PR review approval fails.
+type ApprovalFailed struct{ Err error }
 
 type RefreshStarted struct {
 	Key string
@@ -217,6 +224,15 @@ func PostCommentCmd(svc PRService, prID, body string) tea.Cmd {
 			return CommentFailed{Err: err}
 		}
 		return CommentPosted{}
+	}
+}
+
+func ApprovePRCmd(svc PRService, prID, body string) tea.Cmd {
+	return func() tea.Msg {
+		if err := svc.ApprovePR(context.Background(), prID, body); err != nil {
+			return ApprovalFailed{Err: err}
+		}
+		return ApprovalPosted{}
 	}
 }
 

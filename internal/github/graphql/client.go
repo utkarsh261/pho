@@ -78,6 +78,21 @@ func (c *Client) PostComment(ctx context.Context, host, pullRequestID, body stri
 	return err
 }
 
+// ApprovePullRequest submits a PR review with APPROVE decision via GraphQL.
+func (c *Client) ApprovePullRequest(ctx context.Context, host, pullRequestID, body string) error {
+	vars := map[string]any{
+		"pullRequestId": pullRequestID,
+		"body":          body,
+	}
+	if body == "" {
+		vars["body"] = nil
+	}
+	_, err := queryGraphQL[model.AddPullRequestReviewData](c, ctx, host, func(_ githubpkg.GitHubHostProfile) string {
+		return buildApprovePullRequestMutation()
+	}, vars)
+	return err
+}
+
 // FetchViewer resolves the current viewer login for a host.
 func (c *Client) FetchViewer(ctx context.Context, host string) (string, error) {
 	c.log.Debug("fetch viewer", "host", host)

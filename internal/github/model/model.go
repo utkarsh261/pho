@@ -59,6 +59,15 @@ type AddCommentData struct {
 	} `json:"addComment"`
 }
 
+// AddPullRequestReviewData is the data object returned by the addPullRequestReview mutation.
+type AddPullRequestReviewData struct {
+	AddPullRequestReview struct {
+		PullRequestReview struct {
+			ID string `json:"id"`
+		} `json:"pullRequestReview"`
+	} `json:"addPullRequestReview"`
+}
+
 // ViewerNode identifies the authenticated viewer.
 type ViewerNode struct {
 	Login string `json:"login"`

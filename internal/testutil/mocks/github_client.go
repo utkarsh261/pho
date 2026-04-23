@@ -19,13 +19,15 @@ type MockGitHubClient struct {
 	FetchInvolvingPRsFn   func(ctx context.Context, repo domain.Repository, viewer string) ([]domain.PullRequestSummary, int, bool, error)
 	FetchRecentActivityFn func(ctx context.Context, repo domain.Repository) ([]domain.ActivityItem, error)
 	FetchPreviewFn        func(ctx context.Context, repo domain.Repository, number int) (domain.PRPreviewSnapshot, error)
-	PostCommentFn         func(ctx context.Context, host, pullRequestID, body string) error
-	FetchAllPRsFn         func(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
+	PostCommentFn          func(ctx context.Context, host, pullRequestID, body string) error
+	ApprovePullRequestFn   func(ctx context.Context, host, pullRequestID, body string) error
+	FetchAllPRsFn          func(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
 
 	// Call counters — incremented on each call.
-	FetchDashboardPRsCalls int
-	FetchPreviewCalls      int
-	PostCommentCalls       int
+	FetchDashboardPRsCalls  int
+	FetchPreviewCalls       int
+	PostCommentCalls        int
+	ApprovePullRequestCalls int
 }
 
 func (m *MockGitHubClient) FetchViewer(ctx context.Context, host string) (string, error) {
@@ -71,6 +73,14 @@ func (m *MockGitHubClient) PostComment(ctx context.Context, host, pullRequestID,
 	}
 	m.PostCommentCalls++
 	return m.PostCommentFn(ctx, host, pullRequestID, body)
+}
+
+func (m *MockGitHubClient) ApprovePullRequest(ctx context.Context, host, pullRequestID, body string) error {
+	if m.ApprovePullRequestFn == nil {
+		panic("MockGitHubClient.ApprovePullRequest called but ApprovePullRequestFn is nil")
+	}
+	m.ApprovePullRequestCalls++
+	return m.ApprovePullRequestFn(ctx, host, pullRequestID, body)
 }
 
 func (m *MockGitHubClient) FetchAllPRs(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error) {

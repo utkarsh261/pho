@@ -13,8 +13,9 @@ import (
 type composeMode int
 
 const (
-	composeModeNew   composeMode = iota // new PR-level comment
-	composeModeReply                    // quote-reply to an existing entry
+	composeModeNew     composeMode = iota // new PR-level comment
+	composeModeReply                      // quote-reply to an existing entry
+	composeModeApprove                    // approve the PR with an optional comment
 )
 
 type composeStatus int
@@ -28,6 +29,9 @@ const (
 
 // submitComposeMsg is emitted when the user presses Enter with non-empty input.
 type submitComposeMsg struct{ body string }
+
+// submitApproveMsg is emitted when the user presses Enter in approve mode (body may be empty).
+type submitApproveMsg struct{ body string }
 
 // openEditorComposeMsg is emitted when the user presses Ctrl+E.
 type openEditorComposeMsg struct{ draft string }
@@ -102,6 +106,10 @@ func (c ComposeModel) Update(msg tea.Msg) (ComposeModel, tea.Cmd) {
 
 	switch keyMsg.String() {
 	case "enter":
+		if c.mode == composeModeApprove {
+			c.status = composeStatusPosting
+			return c, func() tea.Msg { return submitApproveMsg{body: strings.TrimSpace(c.input.Value())} }
+		}
 		body := strings.TrimSpace(c.input.Value())
 		if body == "" {
 			return c, nil // silent no-op
@@ -153,7 +161,11 @@ func (c *ComposeModel) View(width int) string {
 		row2 = ""
 
 	case composeStatusSuccess:
-		row1 = th.CISuccess.Render("✓ Comment posted")
+		if c.mode == composeModeApprove {
+			row1 = th.CISuccess.Render("✓ Approved")
+		} else {
+			row1 = th.CISuccess.Render("✓ Comment posted")
+		}
 		row2 = ""
 
 	case composeStatusError:
@@ -162,14 +174,25 @@ func (c *ComposeModel) View(width int) string {
 
 	default: // idle
 		var prefix string
-		if c.mode == composeModeReply && c.target.login != "" {
-			prefix = "Reply to @" + c.target.login + " ▸ "
-		} else {
+		var hint string
+		switch c.mode {
+		case composeModeReply:
+			if c.target.login != "" {
+				prefix = "Reply to @" + c.target.login + " ▸ "
+			} else {
+				prefix = "New comment ▸ "
+			}
+			hint = "Enter: Send   Ctrl+E: $EDITOR   Esc: Cancel"
+		case composeModeApprove:
+			prefix = "Approve PR ▸ "
+			hint = "Enter: Approve   Ctrl+E: $EDITOR   Esc: Cancel"
+		default:
 			prefix = "New comment ▸ "
+			hint = "Enter: Send   Ctrl+E: $EDITOR   Esc: Cancel"
 		}
 		c.input.Width = max(w-lipgloss.Width(prefix)-1, 10)
 		row1 = prefix + c.input.View()
-		row2 = th.MutedTxt.Render("Enter: Send   Ctrl+E: $EDITOR   Esc: Cancel")
+		row2 = th.MutedTxt.Render(hint)
 	}
 
 	line1 := lipgloss.NewStyle().Width(w).Render(row1)
