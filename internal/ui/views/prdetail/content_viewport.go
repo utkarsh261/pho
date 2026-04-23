@@ -11,6 +11,23 @@ import (
 	"github.com/utkarsh261/pho/internal/domain"
 )
 
+// buildInlineBody formats a slice of inline comments into a markdown string
+// used as the body of a review entry when the reviewer left no summary text.
+func buildInlineBody(comments []domain.PreviewInlineComment) string {
+	parts := make([]string, 0, len(comments))
+	for _, c := range comments {
+		if c.Body == "" {
+			continue
+		}
+		loc := c.Path
+		if c.Line > 0 {
+			loc = fmt.Sprintf("%s:%d", c.Path, c.Line)
+		}
+		parts = append(parts, fmt.Sprintf("**%s**\n%s", loc, c.Body))
+	}
+	return strings.Join(parts, "\n\n")
+}
+
 func relativeTime(t time.Time) string {
 	age := time.Since(t)
 	switch {
@@ -243,11 +260,15 @@ func (m *PRDetailModel) commentEntries() []commentEntry {
 		if state == "" {
 			state = "COMMENTED"
 		}
+		body := r.Body
+		if body == "" && len(r.InlineComments) > 0 {
+			body = buildInlineBody(r.InlineComments)
+		}
 		entries = append(entries, commentEntry{
 			login: r.Login,
 			state: state,
 			ts:    r.SubmittedAt,
-			body:  r.Body,
+			body:  body,
 		})
 	}
 	for _, c := range m.Detail.Comments {

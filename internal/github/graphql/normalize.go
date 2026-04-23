@@ -265,12 +265,29 @@ func previewReviewers(conn model.ReviewConnection) []domain.PreviewReviewer {
 		if node.SubmittedAt != nil {
 			submittedAt, _ = time.Parse(time.RFC3339, *node.SubmittedAt)
 		}
+		var inlineComments []domain.PreviewInlineComment
+		for _, c := range node.Comments.Nodes {
+			cLogin := actorLogin(c.Author)
+			line := 0
+			if c.Line != nil {
+				line = *c.Line
+			} else if c.OriginalLine != nil {
+				line = *c.OriginalLine
+			}
+			inlineComments = append(inlineComments, domain.PreviewInlineComment{
+				Login: cLogin,
+				Body:  strings.TrimSpace(c.Body),
+				Path:  c.Path,
+				Line:  line,
+			})
+		}
 		out = append(out, domain.PreviewReviewer{
-			Login:       login,
-			State:       node.State,
-			Avatar:      avatar,
-			Body:        strings.TrimSpace(node.Body),
-			SubmittedAt: submittedAt,
+			Login:          login,
+			State:          node.State,
+			Avatar:         avatar,
+			Body:           strings.TrimSpace(node.Body),
+			SubmittedAt:    submittedAt,
+			InlineComments: inlineComments,
 		})
 	}
 	return out

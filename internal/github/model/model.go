@@ -266,10 +266,26 @@ type ReviewConnection struct {
 
 // ReviewNode captures an individual review for preview rendering.
 type ReviewNode struct {
-	Author      *ActorNode `json:"author"`
-	State       string     `json:"state"`
-	SubmittedAt *string    `json:"submittedAt"`
-	Body        string     `json:"body,omitempty"`
+	Author      *ActorNode             `json:"author"`
+	State       string                 `json:"state"`
+	SubmittedAt *string                `json:"submittedAt"`
+	Body        string                 `json:"body,omitempty"`
+	Comments    ReviewCommentConnection `json:"comments"`
+}
+
+// ReviewCommentConnection carries inline comments within a single review.
+type ReviewCommentConnection struct {
+	Nodes []ReviewCommentNode `json:"nodes"`
+}
+
+// ReviewCommentNode is one inline (line-level) review comment.
+type ReviewCommentNode struct {
+	Author       *ActorNode `json:"author"`
+	Body         string     `json:"body"`
+	CreatedAt    string     `json:"createdAt,omitempty"`
+	Path         string     `json:"path"`
+	Line         *int       `json:"line,omitempty"`
+	OriginalLine *int       `json:"originalLine,omitempty"`
 }
 
 // FileConnection carries file stats for preview rendering.

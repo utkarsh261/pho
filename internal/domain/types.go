@@ -141,12 +141,20 @@ type PRListRow struct {
 	UpdatedAt         time.Time
 }
 
+type PreviewInlineComment struct {
+	Login string
+	Body  string
+	Path  string
+	Line  int // 0 if unknown
+}
+
 type PreviewReviewer struct {
-	Login       string
-	State       string
-	Avatar      string
-	Body        string    // review comment body (may be empty for approval-only reviews)
-	SubmittedAt time.Time // zero if not provided
+	Login          string
+	State          string
+	Avatar         string
+	Body           string    // review comment body (may be empty for inline-only reviews)
+	SubmittedAt    time.Time // zero if not provided
+	InlineComments []PreviewInlineComment
 }
 
 type PreviewComment struct {
