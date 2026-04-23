@@ -53,7 +53,8 @@ func (f *fakeGitHubClient) FetchPreview(ctx context.Context, repo domain.Reposit
 	return f.FetchPreviewFn(ctx, repo, number)
 }
 
-func (f *fakeGitHubClient) PostComment(_ context.Context, _, _, _ string) error { return nil }
+func (f *fakeGitHubClient) PostComment(_ context.Context, _, _, _ string) error       { return nil }
+func (f *fakeGitHubClient) ApprovePullRequest(_ context.Context, _, _, _ string) error { return nil }
 
 func (f *fakeGitHubClient) FetchAllPRs(_ context.Context, _ domain.Repository, _ string) ([]domain.PullRequestSummary, bool, string, error) {
 	return nil, false, "", nil

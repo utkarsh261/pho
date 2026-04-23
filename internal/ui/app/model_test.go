@@ -153,6 +153,7 @@ func (s *stubPRService) LoadDiff(ctx context.Context, repo domain.Repository, nu
 }
 
 func (s *stubPRService) PostComment(_ context.Context, _, _ string) error { return nil }
+func (s *stubPRService) ApprovePR(_ context.Context, _, _ string) error   { return nil }
 
 func TestColdStartThenDashboardLoadedPopulates(t *testing.T) {
 	t.Parallel()
