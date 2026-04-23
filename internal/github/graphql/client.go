@@ -78,6 +78,18 @@ func (c *Client) PostComment(ctx context.Context, host, pullRequestID, body stri
 	return err
 }
 
+// PostReviewComment submits a PR review with COMMENT decision via GraphQL.
+func (c *Client) PostReviewComment(ctx context.Context, host, pullRequestID, body string) error {
+	vars := map[string]any{
+		"pullRequestId": pullRequestID,
+		"body":          body,
+	}
+	_, err := queryGraphQL[model.AddPullRequestReviewData](c, ctx, host, func(_ githubpkg.GitHubHostProfile) string {
+		return buildReviewCommentMutation()
+	}, vars)
+	return err
+}
+
 // ApprovePullRequest submits a PR review with APPROVE decision via GraphQL.
 func (c *Client) ApprovePullRequest(ctx context.Context, host, pullRequestID, body string) error {
 	vars := map[string]any{

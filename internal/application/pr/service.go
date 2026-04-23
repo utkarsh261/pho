@@ -102,6 +102,16 @@ func (s *PRService) PostComment(ctx context.Context, prID string, body string) e
 	return nil
 }
 
+// PostReviewComment submits a PR review with COMMENT decision via the GitHub client.
+func (s *PRService) PostReviewComment(ctx context.Context, prID string, body string) error {
+	s.logDebug("post review comment", "prID", prID)
+	if err := s.Client.PostReviewComment(ctx, s.Host, prID, body); err != nil {
+		s.logWarn("post review comment failed", "prID", prID, "err", err)
+		return err
+	}
+	return nil
+}
+
 // ApprovePR submits a PR review with APPROVE decision via the GitHub client.
 func (s *PRService) ApprovePR(ctx context.Context, prID string, body string) error {
 	s.logDebug("approve pr", "prID", prID)

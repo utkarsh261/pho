@@ -13,9 +13,10 @@ import (
 type composeMode int
 
 const (
-	composeModeNew     composeMode = iota // new PR-level comment
-	composeModeReply                      // quote-reply to an existing entry
-	composeModeApprove                    // approve the PR with an optional comment
+	composeModeNew           composeMode = iota // new PR-level comment
+	composeModeReply                            // quote-reply to an existing entry
+	composeModeApprove                          // approve the PR with an optional comment
+	composeModeReviewComment                    // submit a review with COMMENT decision
 )
 
 type composeStatus int
@@ -161,9 +162,12 @@ func (c *ComposeModel) View(width int) string {
 		row2 = ""
 
 	case composeStatusSuccess:
-		if c.mode == composeModeApprove {
+		switch c.mode {
+		case composeModeApprove:
 			row1 = th.CISuccess.Render("✓ Approved")
-		} else {
+		case composeModeReviewComment:
+			row1 = th.CISuccess.Render("✓ Review posted")
+		default:
 			row1 = th.CISuccess.Render("✓ Comment posted")
 		}
 		row2 = ""
@@ -186,6 +190,9 @@ func (c *ComposeModel) View(width int) string {
 		case composeModeApprove:
 			prefix = "Approve PR ▸ "
 			hint = "Enter: Approve   Ctrl+E: $EDITOR   Esc: Cancel"
+		case composeModeReviewComment:
+			prefix = "Review comment ▸ "
+			hint = "Enter: Send   Ctrl+E: $EDITOR   Esc: Cancel"
 		default:
 			prefix = "New comment ▸ "
 			hint = "Enter: Send   Ctrl+E: $EDITOR   Esc: Cancel"

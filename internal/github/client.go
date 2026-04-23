@@ -15,6 +15,7 @@ type GitHubClient interface {
 	FetchRecentActivity(ctx context.Context, repo domain.Repository) ([]domain.ActivityItem, error)
 	FetchPreview(ctx context.Context, repo domain.Repository, number int) (domain.PRPreviewSnapshot, error)
 	PostComment(ctx context.Context, host, pullRequestID, body string) error
+	PostReviewComment(ctx context.Context, host, pullRequestID, body string) error
 	ApprovePullRequest(ctx context.Context, host, pullRequestID, body string) error
 	// FetchAllPRs fetches a page of all PRs (any state) for the jump index.
 	// Returns summaries, hasNextPage, endCursor, error.

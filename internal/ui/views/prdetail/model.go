@@ -246,7 +246,13 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		if m.PRService == nil {
 			return m, tea.Batch(spinCmd, composeCmd)
 		}
-		return m, tea.Batch(spinCmd, composeCmd, cmds.PostCommentCmd(m.PRService, m.Summary.ID, body))
+		var postCmd tea.Cmd
+		if m.compose.mode == composeModeReviewComment {
+			postCmd = cmds.PostReviewCommentCmd(m.PRService, m.Summary.ID, body)
+		} else {
+			postCmd = cmds.PostCommentCmd(m.PRService, m.Summary.ID, body)
+		}
+		return m, tea.Batch(spinCmd, composeCmd, postCmd)
 
 	case submitApproveMsg:
 		if m.PRService == nil {
@@ -690,6 +696,11 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 	case "a":
 		if m.PRService != nil {
 			m.compose.Open(composeModeApprove, commentEntry{})
+		}
+		return m, nil
+	case "v":
+		if m.PRService != nil {
+			m.compose.Open(composeModeReviewComment, commentEntry{})
 		}
 		return m, nil
 	case "r":

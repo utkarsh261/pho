@@ -18,15 +18,18 @@ func buildAddCommentMutation() string {
 }`
 }
 
-func buildApprovePullRequestMutation() string {
-	return `mutation ApprovePullRequest($pullRequestId: ID!, $body: String) {
-  addPullRequestReview(input: {pullRequestId: $pullRequestId, event: APPROVE, body: $body}) {
+func buildSubmitReviewMutation(event string) string {
+	return fmt.Sprintf(`mutation SubmitReview($pullRequestId: ID!, $body: String) {
+  addPullRequestReview(input: {pullRequestId: $pullRequestId, event: %s, body: $body}) {
     pullRequestReview {
       id
     }
   }
-}`
+}`, event)
 }
+
+func buildApprovePullRequestMutation() string   { return buildSubmitReviewMutation("APPROVE") }
+func buildReviewCommentMutation() string        { return buildSubmitReviewMutation("COMMENT") }
 
 func buildViewerQuery() string {
 	return `query ViewerQuery {

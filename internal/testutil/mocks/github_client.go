@@ -20,6 +20,7 @@ type MockGitHubClient struct {
 	FetchRecentActivityFn func(ctx context.Context, repo domain.Repository) ([]domain.ActivityItem, error)
 	FetchPreviewFn        func(ctx context.Context, repo domain.Repository, number int) (domain.PRPreviewSnapshot, error)
 	PostCommentFn          func(ctx context.Context, host, pullRequestID, body string) error
+	PostReviewCommentFn    func(ctx context.Context, host, pullRequestID, body string) error
 	ApprovePullRequestFn   func(ctx context.Context, host, pullRequestID, body string) error
 	FetchAllPRsFn          func(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
 
@@ -73,6 +74,13 @@ func (m *MockGitHubClient) PostComment(ctx context.Context, host, pullRequestID,
 	}
 	m.PostCommentCalls++
 	return m.PostCommentFn(ctx, host, pullRequestID, body)
+}
+
+func (m *MockGitHubClient) PostReviewComment(ctx context.Context, host, pullRequestID, body string) error {
+	if m.PostReviewCommentFn == nil {
+		panic("MockGitHubClient.PostReviewComment called but PostReviewCommentFn is nil")
+	}
+	return m.PostReviewCommentFn(ctx, host, pullRequestID, body)
 }
 
 func (m *MockGitHubClient) ApprovePullRequest(ctx context.Context, host, pullRequestID, body string) error {

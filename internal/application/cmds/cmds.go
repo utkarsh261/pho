@@ -34,6 +34,7 @@ type PRService interface {
 	LoadDetail(ctx context.Context, repo domain.Repository, number int, force bool) (domain.PRPreviewSnapshot, bool, error)
 	LoadDiff(ctx context.Context, repo domain.Repository, number int, headSHA string, force bool) (model.DiffModel, bool, error)
 	PostComment(ctx context.Context, prID string, body string) error
+	PostReviewComment(ctx context.Context, prID string, body string) error
 	ApprovePR(ctx context.Context, prID string, body string) error
 }
 
@@ -216,6 +217,15 @@ func repoKey(repo domain.Repository) string {
 		return repo.Owner + "/" + repo.Name
 	}
 	return repo.Name
+}
+
+func PostReviewCommentCmd(svc PRService, prID, body string) tea.Cmd {
+	return func() tea.Msg {
+		if err := svc.PostReviewComment(context.Background(), prID, body); err != nil {
+			return CommentFailed{Err: err}
+		}
+		return CommentPosted{}
+	}
 }
 
 func PostCommentCmd(svc PRService, prID, body string) tea.Cmd {
