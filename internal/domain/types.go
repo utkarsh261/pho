@@ -168,6 +168,7 @@ type PreviewFileStat struct {
 }
 
 type PRPreviewSnapshot struct {
+	ID             string
 	Repo           string
 	Number         int
 	Title          string
@@ -293,6 +294,7 @@ type DashboardState struct {
 
 type SearchResult struct {
 	Kind    SearchResultKind
+	ID      string
 	Repo    string
 	Number  int
 	Title   string

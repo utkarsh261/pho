@@ -164,8 +164,8 @@ func (c *Client) FetchRecentActivity(ctx context.Context, repo domain.Repository
 // FetchAllPRs loads one page of all PRs (any state) for the jump index.
 func (c *Client) FetchAllPRs(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error) {
 	c.log.Debug("fetch all prs", "repo", repo.FullName, "host", repo.Host, "cursor", cursor)
-	resp, err := queryGraphQL[model.DashboardData](c, ctx, repo.Host, func(_ githubpkg.GitHubHostProfile) string {
-		return buildAllPRsQuery(repoOwner(repo), repoName(repo), cursor)
+	resp, err := queryGraphQL[model.DashboardData](c, ctx, repo.Host, func(profile githubpkg.GitHubHostProfile) string {
+		return buildAllPRsQuery(profile, repoOwner(repo), repoName(repo), cursor)
 	}, nil)
 	if err != nil {
 		return nil, false, "", err

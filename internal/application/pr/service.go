@@ -94,12 +94,22 @@ func (s *PRService) LoadDetail(ctx context.Context, repo domain.Repository, numb
 
 // PostComment posts a PR-level comment via the GitHub client.
 func (s *PRService) PostComment(ctx context.Context, prID string, body string) error {
-	return s.Client.PostComment(ctx, s.Host, prID, body)
+	s.logDebug("post comment", "prID", prID)
+	if err := s.Client.PostComment(ctx, s.Host, prID, body); err != nil {
+		s.logWarn("post comment failed", "prID", prID, "err", err)
+		return err
+	}
+	return nil
 }
 
 // ApprovePR submits a PR review with APPROVE decision via the GitHub client.
 func (s *PRService) ApprovePR(ctx context.Context, prID string, body string) error {
-	return s.Client.ApprovePullRequest(ctx, s.Host, prID, body)
+	s.logDebug("approve pr", "prID", prID)
+	if err := s.Client.ApprovePullRequest(ctx, s.Host, prID, body); err != nil {
+		s.logWarn("approve pr failed", "prID", prID, "err", err)
+		return err
+	}
+	return nil
 }
 
 func (s *PRService) LoadDiff(ctx context.Context, repo domain.Repository, number int, headSHA string, force bool) (model.DiffModel, bool, error) {

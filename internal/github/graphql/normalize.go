@@ -146,6 +146,7 @@ func normalizePreviewNode(repo domain.Repository, number int, node model.PullReq
 	}
 
 	snapshot := domain.PRPreviewSnapshot{
+		ID:             node.ID,
 		Repo:           repoIdentity(repo, node.Repository),
 		Number:         numberOr(node.Number, number),
 		Title:          node.Title,

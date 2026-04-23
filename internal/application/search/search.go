@@ -41,6 +41,7 @@ type prIndex struct {
 }
 
 type prEntry struct {
+	id        string
 	repo      string
 	number    int
 	title     string
@@ -160,6 +161,7 @@ func (s *Service) BuildPRIndex(repo domain.Repository, snap domain.DashboardSnap
 
 	for _, pr := range snap.PRs {
 		entry := prEntry{
+			id:        pr.ID,
 			repo:      repoKey(effectiveRepo),
 			number:    pr.Number,
 			title:     pr.Title,
@@ -241,6 +243,7 @@ func (s *Service) SearchPRs(query string, limit int) []domain.SearchResult {
 			results = append(results, scoredPR{
 				result: domain.SearchResult{
 					Kind:    domain.SearchResultPR,
+					ID:      entry.id,
 					Repo:    entry.repo,
 					Number:  entry.number,
 					Title:   entry.title,
@@ -350,6 +353,7 @@ func (s *Service) AppendJumpPRs(repo string, prs []domain.PullRequestSummary) {
 			continue
 		}
 		entry := prEntry{
+			id:        pr.ID,
 			repo:      repo,
 			number:    pr.Number,
 			title:     pr.Title,
@@ -392,6 +396,7 @@ func (s *Service) SearchPRsForRepo(query, repo string, limit int) []domain.Searc
 		results = append(results, scoredPR{
 			result: domain.SearchResult{
 				Kind:    domain.SearchResultPR,
+				ID:      entry.id,
 				Repo:    entry.repo,
 				Number:  entry.number,
 				Title:   entry.title,

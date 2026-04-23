@@ -144,7 +144,7 @@ func buildPreviewQuery(profile githubpkg.GitHubHostProfile) string {
 }`, pullRequestPreviewSelection(profile))
 }
 
-func buildAllPRsQuery(owner, name, after string) string {
+func buildAllPRsQuery(profile githubpkg.GitHubHostProfile, owner, name, after string) string {
 	afterClause := ""
 	if after != "" {
 		afterClause = fmt.Sprintf(`, after: "%s"`, after)
@@ -157,17 +157,11 @@ func buildAllPRsQuery(owner, name, after string) string {
         endCursor
       }
       nodes {
-        number
-        title
-        state
-        isDraft
-        updatedAt
-        headRefName
-        author { __typename login }
+        %s
       }
     }
   }
-}`, owner, name, afterClause)
+}`, owner, name, afterClause, pullRequestSummarySelection(profile))
 }
 
 func buildInvolvingSearchQuery(repo domain.Repository, viewer string) string {

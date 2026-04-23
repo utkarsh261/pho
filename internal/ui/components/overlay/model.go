@@ -289,6 +289,7 @@ func (m Model) dispatchSelection() tea.Cmd {
 			messages = append(messages, SelectRepo{Repo: selected.Repo})
 		}
 		summary := domain.PullRequestSummary{
+			ID:          selected.ID,
 			Repo:        selected.Repo,
 			Number:      selected.Number,
 			Title:       selected.Title,
