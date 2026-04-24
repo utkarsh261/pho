@@ -328,12 +328,12 @@ func TestDiffRenderEmptyDiff(t *testing.T) {
 // TestDiffRenderTruncationAt5000Rows verifies that when the diff exceeds
 // maxDiffDisplayRows, a truncation banner appears at row maxDiffDisplayRows
 // and diffSectionRowCount returns maxDiffDisplayRows+1.
-func TestDiffRenderTruncationAt5000Rows(t *testing.T) {
+func TestDiffRenderTruncationAt20000Rows(t *testing.T) {
 	t.Parallel()
 
 	// Each file with no hunks has diffFileDisplayRows = 3 (blank+sep+header).
-	// 1668 files × 3 = 5004 rows > maxDiffDisplayRows (5000).
-	const fileCount = 1668
+	// 8000 files × 3 = 24000 rows > maxDiffDisplayRows (20000).
+	const fileCount = 8000
 	files := makeFilesWithDisplayRows(fileCount, 3)
 
 	m := makePRDetail(100, 30, files, nil)

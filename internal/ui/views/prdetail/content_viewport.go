@@ -137,7 +137,7 @@ func findSection(sections []ContentSection, target domain.PRDetailSection) (Cont
 }
 
 // maxDiffDisplayRows is the cap on rendered diff rows before a truncation banner is shown.
-const maxDiffDisplayRows = 5000
+const maxDiffDisplayRows = 20000
 
 // diffFileDisplayRows returns the UI display-row count for one DiffFile:
 //
