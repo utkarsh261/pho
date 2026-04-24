@@ -172,6 +172,7 @@ func (m *PRListPanelModel) View() string {
 		}
 	}
 	if footer := m.footerLine(); footer != "" {
+		lines = append(lines, fitLine("", m.Width))
 		lines = append(lines, fitLine(footer, m.Width))
 	} else {
 		lines = append(lines, fitLine("", m.Width))
