@@ -826,7 +826,10 @@ func (m *PRDetailModel) jumpToFile(idx int) {
 	for i := 0; i < idx; i++ {
 		fileOffset += diffFileDisplayRows(&m.Diff.Files[i])
 	}
-	m.ContentScroll = clamp(diffSec.StartRow+fileOffset, 0, m.maxContentScroll())
+	// Cap fileOffset within the rendered diff section; for large diffs the section
+	// is truncated at maxDiffDisplayRows, so an uncapped offset would escape into comments.
+	target := min(diffSec.StartRow+fileOffset, diffSec.StartRow+diffSec.RowCount-1)
+	m.ContentScroll = clamp(target, 0, m.maxContentScroll())
 	m.leftPanel.Focus = FocusContent
 }
 

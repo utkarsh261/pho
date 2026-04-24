@@ -181,6 +181,9 @@ func (m *PRDetailModel) scrollToSearchCursor() {
 
 	flatLineIndexWithinFile := m.matchDisplayOffsetWithinFile(match)
 	matchDisplayRow := m.Diff.Files[match.FileIndex].StartRow + flatLineIndexWithinFile
+	// Cap within the rendered diff section; for large diffs the section is truncated
+	// at maxDiffDisplayRows, so an uncapped offset would escape into comments.
+	matchDisplayRow = min(matchDisplayRow, diffSec.RowCount-1)
 	matchAbsoluteRow := diffSec.StartRow + matchDisplayRow
 
 	contentHeight := m.contentViewportHeight()
