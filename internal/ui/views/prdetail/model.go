@@ -826,13 +826,9 @@ func (m *PRDetailModel) jumpToFile(idx int) {
 	for i := 0; i < idx; i++ {
 		fileOffset += diffFileDisplayRows(&m.Diff.Files[i])
 	}
-	contentHeight := m.contentViewportHeight()
-	// maxDiffScroll is the highest scroll value that keeps the viewport entirely
-	// within the diff section. Without this cap, files past the truncation boundary
-	// produce an offset > diffSec.RowCount which clamps to maxContentScroll and
-	// lands the view in the comments section.
-	maxDiffScroll := diffSec.StartRow + max(0, diffSec.RowCount-contentHeight)
-	target := min(diffSec.StartRow+fileOffset, maxDiffScroll)
+	// Cap fileOffset within the rendered diff section; for large diffs the section
+	// is truncated at maxDiffDisplayRows, so an uncapped offset would escape into comments.
+	target := min(diffSec.StartRow+fileOffset, diffSec.StartRow+diffSec.RowCount-1)
 	m.ContentScroll = clamp(target, 0, m.maxContentScroll())
 	m.leftPanel.Focus = FocusContent
 }
