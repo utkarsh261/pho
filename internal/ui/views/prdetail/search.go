@@ -181,16 +181,20 @@ func (m *PRDetailModel) scrollToSearchCursor() {
 
 	flatLineIndexWithinFile := m.matchDisplayOffsetWithinFile(match)
 	matchDisplayRow := m.Diff.Files[match.FileIndex].StartRow + flatLineIndexWithinFile
-	matchAbsoluteRow := diffSec.StartRow + matchDisplayRow
 
 	contentHeight := m.contentViewportHeight()
 	totalContentRows := totalRowsInSections(sections)
-	scroll := clamp(matchAbsoluteRow-contentHeight/2, 0, max(0, totalContentRows-contentHeight))
-	// Cap so the viewport bottom stays within the diff section on large (truncated) diffs.
-	// Matches in files past the truncation boundary would otherwise clamp to
-	// maxContentScroll and land the view in the comments section.
-	maxDiffScroll := diffSec.StartRow + max(0, diffSec.RowCount-contentHeight)
-	m.ContentScroll = min(scroll, maxDiffScroll)
+
+	// When the match is in a file past the truncation boundary, scrolling to it would
+	// overflow into comments. Show the truncation banner instead.
+	if matchDisplayRow >= diffSec.RowCount {
+		scroll := diffSec.StartRow + max(0, diffSec.RowCount-contentHeight)
+		m.ContentScroll = clamp(scroll, 0, max(0, totalContentRows-contentHeight))
+		return
+	}
+
+	matchAbsoluteRow := diffSec.StartRow + matchDisplayRow
+	m.ContentScroll = clamp(matchAbsoluteRow-contentHeight/2, 0, max(0, totalContentRows-contentHeight))
 }
 
 func (m *PRDetailModel) matchDisplayOffsetWithinFile(match diffsearch.Match) int {
@@ -207,7 +211,7 @@ func (m *PRDetailModel) matchLineIndexWithinFile(match diffsearch.Match) int {
 	}
 	line := match.LineIndex
 	limit := min(match.FileIndex, len(m.Diff.Files))
-	for i := 0; i < limit; i++ {
+	for i := range limit {
 		line -= diffFileLineCount(&m.Diff.Files[i])
 	}
 	return max(0, line)
