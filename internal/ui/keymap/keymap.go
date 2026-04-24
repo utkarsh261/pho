@@ -72,7 +72,7 @@ func dispatchGlobal(msg tea.KeyMsg) Result {
 			return Result{Action: Quit{}}
 		case '/':
 			return Result{Action: OpenDashboardFilter{}}
-		case 'r':
+		case 'R':
 			return Result{Action: TriggerRefresh{}}
 		}
 	}
@@ -102,7 +102,7 @@ func dispatchRepoPanel(msg tea.KeyMsg) Result {
 			return Result{Action: Quit{}}
 		case '/':
 			return Result{Action: OpenDashboardFilter{}}
-		case 'r':
+		case 'R':
 			return Result{Action: TriggerRefresh{}}
 		}
 	}
@@ -138,7 +138,7 @@ func dispatchPRListPanel(msg tea.KeyMsg) Result {
 			return Result{Action: Quit{}}
 		case '/':
 			return Result{Action: OpenDashboardFilter{}}
-		case 'r':
+		case 'R':
 			return Result{Action: TriggerRefresh{}}
 		}
 	}
@@ -170,7 +170,7 @@ func dispatchPreviewPanel(msg tea.KeyMsg) Result {
 			return Result{Action: Quit{}}
 		case '/':
 			return Result{Action: OpenDashboardFilter{}}
-		case 'r':
+		case 'R':
 			return Result{Action: TriggerRefresh{}}
 		}
 	}

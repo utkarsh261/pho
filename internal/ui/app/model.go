@@ -114,20 +114,20 @@ func NewModel(deps Dependencies) *Model {
 	}
 
 	m := &Model{
-		deps:          deps,
-		log:           log,
-		classifier:    classifier,
+		deps:              deps,
+		log:               log,
+		classifier:        classifier,
 		hydratedRepos:     map[string]struct{}{},
 		hydrationInFlight: map[string]bool{},
 		layout:            layout.NewLayoutState(0, 0),
-		viewStack:     []domain.PrimaryView{domain.PrimaryViewDashboard},
-		repoPanel:     dashboard.NewRepoPanelModel(nil),
-		prList:        dashboard.NewPRListPanelModel(),
-		preview:       dashboard.NewPreviewPanelModel(),
-		status:        dashboard.NewStatusBarModel(),
-		palette:       overlay.NewModel(deps.Search),
-		focus:         domain.FocusRepoPanel,
-		previousFocus: domain.FocusRepoPanel,
+		viewStack:         []domain.PrimaryView{domain.PrimaryViewDashboard},
+		repoPanel:         dashboard.NewRepoPanelModel(nil),
+		prList:            dashboard.NewPRListPanelModel(),
+		preview:           dashboard.NewPreviewPanelModel(),
+		status:            dashboard.NewStatusBarModel(),
+		palette:           overlay.NewModel(deps.Search),
+		focus:             domain.FocusRepoPanel,
+		previousFocus:     domain.FocusRepoPanel,
 		state: domain.AppState{
 			Session: domain.SessionState{
 				ViewerByHost: make(map[string]string),
@@ -1061,6 +1061,11 @@ func (m *Model) syncStatus() {
 		m.status.SelectedRepo = repo.FullName
 	} else {
 		m.status.SelectedRepo = ""
+	}
+	if m.currentView() == domain.PrimaryViewPRDetail {
+		m.status.HintOverride = "Tab: Switch Panel | 1/2/3: Jump to section | R: Refresh | v: Review | c: Comment | a: Approve | /: Search in Diff"
+	} else {
+		m.status.HintOverride = ""
 	}
 	m.syncPRDetailSearchStatus()
 }

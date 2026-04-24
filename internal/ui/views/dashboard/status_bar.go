@@ -20,6 +20,7 @@ type StatusBarModel struct {
 	Errors       domain.ErrorState
 	CurrentTab   domain.DashboardTab
 	SelectedRepo string
+	HintOverride string // when non-empty, replaces focus-based hint text
 	theme        *theme.Theme
 	spinner      spinner.Model
 
@@ -139,13 +140,16 @@ func (m *StatusBarModel) View() string {
 }
 
 func (m *StatusBarModel) hintText() string {
+	if m.HintOverride != "" {
+		return m.HintOverride
+	}
 	switch m.Focus {
 	case domain.FocusRepoPanel:
-		return "j/k: Move | Enter: Select | r: Refresh | Tab: Next panel"
+		return "j/k: Move | Enter: Select | R: Refresh | Tab: Next panel | Ctrl+P: Jump to PR/Repository"
 	case domain.FocusPRListPanel:
-		return "j/k: Navigate | h/l: Tab | o: Open browser | r: Refresh | Tab: Next panel"
+		return "j/k: Navigate | h/l: Tab | Enter: Open detailed view | o: Open browser | R: Refresh | Tab: Next panel | Ctrl+P: Jump to PR/Repository"
 	case domain.FocusPreviewPanel:
-		return "j/k: Scroll | o/Enter: Open browser | r: Refresh | Tab: Next panel"
+		return "j/k: Scroll | Enter: Open detailed view | o: Open browser | R: Refresh | Tab: Next panel"
 	case domain.FocusCmdPalette:
 		return "Esc: Close | Enter: Run"
 	default:

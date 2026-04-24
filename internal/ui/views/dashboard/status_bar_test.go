@@ -18,13 +18,13 @@ func TestStatusBarFocusLoadingAndAuthError(t *testing.T) {
 	m.Errors = domain.ErrorState{
 		Errors: []domain.AppError{{Kind: domain.ErrorKindAuth, Message: "gh auth login required"}},
 	}
-	m.SetRect(120)
+	m.SetRect(240)
 
 	view := m.View()
 	for _, want := range []string{
 		"j/k: Navigate",
 		"o: Open browser",
-		"r: Refresh",
+		"R: Refresh",
 		"Tab: Next panel",
 		"stale",
 		"auth:",
@@ -49,7 +49,7 @@ func TestStatusBarRateLimitError(t *testing.T) {
 		Errors:         []domain.AppError{{Kind: domain.ErrorKindRateLimit, Message: "API limit reached"}},
 		RateLimitReset: &reset,
 	}
-	m.SetRect(120)
+	m.SetRect(200)
 
 	view := m.View()
 	if !strings.Contains(view, "rate limit: retry at 2026-04-09 15:30 UTC") {

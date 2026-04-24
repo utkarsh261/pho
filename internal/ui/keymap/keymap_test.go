@@ -56,7 +56,7 @@ func TestDispatch_GlobalBindings(t *testing.T) {
 	got := Dispatch(domain.FocusPreviewPanel, keyMsg(tea.KeyCtrlP))
 	assertAction(t, got.Action, ToggleCmdPalette{})
 
-	got = Dispatch(domain.FocusPreviewPanel, keyRune('r'))
+	got = Dispatch(domain.FocusPreviewPanel, keyRune('R'))
 	assertAction(t, got.Action, TriggerRefresh{})
 
 	got = Dispatch(domain.FocusPreviewPanel, keyRune('/'))
