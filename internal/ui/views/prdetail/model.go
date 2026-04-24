@@ -103,6 +103,14 @@ type PRDetailModel struct {
 
 	theme      *theme.Theme
 	mdRenderer *markdown.Renderer
+
+	// cachedBody holds the rendered body (left+right panels) from the last
+	// frame where compose was not active. While compose is open, the body
+	// doesn't change (user is typing, not scrolling), so reusing it makes
+	// every keystroke render O(1) instead of re-rendering all markdown.
+	cachedBody       string
+	cachedBodyWidth  int
+	cachedBodyHeight int
 }
 
 // NewModel creates a new PRDetailModel for the given PR.
@@ -346,13 +354,23 @@ func (m *PRDetailModel) View() string {
 	bodyH := m.effectiveBodyH()
 
 	var body string
-	if m.Width >= MinWidthForSidebar {
-		rightWidth := max(m.Width-LeftPanelWidth-2, 10)
-		leftView := m.leftPanel.View(bodyH, m.spinner.View())
-		rightView := m.renderRightViewport(rightWidth, bodyH)
-		body = lipgloss.JoinHorizontal(lipgloss.Top, leftView, "  ", rightView)
+	if m.compose.active && m.cachedBody != "" &&
+		m.cachedBodyWidth == m.Width && m.cachedBodyHeight == bodyH {
+		// Compose is open and nothing in the body has changed — reuse last render
+		// so that text input navigation (arrow keys, backspace, etc.) is instant.
+		body = m.cachedBody
 	} else {
-		body = m.renderNarrowBody(m.Width, bodyH)
+		if m.Width >= MinWidthForSidebar {
+			rightWidth := max(m.Width-LeftPanelWidth-2, 10)
+			leftView := m.leftPanel.View(bodyH, m.spinner.View())
+			rightView := m.renderRightViewport(rightWidth, bodyH)
+			body = lipgloss.JoinHorizontal(lipgloss.Top, leftView, "  ", rightView)
+		} else {
+			body = m.renderNarrowBody(m.Width, bodyH)
+		}
+		m.cachedBody = body
+		m.cachedBodyWidth = m.Width
+		m.cachedBodyHeight = bodyH
 	}
 
 	if m.compose.active {

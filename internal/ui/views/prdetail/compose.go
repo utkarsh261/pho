@@ -39,13 +39,14 @@ type openEditorComposeMsg struct{ draft string }
 
 // ComposeModel is the bottom two-row compose pane shown when writing a comment.
 type ComposeModel struct {
-	active bool
-	mode   composeMode
-	target commentEntry // populated for reply mode; zero value for new comment
-	input  textinput.Model
-	status composeStatus
-	errMsg string
-	theme  *theme.Theme
+	active  bool
+	mode    composeMode
+	target  commentEntry // populated for reply mode; zero value for new comment
+	input   textinput.Model
+	rawBody string // full multi-line text from $EDITOR; empty when user is typing in input
+	status  composeStatus
+	errMsg  string
+	theme   *theme.Theme
 }
 
 func newComposeModel(th *theme.Theme) ComposeModel {
@@ -73,14 +74,21 @@ func (c *ComposeModel) Close() {
 	c.active = false
 	c.input.Blur()
 	c.input.Reset()
+	c.rawBody = ""
 	c.status = composeStatusIdle
 	c.errMsg = ""
 }
 
 // SetText replaces the input text (used after returning from $EDITOR).
+// The full text (including newlines) is stored in rawBody for submission;
+// the textinput shows only the first line as a preview.
 func (c *ComposeModel) SetText(s string) {
-	c.input.SetValue(s)
-	// Move cursor to end.
+	c.rawBody = s
+	display := s
+	if idx := strings.IndexByte(s, '\n'); idx >= 0 {
+		display = s[:idx] + "…"
+	}
+	c.input.SetValue(display)
 	c.input.CursorEnd()
 }
 
@@ -107,11 +115,14 @@ func (c ComposeModel) Update(msg tea.Msg) (ComposeModel, tea.Cmd) {
 
 	switch keyMsg.String() {
 	case "enter":
+		body := c.rawBody
+		if body == "" {
+			body = strings.TrimSpace(c.input.Value())
+		}
 		if c.mode == composeModeApprove {
 			c.status = composeStatusPosting
-			return c, func() tea.Msg { return submitApproveMsg{body: strings.TrimSpace(c.input.Value())} }
+			return c, func() tea.Msg { return submitApproveMsg{body: body} }
 		}
-		body := strings.TrimSpace(c.input.Value())
 		if body == "" {
 			return c, nil // silent no-op
 		}
@@ -119,7 +130,10 @@ func (c ComposeModel) Update(msg tea.Msg) (ComposeModel, tea.Cmd) {
 		return c, func() tea.Msg { return submitComposeMsg{body: body} }
 
 	case "ctrl+e":
-		draft := c.input.Value()
+		draft := c.rawBody
+		if draft == "" {
+			draft = c.input.Value()
+		}
 		return c, func() tea.Msg { return openEditorComposeMsg{draft: draft} }
 
 	case "esc":
@@ -134,6 +148,9 @@ func (c ComposeModel) Update(msg tea.Msg) (ComposeModel, tea.Cmd) {
 		return c, nil
 
 	default:
+		// User is editing the input directly: discard editor content so the
+		// typed text (not the original editor body) is submitted.
+		c.rawBody = ""
 		var cmd tea.Cmd
 		c.input, cmd = c.input.Update(msg)
 		return c, cmd

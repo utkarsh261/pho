@@ -21,6 +21,11 @@ var tokyoNightNoMargin = func() glamouransi.StyleConfig {
 	return s
 }()
 
+type renderCacheKey struct {
+	src   string
+	width int
+}
+
 // Renderer wraps a glamour TermRenderer, lazily re-creating it only when the
 // requested width changes. Safe for use from a single goroutine (bubbletea's
 // update/view cycle); the mutex guards the lazy re-init only.
@@ -28,6 +33,7 @@ type Renderer struct {
 	mu    sync.Mutex
 	width int
 	inner *glamour.TermRenderer
+	cache map[renderCacheKey][]string
 }
 
 // New returns a Renderer ready for use. The inner glamour renderer is
@@ -48,7 +54,16 @@ func (r *Renderer) Render(src string, width int) []string {
 	}
 	w := max(width, 20)
 
+	key := renderCacheKey{src, w}
+
 	r.mu.Lock()
+	if r.cache != nil {
+		if lines, ok := r.cache[key]; ok {
+			r.mu.Unlock()
+			return lines
+		}
+	}
+
 	if r.inner == nil || r.width != w {
 		tr, err := glamour.NewTermRenderer(
 			glamour.WithStyles(tokyoNightNoMargin),
@@ -69,7 +84,16 @@ func (r *Renderer) Render(src string, width int) []string {
 	if err != nil {
 		return []string{src}
 	}
-	return trimOutput(strings.Split(out, "\n"))
+	result := trimOutput(strings.Split(out, "\n"))
+
+	r.mu.Lock()
+	if r.cache == nil {
+		r.cache = make(map[renderCacheKey][]string)
+	}
+	r.cache[key] = result
+	r.mu.Unlock()
+
+	return result
 }
 
 // trimOutput post-processes glamour's output lines:
