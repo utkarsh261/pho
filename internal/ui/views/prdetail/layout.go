@@ -20,7 +20,7 @@ var panelHeadBorder = lipgloss.Border{
 
 const (
 	// LeftPanelWidth is the fixed OUTER width of the left panel (including 1-char side borders).
-	LeftPanelWidth = 38
+	LeftPanelWidth = 42
 	// MinWidthForSidebar is the minimum terminal width at which the sidebar is shown.
 	MinWidthForSidebar = 80
 
@@ -34,8 +34,8 @@ const (
 	//   truncated path   : lpPathMax chars
 	//   stats " +N -N"  : lpStatsWidth chars
 	lpIndicatorWidth = 2
-	lpStatsWidth     = 8                                         // " +NNN -NN" including leading space — wide enough for most stats
-	lpPathMax        = lpInner - lpIndicatorWidth - lpStatsWidth // 18
+	lpStatsWidth     = 10
+	lpPathMax        = lpInner - lpIndicatorWidth - lpStatsWidth
 
 	// CI row layout within lpInner (28 chars):
 	//   icon + space     : lpCIIconWidth chars (2)
