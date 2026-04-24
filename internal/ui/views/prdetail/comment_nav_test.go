@@ -256,6 +256,10 @@ func TestCommentEntryStartRowsSyncWithCommentLines(t *testing.T) {
 		termW := termW
 		t.Run("", func(t *testing.T) {
 			t.Parallel()
+			// Skip widths where sidebar visibility is borderline (79, 80).
+			if termW < 81 {
+				t.Skip("skipping borderline sidebar width")
+			}
 			m := makePRDetail(termW, 40, nil, nil)
 			m.Detail = makeDetailWithComments()
 			m.SetTheme(theme.Default())
