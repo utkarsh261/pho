@@ -32,9 +32,10 @@ type LeftPanelModel struct {
 	Loading bool // true while the diff is still being fetched
 
 	// Navigation state — mutated by PRDetailModel.Update
-	FilesScroll int // index of first visible file row
-	CIScroll    int // index of first visible CI row
-	FileIndex   int // index of the highlighted (cursor) file
+	FilesScroll     int // index of first visible file row
+	CIScroll        int // index of first visible CI row
+	FileIndex       int // index of the highlighted (cursor) file
+	LastOpenedIndex int // index of the file last opened (Enter/l); persists when focus leaves files
 
 	Focus PRDetailFocus
 
@@ -168,14 +169,16 @@ func (m *LeftPanelModel) fileRows(innerH int) []string {
 // renderFileRow renders a single file entry as exactly lpInner visible columns.
 // Selected rows (when Files is focused) use a full-width background highlight
 // matching the command palette's selection UX.
+// Last-opened rows (persisted after Enter/l) get a lighter subtle highlight.
 func (m *LeftPanelModel) renderFileRow(f diffmodel.DiffFile, idx int) string {
 	isSelected := idx == m.FileIndex && m.Focus == FocusFiles
+	isOpened := idx == m.LastOpenedIndex && !isSelected
 
 	path := truncatePathLeft(f.NewPath, lpPathMax) // exactly lpPathMax visible chars
 
 	var stats string
-	if isSelected && m.theme != nil {
-		// Plain stats so the selected-row style controls foreground uniformly.
+	if (isSelected || isOpened) && m.theme != nil {
+		// Plain stats so the row style controls foreground uniformly.
 		stats = formatFileStats(f.Additions, f.Deletions)
 	} else if m.theme != nil {
 		stats = formatFileStatsColored(f.Additions, f.Deletions, m.theme)
@@ -189,6 +192,13 @@ func (m *LeftPanelModel) renderFileRow(f diffmodel.DiffFile, idx int) string {
 	if isSelected {
 		if m.theme != nil {
 			return m.theme.ListSelected.Width(lpInner).Render(content)
+		}
+		return lipgloss.NewStyle().Reverse(true).Width(lpInner).Render(content)
+	}
+
+	if isOpened {
+		if m.theme != nil {
+			return m.theme.ListOpened.Width(lpInner).Render(content)
 		}
 		return lipgloss.NewStyle().Reverse(true).Width(lpInner).Render(content)
 	}

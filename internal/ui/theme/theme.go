@@ -30,6 +30,7 @@ type Theme struct {
 	SelectedRow  lipgloss.Style // subtle background tint
 	NormalRow    lipgloss.Style // no decoration
 	ListSelected lipgloss.Style // full-row primary highlight for panel lists
+	ListOpened   lipgloss.Style // full-row subtle highlight for last-opened file
 
 	// ── text styles ────────────────────────────────────────────────
 	Title        lipgloss.Style // bold
@@ -128,6 +129,9 @@ func Default() *Theme {
 		Background(t.Primary).
 		Foreground(lipgloss.Color("#FFFFFF")).
 		Bold(true)
+
+	t.ListOpened = lipgloss.NewStyle().
+		Background(t.Subtle)
 
 	// Text styles.
 	t.Title = lipgloss.NewStyle().Bold(true)

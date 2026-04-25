@@ -131,6 +131,7 @@ func NewModel(summary domain.PullRequestSummary, repo domain.Repository, prServi
 	}
 	m.leftPanel.Loading = loading
 	m.leftPanel.Focus = FocusContent
+	m.leftPanel.LastOpenedIndex = 0
 	m.mdRenderer = markdown.New()
 	return m
 }
@@ -816,6 +817,7 @@ func (m *PRDetailModel) jumpToFile(idx int) {
 	if m.Diff == nil || idx < 0 || idx >= len(m.Diff.Files) {
 		return
 	}
+	m.leftPanel.LastOpenedIndex = idx
 	contentWidth := contentViewportWidth(m.rightPanelWidth())
 	sections := m.buildContentSections(contentWidth)
 	diffSec, ok := findSection(sections, domain.SectionDiff)
