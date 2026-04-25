@@ -29,13 +29,13 @@ const (
 	// 2-pad: 1-char left pad + 1-char right pad = 2 overhead. Total = 4 overhead.
 	lpInner = LeftPanelWidth - 4
 
-	// File row layout within lpInner (28 chars):
-	//   "▶ " indicator  : 2 chars
-	//   truncated path   : lpPathMax chars
-	//   stats " +N -N"  : lpStatsWidth chars
-	lpIndicatorWidth = 2
+	// File row layout within lpInner (38 chars):
+	//   "  " left padding : 2 chars
+	//   truncated path     : lpPathMax chars
+	//   stats " +N -N"    : lpStatsWidth chars
+	lpPaddingWidth = 2
 	lpStatsWidth     = 10
-	lpPathMax        = lpInner - lpIndicatorWidth - lpStatsWidth
+	lpPathMax        = lpInner - lpPaddingWidth - lpStatsWidth
 
 	// CI row layout within lpInner (28 chars):
 	//   icon + space     : lpCIIconWidth chars (2)

@@ -651,7 +651,7 @@ func TestLeftPanelFullUIRender(t *testing.T) {
 	expected := `┌────────────────────────────────────────┐
 │  FILES                                 │
 ├────────────────────────────────────────┤
-│ ▶ cmd/main.go                    +5 -2 │
+│   cmd/main.go                    +5 -2 │
 │   internal/app/app.go            +5 -2 │
 │                                        │
 │                                        │

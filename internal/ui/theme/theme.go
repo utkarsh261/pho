@@ -27,8 +27,9 @@ type Theme struct {
 	Divider lipgloss.Style // horizontal rule in Border color
 
 	// ── row styles ─────────────────────────────────────────────────
-	SelectedRow lipgloss.Style // subtle background tint
-	NormalRow   lipgloss.Style // no decoration
+	SelectedRow  lipgloss.Style // subtle background tint
+	NormalRow    lipgloss.Style // no decoration
+	ListSelected lipgloss.Style // full-row primary highlight for panel lists
 
 	// ── text styles ────────────────────────────────────────────────
 	Title        lipgloss.Style // bold
@@ -122,6 +123,11 @@ func Default() *Theme {
 		Background(t.Subtle)
 
 	t.NormalRow = lipgloss.NewStyle()
+
+	t.ListSelected = lipgloss.NewStyle().
+		Background(t.Primary).
+		Foreground(lipgloss.Color("#FFFFFF")).
+		Bold(true)
 
 	// Text styles.
 	t.Title = lipgloss.NewStyle().Bold(true)

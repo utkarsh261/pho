@@ -166,30 +166,35 @@ func (m *LeftPanelModel) fileRows(innerH int) []string {
 }
 
 // renderFileRow renders a single file entry as exactly lpInner visible columns.
+// Selected rows (when Files is focused) use a full-width background highlight
+// matching the command palette's selection UX.
 func (m *LeftPanelModel) renderFileRow(f diffmodel.DiffFile, idx int) string {
-	// Cursor indicator: "▶ " for the current file (when Files focused), "  " otherwise.
-	var indicator string
-	if idx == m.FileIndex && m.Focus == FocusFiles {
-		if m.theme != nil {
-			indicator = m.theme.PrimaryTxt.Render("▶") + " "
-		} else {
-			indicator = "▶ "
-		}
-	} else {
-		indicator = "  "
-	}
+	isSelected := idx == m.FileIndex && m.Focus == FocusFiles
 
 	path := truncatePathLeft(f.NewPath, lpPathMax) // exactly lpPathMax visible chars
 
 	var stats string
-	if m.theme != nil {
+	if isSelected && m.theme != nil {
+		// Plain stats so the selected-row style controls foreground uniformly.
+		stats = formatFileStats(f.Additions, f.Deletions)
+	} else if m.theme != nil {
 		stats = formatFileStatsColored(f.Additions, f.Deletions, m.theme)
 	} else {
 		stats = formatFileStats(f.Additions, f.Deletions)
 	}
 
-	// Use dashboard's fitLine to strictly prevent random word wrapping on borders
-	return fitLine(indicator+path+stats, lpInner)
+	// 2-char left padding, matching the command palette row layout.
+	content := "  " + path + stats
+
+	if isSelected {
+		if m.theme != nil {
+			return m.theme.ListSelected.Width(lpInner).Render(content)
+		}
+		return lipgloss.NewStyle().Reverse(true).Width(lpInner).Render(content)
+	}
+
+	// Use dashboard's fitLine to strictly prevent random word wrapping on borders.
+	return fitLine(content, lpInner)
 }
 
 // formatFileStatsColored returns a stats string of exactly lpStatsWidth visible chars
