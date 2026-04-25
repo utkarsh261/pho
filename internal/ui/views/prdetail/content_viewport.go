@@ -139,6 +139,10 @@ func findSection(sections []ContentSection, target domain.PRDetailSection) (Cont
 // maxDiffDisplayRows is the cap on rendered diff rows before a truncation banner is shown.
 const maxDiffDisplayRows = 20000
 
+// diffFileHeaderRows is the number of display rows before the first hunk
+// header in each diff file: blank padding + dashed separator + file header bar.
+const diffFileHeaderRows = 3
+
 // diffFileDisplayRows returns the UI display-row count for one DiffFile:
 //
 //	row 0   : blank padding before separator
@@ -151,7 +155,7 @@ const maxDiffDisplayRows = 20000
 // diffSectionRowCount and renderDiffSectionLines, so they stay in sync
 // regardless of what f.DisplayRows holds (legacy cache entries may have 0).
 func diffFileDisplayRows(f *diffmodel.DiffFile) int {
-	rows := 3 // blank + separator + header bar
+	rows := diffFileHeaderRows // blank + separator + header bar
 	if f.IsBinary {
 		return rows + 1 // +1 for the "📄 Binary file (no diff available)" placeholder row
 	}
@@ -357,7 +361,7 @@ func (m *PRDetailModel) entryRowCount(e commentEntry, cw int) int {
 	return rows
 }
 
-// commentEntryStartRows returns, for each entry, the absolute content-row index
+// commentEntryStartRows returns, for each entry, the tab-relative row index
 // where its border-top line appears. Every entry is always rendered with a
 // rounded border, so heights are constant regardless of which entry is active.
 // The section header occupies 3 rows before the first entry.
@@ -677,43 +681,6 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 
 	cw := max(contentWidth, 1)
 
-	// Build a set of hunk line indices covered by drafts so the indicator
-	// highlights the full selected range, even when it spans both LEFT
-	// (deletion) and RIGHT (addition) sides.
-	type hunkLineKey struct{ fileIdx, hunkIdx, lineIdx int }
-	draftCovered := make(map[hunkLineKey]bool)
-	for _, d := range m.drafts {
-		for fi, f := range m.Diff.Files {
-			if f.NewPath != d.Path && f.OldPath != d.Path {
-				continue
-			}
-			for hi, h := range f.Hunks {
-				startLI, endLI := -1, -1
-				for li, dl := range h.Lines {
-					for _, a := range dl.Anchors {
-						if a.Path != d.Path || a.Line == nil {
-							continue
-						}
-						if d.StartLine > 0 && a.Side == d.StartSide && *a.Line == d.StartLine {
-							startLI = li
-						}
-						if a.Side == d.Side && *a.Line == d.Line {
-							endLI = li
-						}
-					}
-				}
-				if endLI >= 0 {
-					if startLI < 0 {
-						startLI = endLI
-					}
-					for li := startLI; li <= endLI; li++ {
-						draftCovered[hunkLineKey{fi, hi, li}] = true
-					}
-				}
-			}
-		}
-	}
-
 	// Determine whether truncation is needed (recompute real total here).
 	realTotal := 0
 	for i := range m.Diff.Files {
@@ -740,7 +707,6 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 		separatorLine = m.theme.MutedTxt.Render(dashStr)
 		fileHeaderStyle = lipgloss.NewStyle().
 			Background(m.theme.Subtle).
-			Foreground(lipgloss.Color("#E2E8F0")).
 			Bold(true).
 			Width(cw)
 		truncStyle = m.theme.MutedTxt
@@ -827,7 +793,7 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 					// Apply visual selection highlight or draft indicator.
 					isSelected := m.visual.Active && m.visual.FileIdx == i && m.visual.HunkIdx == hi &&
 						li >= m.visual.StartLine && li <= m.visual.EndLine
-					isDrafted := !isSelected && draftCovered[hunkLineKey{i, hi, li}]
+					isDrafted := !isSelected && m.draftCovered[hunkLineKey{i, hi, li}]
 
 					if isSelected {
 						if m.theme != nil {

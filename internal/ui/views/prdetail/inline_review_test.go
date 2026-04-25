@@ -460,7 +460,7 @@ func TestVisualModeSpaceInCommentsIsNoop(t *testing.T) {
 	t.Parallel()
 	m := makeInlineReviewModel(100, 40)
 	m.Detail = &domain.PRPreviewSnapshot{Reviewers: []domain.PreviewReviewer{{Login: "alice", State: "APPROVED"}}}
-	m.jumpToSection(3) // jump to Comments
+	m.switchTab(TabComments)
 	m = pressKey(m, " ")
 	if m.visual.Active {
 		t.Error("expected V to be no-op in Comments section")
@@ -590,7 +590,7 @@ func TestJumpToCodeFromInlineComment(t *testing.T) {
 			},
 		},
 	}
-	m.jumpToSection(3)
+	m.switchTab(TabComments)
 	m.commentCursor = 0
 	m = pressKey(m, "enter")
 	if m.activeTab != TabDiff {
@@ -609,7 +609,7 @@ func TestJumpToCodeFromPRLevelCommentIsNoop(t *testing.T) {
 			{Login: "bob", Body: "general comment"},
 		},
 	}
-	m.jumpToSection(3)
+	m.switchTab(TabComments)
 	m.commentCursor = 0
 	beforeScroll := m.ContentScroll
 	m = pressKey(m, "enter")
@@ -628,7 +628,7 @@ func TestReplyToDraftOpensEdit(t *testing.T) {
 	m.drafts = []domain.DraftInlineComment{
 		{Body: "draft body", Path: "a.go", Line: 1, ContextLine: " line1"},
 	}
-	m.jumpToSection(3)
+	m.switchTab(TabComments)
 	m.commentCursor = 0
 	m = pressKey(m, "r")
 	if !m.compose.active {

@@ -39,7 +39,7 @@ func makeCommentModel(width, height int) *PRDetailModel {
 	m.SetTheme(theme.Default())
 	m.leftPanel.Focus = FocusContent
 	// Jump to comments section so j/k activates comment navigation.
-	m.jumpToSection(3)
+	m.switchTab(TabComments)
 	return m
 }
 

@@ -6,6 +6,7 @@ package prdetail
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"os"
 	"os/exec"
 	"strings"
@@ -141,7 +142,11 @@ type PRDetailModel struct {
 	visual            visualModeState
 	drafts            []domain.DraftInlineComment
 	confirmDiscardAll bool
+	draftCovered      map[hunkLineKey]bool // precomputed for diff rendering
 }
+
+// hunkLineKey identifies a specific line within a hunk for draft highlighting.
+type hunkLineKey struct{ fileIdx, hunkIdx, lineIdx int }
 
 // NewModel creates a new PRDetailModel for the given PR.
 func NewModel(summary domain.PullRequestSummary, repo domain.Repository, prService cmds.PRService) *PRDetailModel {
@@ -389,15 +394,11 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 	case cmds.ReviewPosted:
 		m.compose.status = composeStatusSuccess
 		m.drafts = nil
+		m.rebuildDraftCovered()
 		if m.PRService != nil {
-			headSHA := ""
-			if m.Diff != nil {
-				headSHA = m.Diff.HeadSHA
+			if headSHA := m.headSHA(); headSHA != "" {
+				_ = m.PRService.DeleteDraftComments(context.Background(), m.Repo, m.Summary.Number, headSHA)
 			}
-			if headSHA == "" {
-				headSHA = m.Summary.HeadRefOID
-			}
-			_ = m.PRService.DeleteDraftComments(context.Background(), m.Repo, m.Summary.Number, headSHA)
 		}
 		return m, tea.Batch(spinCmd, composeCmd, tea.Tick(1500*time.Millisecond, func(time.Time) tea.Msg {
 			return composeSuccessDismissMsg{}
@@ -861,6 +862,7 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		switch msg.String() {
 		case "y":
 			m.drafts = nil
+			m.rebuildDraftCovered()
 			m.persistDrafts()
 			m.confirmDiscardAll = false
 		case "n", "esc":
@@ -1342,7 +1344,7 @@ func (m *PRDetailModel) diffLineToDisplayRow(fileIdx, hunkIdx, lineIdx int) int 
 	for i := 0; i < fileIdx; i++ {
 		row += diffFileDisplayRows(&m.Diff.Files[i])
 	}
-	row += 3 // blank + separator + header
+	row += diffFileHeaderRows // blank + separator + header
 	f := &m.Diff.Files[fileIdx]
 	for i := 0; i < hunkIdx; i++ {
 		row += 1 + len(f.Hunks[i].Lines)
@@ -1370,7 +1372,7 @@ func (m *PRDetailModel) firstDiffLineAtOrBelow(targetRow int) (fileIdx, hunkIdx,
 				// Skip binary files — no diff lines to select.
 				return 0, 0, 0, false
 			}
-			localTarget -= 3 // skip blank, separator, header
+			localTarget -= diffFileHeaderRows // skip blank, separator, header
 			if localTarget <= 0 {
 				return fi, 0, 0, true
 			}
@@ -1430,6 +1432,10 @@ func (m *PRDetailModel) buildDraftFromVisualSelection(body string) domain.DraftI
 	firstLine := h.Lines[m.visual.StartLine]
 	lastLine := h.Lines[m.visual.EndLine]
 
+	if len(lastLine.Anchors) == 0 {
+		return domain.DraftInlineComment{}
+	}
+
 	draft := domain.DraftInlineComment{
 		ID:          generateDraftID(),
 		Path:        lastLine.Anchors[0].Path,
@@ -1440,7 +1446,7 @@ func (m *PRDetailModel) buildDraftFromVisualSelection(body string) domain.DraftI
 		HeadSHA:     lastLine.Anchors[0].CommitSHA,
 		CreatedAt:   time.Now(),
 	}
-	if m.visual.StartLine != m.visual.EndLine && firstLine.Anchors != nil && len(firstLine.Anchors) > 0 {
+	if m.visual.StartLine != m.visual.EndLine && len(firstLine.Anchors) > 0 {
 		draft.StartLine = *firstLine.Anchors[0].Line
 		draft.StartSide = firstLine.Anchors[0].Side
 	}
@@ -1453,10 +1459,12 @@ func (m *PRDetailModel) upsertDraft(draft domain.DraftInlineComment) {
 		if d.Path == draft.Path && d.Line == draft.Line && d.Side == draft.Side &&
 			d.StartLine == draft.StartLine && d.StartSide == draft.StartSide {
 			m.drafts[i] = draft
+			m.rebuildDraftCovered()
 			return
 		}
 	}
 	m.drafts = append(m.drafts, draft)
+	m.rebuildDraftCovered()
 }
 
 // removeDraftAt removes any draft that overlaps the given file/hunk/line range.
@@ -1471,26 +1479,33 @@ func (m *PRDetailModel) removeDraftAt(fileIdx, hunkIdx, startLine, endLine int) 
 	}
 	firstLine := h.Lines[startLine]
 	lastLine := h.Lines[endLine]
+	if len(lastLine.Anchors) == 0 {
+		return false
+	}
 	path := lastLine.Anchors[0].Path
 	line := *lastLine.Anchors[0].Line
 	side := lastLine.Anchors[0].Side
 	startLineNum := 0
 	startSide := ""
-	if startLine != endLine && firstLine.Anchors != nil && len(firstLine.Anchors) > 0 {
+	if startLine != endLine && len(firstLine.Anchors) > 0 {
 		startLineNum = *firstLine.Anchors[0].Line
 		startSide = firstLine.Anchors[0].Side
 	}
 
-	for i, d := range m.drafts {
+	// Iterate backwards so slice deletion doesn't skip elements.
+	for i := len(m.drafts) - 1; i >= 0; i-- {
+		d := m.drafts[i]
 		if d.Path == path && d.Side == side && d.Line == line {
 			// Single-line draft match.
 			if d.StartLine == 0 && startLineNum == 0 {
 				m.drafts = append(m.drafts[:i], m.drafts[i+1:]...)
+				m.rebuildDraftCovered()
 				return true
 			}
 			// Multi-line draft match.
 			if d.StartLine == startLineNum && d.StartSide == startSide {
 				m.drafts = append(m.drafts[:i], m.drafts[i+1:]...)
+				m.rebuildDraftCovered()
 				return true
 			}
 		}
@@ -1507,12 +1522,15 @@ func (m *PRDetailModel) draftOverlapsSelection() bool {
 	h := &f.Hunks[m.visual.HunkIdx]
 	firstLine := h.Lines[m.visual.StartLine]
 	lastLine := h.Lines[m.visual.EndLine]
+	if len(lastLine.Anchors) == 0 {
+		return false
+	}
 	path := lastLine.Anchors[0].Path
 	line := *lastLine.Anchors[0].Line
 	side := lastLine.Anchors[0].Side
 	startLineNum := 0
 	startSide := ""
-	if m.visual.StartLine != m.visual.EndLine && firstLine.Anchors != nil && len(firstLine.Anchors) > 0 {
+	if m.visual.StartLine != m.visual.EndLine && len(firstLine.Anchors) > 0 {
 		startLineNum = *firstLine.Anchors[0].Line
 		startSide = firstLine.Anchors[0].Side
 	}
@@ -1540,12 +1558,15 @@ func (m *PRDetailModel) findDraftForSelection() *domain.DraftInlineComment {
 	h := &f.Hunks[m.visual.HunkIdx]
 	firstLine := h.Lines[m.visual.StartLine]
 	lastLine := h.Lines[m.visual.EndLine]
+	if len(lastLine.Anchors) == 0 {
+		return nil
+	}
 	path := lastLine.Anchors[0].Path
 	line := *lastLine.Anchors[0].Line
 	side := lastLine.Anchors[0].Side
 	startLineNum := 0
 	startSide := ""
-	if m.visual.StartLine != m.visual.EndLine && firstLine.Anchors != nil && len(firstLine.Anchors) > 0 {
+	if m.visual.StartLine != m.visual.EndLine && len(firstLine.Anchors) > 0 {
 		startLineNum = *firstLine.Anchors[0].Line
 		startSide = firstLine.Anchors[0].Side
 	}
@@ -1564,18 +1585,56 @@ func (m *PRDetailModel) findDraftForSelection() *domain.DraftInlineComment {
 	return nil
 }
 
-// persistDrafts saves the current drafts to the cache.
+// rebuildDraftCovered recomputes the draftCovered map from m.drafts.
+// Call this whenever drafts change (add, remove, load, clear).
+func (m *PRDetailModel) rebuildDraftCovered() {
+	if m.Diff == nil {
+		m.draftCovered = nil
+		return
+	}
+	m.draftCovered = make(map[hunkLineKey]bool)
+	for _, d := range m.drafts {
+		for fi, f := range m.Diff.Files {
+			if f.NewPath != d.Path && f.OldPath != d.Path {
+				continue
+			}
+			for hi, h := range f.Hunks {
+				startLI, endLI := -1, -1
+				for li, dl := range h.Lines {
+					for _, a := range dl.Anchors {
+						if a.Path != d.Path || a.Line == nil {
+							continue
+						}
+						if d.StartLine > 0 && a.Side == d.StartSide && *a.Line == d.StartLine {
+							startLI = li
+						}
+						if a.Side == d.Side && *a.Line == d.Line {
+							endLI = li
+						}
+					}
+				}
+				if endLI >= 0 {
+					if startLI < 0 {
+						startLI = endLI
+					}
+					for li := startLI; li <= endLI; li++ {
+						m.draftCovered[hunkLineKey{fi, hi, li}] = true
+					}
+				}
+			}
+		}
+	}
+}
+
 func (m *PRDetailModel) persistDrafts() {
 	if m.PRService == nil {
 		return
 	}
-	headSHA := ""
-	if m.Diff != nil {
-		headSHA = m.Diff.HeadSHA
-	}
+	headSHA := m.headSHA()
 	if headSHA == "" {
-		headSHA = m.Summary.HeadRefOID
+		return // no SHA to key drafts against; skip persistence to avoid collision
 	}
+	// Errors are logged by the service layer; no additional UI feedback needed.
 	_ = m.PRService.SaveDraftComments(context.Background(), m.Repo, m.Summary.Number, headSHA, m.drafts)
 }
 
@@ -1584,15 +1643,22 @@ func (m *PRDetailModel) loadDrafts() {
 	if m.PRService == nil {
 		return
 	}
-	headSHA := ""
-	if m.Diff != nil {
-		headSHA = m.Diff.HeadSHA
-	}
+	headSHA := m.headSHA()
 	if headSHA == "" {
-		headSHA = m.Summary.HeadRefOID
+		return
 	}
+	// Errors are logged by the service layer; missing cache entries are expected (not an error).
 	drafts, _ := m.PRService.LoadDraftComments(context.Background(), m.Repo, m.Summary.Number, headSHA)
 	m.drafts = drafts
+	m.rebuildDraftCovered()
+}
+
+// headSHA returns the best available head SHA for draft persistence.
+func (m *PRDetailModel) headSHA() string {
+	if m.Diff != nil && m.Diff.HeadSHA != "" {
+		return m.Diff.HeadSHA
+	}
+	return m.Summary.HeadRefOID
 }
 
 // lookupDiffLine finds the raw diff line text for a given path:line.
@@ -1622,7 +1688,7 @@ func (m *PRDetailModel) IsDiffTabActive() bool { return m.activeTab == TabDiff }
 
 // generateDraftID creates a simple unique ID for a draft comment.
 func generateDraftID() string {
-	return fmt.Sprintf("draft-%d", time.Now().UnixNano())
+	return fmt.Sprintf("draft-%d-%d", time.Now().UnixNano(), rand.Intn(10000))
 }
 
 // StatusHint returns the status bar hint text for the current state.
