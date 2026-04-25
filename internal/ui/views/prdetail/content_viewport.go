@@ -258,6 +258,9 @@ func (m *PRDetailModel) commentEntries() []commentEntry {
 	if m.Detail == nil {
 		return nil
 	}
+	if !m.commentEntriesDirty && m.cachedCommentEntries != nil {
+		return m.cachedCommentEntries
+	}
 	var entries []commentEntry
 
 	// Drafts first.
@@ -334,6 +337,8 @@ func (m *PRDetailModel) commentEntries() []commentEntry {
 			}
 		}
 	}
+	m.cachedCommentEntries = entries
+	m.commentEntriesDirty = false
 	return entries
 }
 

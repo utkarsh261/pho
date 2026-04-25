@@ -39,6 +39,9 @@ type submitApproveMsg struct{ body string }
 // openEditorComposeMsg is emitted when the user presses Ctrl+E.
 type openEditorComposeMsg struct{ draft string }
 
+// composeClosedMsg is emitted when the compose pane closes itself (e.g. via Esc).
+type composeClosedMsg struct{ mode composeMode }
+
 // ComposeModel is the bottom two-row compose pane shown when writing a comment.
 type ComposeModel struct {
 	active     bool
@@ -147,14 +150,13 @@ func (c ComposeModel) Update(msg tea.Msg) (ComposeModel, tea.Cmd) {
 
 	case "esc":
 		// Silent discard — no confirmation regardless of content.
+		wasMode := c.mode
 		if c.status == composeStatusError {
 			c.errMsg = ""
 			c.status = composeStatusIdle
-			c.Close()
-			return c, nil
 		}
 		c.Close()
-		return c, nil
+		return c, func() tea.Msg { return composeClosedMsg{mode: wasMode} }
 
 	default:
 		// User is editing the input directly: discard editor content so the

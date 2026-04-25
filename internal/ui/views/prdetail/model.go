@@ -143,6 +143,14 @@ type PRDetailModel struct {
 	drafts            []domain.DraftInlineComment
 	confirmDiscardAll bool
 	draftCovered      map[hunkLineKey]bool // precomputed for diff rendering
+
+	// Diff indices (rebuilt when Diff changes)
+	diffLineIndex    map[string]map[int]string              // path → line → raw text
+	diffAnchorIndex  map[string]map[int]map[string][3]int   // path → line → side → {fileIdx, hunkIdx, lineIdx}
+
+	// Comment entries cache (invalidated when Detail or drafts change)
+	cachedCommentEntries []commentEntry
+	commentEntriesDirty  bool
 }
 
 // hunkLineKey identifies a specific line within a hunk for draft highlighting.
@@ -204,7 +212,10 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 
 	// Forward all messages to compose so textinput receives tick events for cursor blink.
 	var composeCmd tea.Cmd
-	composeWasActive := m.compose.active
+	// composeConsumedKey tracks whether compose was active at the start of this
+	// cycle. When compose closes itself on Esc in the same Update cycle,
+	// m.compose.active becomes false, but the key must not fall through to handleKey.
+	composeConsumedKey := m.compose.active
 	m.compose, composeCmd = m.compose.Update(msg)
 
 	switch msg := msg.(type) {
@@ -223,6 +234,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		}
 		m.Detail = &msg.Detail
 		m.DetailFromCache = msg.FromCache
+		m.commentEntriesDirty = true
 		m.resetCommentCursor()
 		// Sync checks into left panel.
 		m.leftPanel.Checks = msg.Detail.Checks
@@ -272,6 +284,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 				cmds.LoadDiffCmd(m.PRService, m.Repo, m.Summary.Number, m.Summary.HeadRefOID, true))
 		}
 		m.Diff = &msg.Diff
+		m.rebuildDiffIndices()
 		m.normalizeDiffRows()
 		m.searchIndex = nil
 		m.refreshSearchMatches()
@@ -395,6 +408,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		m.compose.status = composeStatusSuccess
 		m.drafts = nil
 		m.rebuildDraftCovered()
+		m.commentEntriesDirty = true
 		if m.PRService != nil {
 			if headSHA := m.headSHA(); headSHA != "" {
 				_ = m.PRService.DeleteDraftComments(context.Background(), m.Repo, m.Summary.Number, headSHA)
@@ -417,14 +431,19 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		}
 		return m, tea.Batch(spinCmd, composeCmd)
 
+	case composeClosedMsg:
+		// Compose closed itself (e.g. Esc). No action needed here; the same-cycle
+		// guard in tea.KeyMsg below prevents the consumed key from reaching handleKey.
+		return m, tea.Batch(spinCmd, composeCmd)
+
 	case tea.KeyMsg:
 		if m.compose.active {
 			// Key already routed to compose.Update above; skip handleKey.
 			return m, tea.Batch(spinCmd, composeCmd)
 		}
-		// If compose was just closed from draft-inline mode (via Esc), keep visual
-		// mode active instead of letting handleKey process the Esc key.
-		if composeWasActive && !m.compose.active && m.compose.mode == composeModeDraftInline && msg.String() == "esc" {
+		// If compose was active at the start of this cycle and just closed itself
+		// (e.g. Esc in draft-inline mode), don't let the consumed key reach handleKey.
+		if composeConsumedKey && !m.compose.active && m.compose.mode == composeModeDraftInline && msg.String() == "esc" {
 			return m, tea.Batch(spinCmd, composeCmd)
 		}
 		next, cmd := m.handleKey(msg)
@@ -747,9 +766,32 @@ func (m *PRDetailModel) scrollToCommentCursor() {
 	m.clampContentScroll()
 }
 
+// validVisualState reports whether m.visual indices are in bounds for the
+// current m.Diff. Call before accessing m.Diff.Files[FileIdx] or f.Hunks[HunkIdx].
+func (m *PRDetailModel) validVisualState() bool {
+	if m.Diff == nil || !m.visual.Active {
+		return false
+	}
+	if m.visual.FileIdx < 0 || m.visual.FileIdx >= len(m.Diff.Files) {
+		return false
+	}
+	f := &m.Diff.Files[m.visual.FileIdx]
+	if m.visual.HunkIdx < 0 || m.visual.HunkIdx >= len(f.Hunks) {
+		return false
+	}
+	h := &f.Hunks[m.visual.HunkIdx]
+	if m.visual.StartLine < 0 || m.visual.StartLine >= len(h.Lines) {
+		return false
+	}
+	if m.visual.EndLine < 0 || m.visual.EndLine >= len(h.Lines) {
+		return false
+	}
+	return true
+}
+
 // expandVisualSelectionDown grows the selection by one line downward within the hunk.
 func (m *PRDetailModel) expandVisualSelectionDown() {
-	if !m.visual.Active || m.Diff == nil {
+	if !m.validVisualState() {
 		return
 	}
 	f := &m.Diff.Files[m.visual.FileIdx]
@@ -770,6 +812,10 @@ func (m *PRDetailModel) expandVisualSelectionDown() {
 // If selection is single-line, exits visual mode.
 func (m *PRDetailModel) shrinkVisualSelectionUp() {
 	if !m.visual.Active {
+		return
+	}
+	if !m.validVisualState() {
+		m.exitVisualMode()
 		return
 	}
 	if m.visual.EndLine > m.visual.StartLine {
@@ -805,22 +851,10 @@ func (m *PRDetailModel) jumpToCommentCode() {
 		return
 	}
 	// Find the diff line matching (path, line).
-	if m.Diff == nil {
-		return
-	}
-	for fi, f := range m.Diff.Files {
-		for hi, h := range f.Hunks {
-			for li, dl := range h.Lines {
-				for _, a := range dl.Anchors {
-					if a.Path == entry.path && a.Line != nil && *a.Line == entry.line {
-						m.switchTab(TabDiff)
-						m.ContentScroll = m.diffLineToDisplayRow(fi, hi, li)
-						m.clampContentScroll()
-						return
-					}
-				}
-			}
-		}
+	if fi, hi, li, ok := m.findDiffLineAnchorAnySide(entry.path, entry.line); ok {
+		m.switchTab(TabDiff)
+		m.ContentScroll = m.diffLineToDisplayRow(fi, hi, li)
+		m.clampContentScroll()
 	}
 }
 
@@ -863,6 +897,7 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		case "y":
 			m.drafts = nil
 			m.rebuildDraftCovered()
+			m.commentEntriesDirty = true
 			m.persistDrafts()
 			m.confirmDiscardAll = false
 		case "n", "esc":
@@ -997,19 +1032,6 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		m.LastKey = ""
 	}
 	return m, nil
-}
-
-// jumpToSection switches to the tab corresponding to the given section (1=Desc, 2=Diff, 3=Comments).
-// Deprecated: use switchTab directly.
-func (m *PRDetailModel) jumpToSection(num int) {
-	switch num {
-	case 1:
-		m.switchTab(TabDescription)
-	case 2:
-		m.switchTab(TabDiff)
-	case 3:
-		m.switchTab(TabComments)
-	}
 }
 
 // jumpToFile switches to the Diff tab and scrolls so that file at index idx is at
@@ -1424,7 +1446,7 @@ func (m *PRDetailModel) exitVisualMode() {
 // buildDraftFromVisualSelection creates a DraftInlineComment from the current
 // visual selection and the provided body text.
 func (m *PRDetailModel) buildDraftFromVisualSelection(body string) domain.DraftInlineComment {
-	if !m.visual.Active || m.Diff == nil {
+	if !m.validVisualState() {
 		return domain.DraftInlineComment{}
 	}
 	f := &m.Diff.Files[m.visual.FileIdx]
@@ -1465,6 +1487,7 @@ func (m *PRDetailModel) upsertDraft(draft domain.DraftInlineComment) {
 	}
 	m.drafts = append(m.drafts, draft)
 	m.rebuildDraftCovered()
+	m.commentEntriesDirty = true
 }
 
 // removeDraftAt removes any draft that overlaps the given file/hunk/line range.
@@ -1472,7 +1495,13 @@ func (m *PRDetailModel) removeDraftAt(fileIdx, hunkIdx, startLine, endLine int) 
 	if m.Diff == nil {
 		return false
 	}
+	if fileIdx < 0 || fileIdx >= len(m.Diff.Files) {
+		return false
+	}
 	f := &m.Diff.Files[fileIdx]
+	if hunkIdx < 0 || hunkIdx >= len(f.Hunks) {
+		return false
+	}
 	h := &f.Hunks[hunkIdx]
 	if startLine < 0 || startLine >= len(h.Lines) || endLine < 0 || endLine >= len(h.Lines) {
 		return false
@@ -1500,12 +1529,14 @@ func (m *PRDetailModel) removeDraftAt(fileIdx, hunkIdx, startLine, endLine int) 
 			if d.StartLine == 0 && startLineNum == 0 {
 				m.drafts = append(m.drafts[:i], m.drafts[i+1:]...)
 				m.rebuildDraftCovered()
+				m.commentEntriesDirty = true
 				return true
 			}
 			// Multi-line draft match.
 			if d.StartLine == startLineNum && d.StartSide == startSide {
 				m.drafts = append(m.drafts[:i], m.drafts[i+1:]...)
 				m.rebuildDraftCovered()
+				m.commentEntriesDirty = true
 				return true
 			}
 		}
@@ -1515,7 +1546,7 @@ func (m *PRDetailModel) removeDraftAt(fileIdx, hunkIdx, startLine, endLine int) 
 
 // draftOverlapsSelection reports whether any draft overlaps the visual selection.
 func (m *PRDetailModel) draftOverlapsSelection() bool {
-	if !m.visual.Active || m.Diff == nil {
+	if !m.validVisualState() {
 		return false
 	}
 	f := &m.Diff.Files[m.visual.FileIdx]
@@ -1551,7 +1582,7 @@ func (m *PRDetailModel) draftOverlapsSelection() bool {
 // findDraftForSelection returns the draft matching the exact current visual
 // selection, or nil if none exists.
 func (m *PRDetailModel) findDraftForSelection() *domain.DraftInlineComment {
-	if !m.visual.Active || m.Diff == nil {
+	if !m.validVisualState() {
 		return nil
 	}
 	f := &m.Diff.Files[m.visual.FileIdx]
@@ -1592,36 +1623,21 @@ func (m *PRDetailModel) rebuildDraftCovered() {
 		m.draftCovered = nil
 		return
 	}
+	m.ensureDiffIndices()
 	m.draftCovered = make(map[hunkLineKey]bool)
 	for _, d := range m.drafts {
-		for fi, f := range m.Diff.Files {
-			if f.NewPath != d.Path && f.OldPath != d.Path {
-				continue
+		fi, hi, endLI, ok := m.findDiffLineAnchor(d.Path, d.Line, d.Side)
+		if !ok {
+			continue
+		}
+		startLI := endLI
+		if d.StartLine > 0 {
+			if _, _, sli, ok := m.findDiffLineAnchor(d.Path, d.StartLine, d.StartSide); ok {
+				startLI = sli
 			}
-			for hi, h := range f.Hunks {
-				startLI, endLI := -1, -1
-				for li, dl := range h.Lines {
-					for _, a := range dl.Anchors {
-						if a.Path != d.Path || a.Line == nil {
-							continue
-						}
-						if d.StartLine > 0 && a.Side == d.StartSide && *a.Line == d.StartLine {
-							startLI = li
-						}
-						if a.Side == d.Side && *a.Line == d.Line {
-							endLI = li
-						}
-					}
-				}
-				if endLI >= 0 {
-					if startLI < 0 {
-						startLI = endLI
-					}
-					for li := startLI; li <= endLI; li++ {
-						m.draftCovered[hunkLineKey{fi, hi, li}] = true
-					}
-				}
-			}
+		}
+		for li := startLI; li <= endLI; li++ {
+			m.draftCovered[hunkLineKey{fi, hi, li}] = true
 		}
 	}
 }
@@ -1651,6 +1667,7 @@ func (m *PRDetailModel) loadDrafts() {
 	drafts, _ := m.PRService.LoadDraftComments(context.Background(), m.Repo, m.Summary.Number, headSHA)
 	m.drafts = drafts
 	m.rebuildDraftCovered()
+	m.commentEntriesDirty = true
 }
 
 // headSHA returns the best available head SHA for draft persistence.
@@ -1661,23 +1678,85 @@ func (m *PRDetailModel) headSHA() string {
 	return m.Summary.HeadRefOID
 }
 
-// lookupDiffLine finds the raw diff line text for a given path:line.
-func (m *PRDetailModel) lookupDiffLine(path string, line int) string {
-	if m.Diff == nil {
-		return ""
+// ensureDiffIndices lazily rebuilds the diff indices when they are stale.
+func (m *PRDetailModel) ensureDiffIndices() {
+	if m.Diff != nil && m.diffLineIndex == nil {
+		m.rebuildDiffIndices()
 	}
-	for _, f := range m.Diff.Files {
-		for _, h := range f.Hunks {
-			for _, dl := range h.Lines {
+}
+
+// rebuildDiffIndices rebuilds the O(1) lookup maps from m.Diff.
+// Call whenever m.Diff changes.
+func (m *PRDetailModel) rebuildDiffIndices() {
+	if m.Diff == nil {
+		m.diffLineIndex = nil
+		m.diffAnchorIndex = nil
+		return
+	}
+	m.diffLineIndex = make(map[string]map[int]string)
+	m.diffAnchorIndex = make(map[string]map[int]map[string][3]int)
+	for fi, f := range m.Diff.Files {
+		for hi, h := range f.Hunks {
+			for li, dl := range h.Lines {
 				for _, a := range dl.Anchors {
-					if a.Path == path && a.Line != nil && *a.Line == line {
-						return dl.Raw
+					if a.Path == "" || a.Line == nil {
+						continue
 					}
+					lineNum := *a.Line
+					if m.diffLineIndex[a.Path] == nil {
+						m.diffLineIndex[a.Path] = make(map[int]string)
+						m.diffAnchorIndex[a.Path] = make(map[int]map[string][3]int)
+					}
+					m.diffLineIndex[a.Path][lineNum] = dl.Raw
+					if m.diffAnchorIndex[a.Path][lineNum] == nil {
+						m.diffAnchorIndex[a.Path][lineNum] = make(map[string][3]int)
+					}
+					m.diffAnchorIndex[a.Path][lineNum][a.Side] = [3]int{fi, hi, li}
 				}
 			}
 		}
 	}
+}
+
+// lookupDiffLine finds the raw diff line text for a given path:line.
+func (m *PRDetailModel) lookupDiffLine(path string, line int) string {
+	m.ensureDiffIndices()
+	if m.diffLineIndex == nil {
+		return ""
+	}
+	if lines, ok := m.diffLineIndex[path]; ok {
+		return lines[line]
+	}
 	return ""
+}
+
+// findDiffLineAnchor returns the hunk coordinates for a given path:line:side anchor.
+func (m *PRDetailModel) findDiffLineAnchor(path string, line int, side string) (fileIdx, hunkIdx, lineIdx int, ok bool) {
+	m.ensureDiffIndices()
+	if m.diffAnchorIndex == nil {
+		return 0, 0, 0, false
+	}
+	if lines, ok := m.diffAnchorIndex[path]; ok {
+		if sides, ok := lines[line]; ok {
+			if coords, ok := sides[side]; ok {
+				return coords[0], coords[1], coords[2], true
+			}
+		}
+	}
+	return 0, 0, 0, false
+}
+
+// findDiffLineAnchorAnySide returns the hunk coordinates for any anchor matching
+// path:line, regardless of side. Tries RIGHT first, then LEFT, then any other.
+func (m *PRDetailModel) findDiffLineAnchorAnySide(path string, line int) (fileIdx, hunkIdx, lineIdx int, ok bool) {
+	m.ensureDiffIndices()
+	if fi, hi, li, ok := m.findDiffLineAnchor(path, line, "RIGHT"); ok {
+		return fi, hi, li, ok
+	}
+	if fi, hi, li, ok := m.findDiffLineAnchor(path, line, "LEFT"); ok {
+		return fi, hi, li, ok
+	}
+	return 0, 0, 0, false
 }
 
 // SearchActive reports whether the diff search is currently active.
