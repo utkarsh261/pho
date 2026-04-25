@@ -65,6 +65,15 @@ func (m *PRDetailModel) contentViewportHeight() int {
 	return max(innerH-2, 1)
 }
 
+// contentTab identifies the active tab in the right content panel.
+type contentTab int
+
+const (
+	TabDescription contentTab = iota
+	TabDiff
+	TabComments
+)
+
 // visualModeState tracks the active visual-mode selection in the diff.
 type visualModeState struct {
 	Active    bool
@@ -122,6 +131,12 @@ type PRDetailModel struct {
 	cachedBodyWidth  int
 	cachedBodyHeight int
 
+	// Content tabs
+	activeTab      contentTab
+	descScroll     int
+	diffScroll     int
+	commentsScroll int
+
 	// Inline review drafts
 	visual            visualModeState
 	drafts            []domain.DraftInlineComment
@@ -143,6 +158,7 @@ func NewModel(summary domain.PullRequestSummary, repo domain.Repository, prServi
 		spinner:       s,
 		commentCursor: -1,
 		compose:       newComposeModel(nil),
+		activeTab:     TabDescription,
 	}
 	m.leftPanel.Loading = loading
 	m.leftPanel.Focus = FocusContent
@@ -210,22 +226,20 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		if m.postedComment {
 			m.postedComment = false
 			cw := contentViewportWidth(m.rightPanelWidth())
-			sections := m.buildContentSections(cw)
-			if commentSec, ok := findSection(sections, domain.SectionComments); ok {
-				entries := m.commentEntries()
-				startRows := m.commentEntryStartRows(cw)
-				if len(startRows) > 0 {
-					lastIdx := len(startRows) - 1
-					lastAbsRow := commentSec.StartRow + startRows[lastIdx]
-					entryH := m.entryRowCount(entries[lastIdx], cw) + 2 // +2 for border
-					endAbsRow := lastAbsRow + entryH
-					vh := m.contentViewportHeight()
-					target := max(endAbsRow-vh+1, 0)
-					m.ContentScroll = target
-					m.clampContentScroll()
-					// Place cursor at the new comment so j/k starts from here.
-					m.commentCursor = lastIdx
-				}
+			entries := m.commentEntries()
+			startRows := m.commentEntryStartRows(cw)
+			if len(startRows) > 0 {
+				lastIdx := len(startRows) - 1
+				entryTop := startRows[lastIdx]
+				entryH := m.entryRowCount(entries[lastIdx], cw) + 2 // +2 for border
+				endRow := entryTop + entryH
+				vh := m.contentViewportHeight()
+				target := max(endRow-vh+1, 0)
+				m.switchTab(TabComments)
+				m.ContentScroll = target
+				m.clampContentScroll()
+				// Place cursor at the new comment so j/k starts from here.
+				m.commentCursor = lastIdx
 			}
 		}
 
@@ -559,18 +573,18 @@ func (m *PRDetailModel) renderRightViewport(width, height int) string {
 	contentW := max(innerW-2, 1)
 	contentH := max(innerH-2, 1)
 
-	// Build sections and clamp scroll within the real content bounds.
-	sections := m.buildContentSections(contentW)
-	total := totalRowsInSections(sections)
-	scroll := clamp(m.ContentScroll, 0, max(0, total-contentH))
+	scroll := clamp(m.ContentScroll, 0, max(0, m.maxContentScroll()))
 
-	// Scroll-spy: use the unclamped ContentScroll so that a section jump
-	// (e.g. pressing '2') highlights the Diff tab even when total content
-	// fits within the viewport and the display scroll is clamped to 0.
-	active := activeSectionAt(sections, m.ContentScroll)
-
-	// Render content lines using the overscan algorithm.
-	lines := m.renderContentLines(sections, scroll, contentH, contentW)
+	// Render content based on active tab.
+	var lines []string
+	switch m.activeTab {
+	case TabDescription:
+		lines = m.renderDescriptionTab(scroll, contentH, contentW)
+	case TabDiff:
+		lines = m.renderDiffTab(scroll, contentH, contentW)
+	case TabComments:
+		lines = m.renderCommentsTab(scroll, contentH, contentW)
+	}
 
 	// Apply left-padding (1 space) to each content line.
 	for i, l := range lines {
@@ -578,8 +592,8 @@ func (m *PRDetailModel) renderRightViewport(width, height int) string {
 	}
 	contentStr := renderBlock(lines, innerW, contentH)
 
-	// Build tab indicators (scroll-spy only — not focusable).
-	tabsStr := m.renderSectionTabs(sections, active)
+	// Build tab indicators based on active tab.
+	tabsStr := m.renderSectionTabs()
 	tabsStr = " " + tabsStr
 
 	var borderColor lipgloss.Color
@@ -613,37 +627,32 @@ func (m *PRDetailModel) renderRightViewport(width, height int) string {
 	return lipgloss.JoinVertical(lipgloss.Left, headBox, bodyBox)
 }
 
-// renderSectionTabs builds the "Desc | Diff | Comments" indicator string.
-// Active section is highlighted; sections with RowCount=0 are muted.
-func (m *PRDetailModel) renderSectionTabs(sections []ContentSection, active domain.PRDetailSection) string {
-	type tabDef struct {
-		section domain.PRDetailSection
-		label   string
-	}
-	tabs := []tabDef{
-		{domain.SectionDescription, "Desc"},
-		{domain.SectionDiff, "Diff"},
-		{domain.SectionComments, "Comments"},
-	}
-
+// renderSectionTabs builds the "1:Desc 2:Diff 3:Comments" indicator string.
+// Active tab is highlighted.
+func (m *PRDetailModel) renderSectionTabs() string {
 	th := m.theme
 	if th == nil {
 		th = theme.Default()
 	}
 
+	type tabDef struct {
+		num  contentTab
+		key  string
+		name string
+	}
+	tabs := []tabDef{
+		{TabDescription, "1", "Desc"},
+		{TabDiff, "2", "Diff"},
+		{TabComments, "3", "Comments"},
+	}
+
 	parts := make([]string, len(tabs))
 	for i, td := range tabs {
-		sec, hasRows := findSection(sections, td.section)
-		_ = sec
-
 		var rendered string
-		switch {
-		case hasRows && active == td.section:
-			rendered = th.TabActive.Render("● " + td.label)
-		case hasRows:
-			rendered = th.TabInactive.Render(td.label)
-		default:
-			rendered = th.MutedTxt.Render(td.label)
+		if m.activeTab == td.num {
+			rendered = th.TabActive.Render("● " + td.name)
+		} else {
+			rendered = th.TabInactive.Render(td.key + ":" + td.name)
 		}
 		parts[i] = rendered
 	}
@@ -668,23 +677,9 @@ func (m *PRDetailModel) renderNarrowBody(width, height int) string {
 	return top + "\n" + body
 }
 
-// isInCommentsSection reports whether the content viewport is currently showing
-// the Comments section. Returns true when the viewport bottom overlaps the
-// section, so natural scrolling to the bottom activates comment navigation even
-// when the comments section is shorter than the viewport height.
+// isInCommentsSection reports whether the Comments tab is active.
 func (m *PRDetailModel) isInCommentsSection() bool {
-	if m.leftPanel.Focus != FocusContent {
-		return false
-	}
-	cw := contentViewportWidth(m.rightPanelWidth())
-	sections := m.buildContentSections(cw)
-	commentSec, ok := findSection(sections, domain.SectionComments)
-	if !ok {
-		return false
-	}
-	vh := m.contentViewportHeight()
-	viewEnd := m.ContentScroll + vh
-	return m.ContentScroll >= commentSec.StartRow || viewEnd > commentSec.StartRow
+	return m.activeTab == TabComments && m.leftPanel.Focus == FocusContent
 }
 
 // resetCommentCursor clears the comment cursor. Call whenever navigation leaves
@@ -709,13 +704,10 @@ func (m *PRDetailModel) moveCursorNextComment() {
 }
 
 // moveCursorPrevComment moves the comment cursor back one entry. At entry 0,
-// deactivates the cursor and scrolls up one line (exits comment nav mode).
+// deactivates the cursor.
 func (m *PRDetailModel) moveCursorPrevComment() {
 	if m.commentCursor <= 0 {
 		m.commentCursor = -1
-		// Fall through to normal line scroll.
-		m.ContentScroll--
-		m.clampContentScroll()
 		return
 	}
 	m.commentCursor--
@@ -729,17 +721,12 @@ func (m *PRDetailModel) scrollToCommentCursor() {
 		return
 	}
 	cw := contentViewportWidth(m.rightPanelWidth())
-	sections := m.buildContentSections(cw)
-	commentSec, ok := findSection(sections, domain.SectionComments)
-	if !ok {
-		return
-	}
 	startRows := m.commentEntryStartRows(cw)
 	if m.commentCursor >= len(startRows) {
 		return
 	}
 	entries := m.commentEntries()
-	entryTop := commentSec.StartRow + startRows[m.commentCursor]
+	entryTop := startRows[m.commentCursor]
 	entryBottom := entryTop + m.entryRowCount(entries[m.commentCursor], cw) + 2 // +2 for border
 	vh := m.contentViewportHeight()
 	viewTop := m.ContentScroll
@@ -794,22 +781,13 @@ func (m *PRDetailModel) shrinkVisualSelectionUp() {
 	}
 }
 
-// isInDiffSection reports whether the content viewport is currently showing
-// the Diff section.
+// isInDiffSection reports whether the Diff tab is active.
 func (m *PRDetailModel) isInDiffSection() bool {
-	cw := contentViewportWidth(m.rightPanelWidth())
-	sections := m.buildContentSections(cw)
-	diffSec, ok := findSection(sections, domain.SectionDiff)
-	if !ok || diffSec.RowCount == 0 {
-		return false
-	}
-	vh := m.contentViewportHeight()
-	viewEnd := m.ContentScroll + vh
-	return m.ContentScroll < diffSec.StartRow+diffSec.RowCount && viewEnd > diffSec.StartRow
+	return m.activeTab == TabDiff && m.leftPanel.Focus == FocusContent
 }
 
-// jumpToCommentCode scrolls the diff viewport to the code line referenced by
-// the focused comment entry.
+// jumpToCommentCode switches to the Diff tab and scrolls to the code line
+// referenced by the focused comment entry.
 func (m *PRDetailModel) jumpToCommentCode() {
 	if m.commentCursor < 0 {
 		return
@@ -831,8 +809,8 @@ func (m *PRDetailModel) jumpToCommentCode() {
 			for li, dl := range h.Lines {
 				for _, a := range dl.Anchors {
 					if a.Path == entry.path && a.Line != nil && *a.Line == entry.line {
+						m.switchTab(TabDiff)
 						m.ContentScroll = m.diffLineToDisplayRow(fi, hi, li)
-						m.leftPanel.Focus = FocusContent
 						m.clampContentScroll()
 						return
 					}
@@ -941,7 +919,7 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		}
 		return m, nil
 	case " ":
-		if m.leftPanel.Focus == FocusContent && m.isInDiffSection() {
+		if m.leftPanel.Focus == FocusContent && m.activeTab == TabDiff {
 			m.enterVisualMode()
 		}
 		return m, nil
@@ -959,19 +937,18 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		m.cycleBackward()
 		m.resetCommentCursor()
 	case "j", "down":
-		if m.isInCommentsSection() {
+		if m.activeTab == TabComments {
 			m.moveCursorNextComment()
 			return m, nil
 		}
 		m.scrollDown()
 	case "k", "up":
-		if m.isInCommentsSection() && m.commentCursor >= 0 {
-			// moveCursorPrevComment handles deactivation+scrollUp at entry 0.
+		if m.activeTab == TabComments && m.commentCursor >= 0 {
 			m.moveCursorPrevComment()
 			return m, nil
 		}
 		m.scrollUp()
-		if !m.isInCommentsSection() {
+		if m.activeTab != TabComments {
 			m.resetCommentCursor()
 		}
 	case "enter":
@@ -979,7 +956,7 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 			m.jumpToFile(m.leftPanel.FileIndex)
 		} else if m.leftPanel.Focus == FocusCI {
 			return m, m.emitOpenBrowserCI()
-		} else if m.leftPanel.Focus == FocusContent && m.isInCommentsSection() && m.commentCursor >= 0 {
+		} else if m.leftPanel.Focus == FocusContent && m.activeTab == TabComments && m.commentCursor >= 0 {
 			m.jumpToCommentCode()
 		}
 	case "h", "left":
@@ -991,14 +968,11 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 	case "shift+l":
 		m.jumpNextFile()
 	case "1":
-		m.jumpToSection(1)
-		m.resetCommentCursor()
+		m.switchTab(TabDescription)
 	case "2":
-		m.jumpToSection(2)
-		m.resetCommentCursor()
+		m.switchTab(TabDiff)
 	case "3":
-		m.resetCommentCursor()
-		m.jumpToSection(3)
+		m.switchTab(TabComments)
 	case "g":
 		if m.LastKey == "g" {
 			m.scrollToTop()
@@ -1020,49 +994,40 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 	return m, nil
 }
 
-// jumpToSection scrolls the content viewport to the start of the given section (1=Desc, 2=Diff, 3=Comments).
-// If the section is empty (RowCount = 0) or does not exist, this is a no-op.
-// On success, focus moves to the Content viewport.
+// jumpToSection switches to the tab corresponding to the given section (1=Desc, 2=Diff, 3=Comments).
+// Deprecated: use switchTab directly.
 func (m *PRDetailModel) jumpToSection(num int) {
-	target := domain.PRDetailSection(num - 1)
-	contentWidth := contentViewportWidth(m.rightPanelWidth())
-	sections := m.buildContentSections(contentWidth)
-	sec, ok := findSection(sections, target)
-	if !ok {
-		return
+	switch num {
+	case 1:
+		m.switchTab(TabDescription)
+	case 2:
+		m.switchTab(TabDiff)
+	case 3:
+		m.switchTab(TabComments)
 	}
-	m.ContentScroll = sec.StartRow
-	m.leftPanel.Focus = FocusContent
 }
 
-// jumpToFile scrolls the content viewport so that file at index idx is at the top
-// and moves focus to the Content viewport. No-op when diff is absent or idx is out of range.
+// jumpToFile switches to the Diff tab and scrolls so that file at index idx is at
+// the top. No-op when diff is absent or idx is out of range.
 func (m *PRDetailModel) jumpToFile(idx int) {
 	if m.Diff == nil || idx < 0 || idx >= len(m.Diff.Files) {
 		return
 	}
 	m.leftPanel.LastOpenedIndex = idx
-	contentWidth := contentViewportWidth(m.rightPanelWidth())
-	sections := m.buildContentSections(contentWidth)
-	diffSec, ok := findSection(sections, domain.SectionDiff)
-	if !ok {
-		return
-	}
+	m.switchTab(TabDiff)
 	fileOffset := 0
 	for i := range idx {
 		fileOffset += diffFileDisplayRows(&m.Diff.Files[i])
 	}
 	contentHeight := m.contentViewportHeight()
-	// When fileOffset falls beyond the rendered diff (truncated large diffs), the
-	// scroll would overflow into comments. Show the truncation banner instead.
-	if fileOffset >= diffSec.RowCount {
-		target := diffSec.StartRow + max(0, diffSec.RowCount-contentHeight)
-		m.ContentScroll = clamp(target, 0, m.maxContentScroll())
-		m.leftPanel.Focus = FocusContent
+	diffRows := m.diffSectionRowCount()
+	// When fileOffset falls beyond the rendered diff (truncated large diffs), show
+	// the truncation banner instead.
+	if fileOffset >= diffRows {
+		m.ContentScroll = clamp(max(0, diffRows-contentHeight), 0, m.maxContentScroll())
 		return
 	}
-	m.ContentScroll = clamp(diffSec.StartRow+fileOffset, 0, m.maxContentScroll())
-	m.leftPanel.Focus = FocusContent
+	m.ContentScroll = clamp(fileOffset, 0, m.maxContentScroll())
 }
 
 // cycleForward advances focus: Files → CI (if checks) → Content → Files.
@@ -1264,12 +1229,52 @@ func (m *PRDetailModel) ciVisibleRows() int {
 	return contentH
 }
 
-// maxContentScroll returns the maximum valid content scroll value.
+// switchTab changes the active content tab, saving and restoring per-tab scroll.
+func (m *PRDetailModel) switchTab(tab contentTab) {
+	if m.activeTab == tab {
+		return
+	}
+	// Save current scroll.
+	switch m.activeTab {
+	case TabDescription:
+		m.descScroll = m.ContentScroll
+	case TabDiff:
+		m.diffScroll = m.ContentScroll
+	case TabComments:
+		m.commentsScroll = m.ContentScroll
+	}
+	// Load new scroll.
+	switch tab {
+	case TabDescription:
+		m.ContentScroll = m.descScroll
+	case TabDiff:
+		m.ContentScroll = m.diffScroll
+	case TabComments:
+		m.ContentScroll = m.commentsScroll
+	}
+	m.activeTab = tab
+	m.leftPanel.Focus = FocusContent
+	m.resetCommentCursor()
+	if m.visual.Active {
+		m.exitVisualMode()
+	}
+	m.clampContentScroll()
+}
+
+// maxContentScroll returns the maximum valid content scroll value for the active tab.
 func (m *PRDetailModel) maxContentScroll() int {
-	contentWidth := contentViewportWidth(m.rightPanelWidth())
-	sections := m.buildContentSections(contentWidth)
-	total := totalRowsInSections(sections)
-	return max(0, total-m.contentViewportHeight())
+	cw := contentViewportWidth(m.rightPanelWidth())
+	vh := m.contentViewportHeight()
+	switch m.activeTab {
+	case TabDescription:
+		return max(0, len(m.descriptionLines(cw))-vh)
+	case TabDiff:
+		return max(0, m.diffSectionRowCount()-vh)
+	case TabComments:
+		cLines := m.commentLines(cw, -1)
+		return max(0, len(cLines)-vh)
+	}
+	return 0
 }
 
 func (m *PRDetailModel) clampContentScroll() {
@@ -1324,14 +1329,13 @@ func (m *PRDetailModel) handleRefresh() (*PRDetailModel, tea.Cmd) {
 
 // ── Visual mode & draft helpers ───────────────────────────────────────────────
 
-// diffLineToDisplayRow returns the absolute display row for a diff line.
+// diffLineToDisplayRow returns the display row for a diff line relative to the
+// start of the Diff tab.
 func (m *PRDetailModel) diffLineToDisplayRow(fileIdx, hunkIdx, lineIdx int) int {
 	if m.Diff == nil {
 		return 0
 	}
-	sections := m.buildContentSections(contentViewportWidth(m.rightPanelWidth()))
-	diffSec, _ := findSection(sections, domain.SectionDiff)
-	row := diffSec.StartRow
+	row := 0
 	for i := 0; i < fileIdx; i++ {
 		row += diffFileDisplayRows(&m.Diff.Files[i])
 	}
@@ -1344,20 +1348,17 @@ func (m *PRDetailModel) diffLineToDisplayRow(fileIdx, hunkIdx, lineIdx int) int 
 	return row
 }
 
-// firstDiffLineAtOrBelow finds the first actual DiffLine at or after targetRow.
+// firstDiffLineAtOrBelow finds the first actual DiffLine at or after targetRow,
+// where targetRow is relative to the start of the Diff tab.
 func (m *PRDetailModel) firstDiffLineAtOrBelow(targetRow int) (fileIdx, hunkIdx, lineIdx int, found bool) {
 	if m.Diff == nil || len(m.Diff.Files) == 0 {
 		return 0, 0, 0, false
 	}
-	sections := m.buildContentSections(contentViewportWidth(m.rightPanelWidth()))
-	diffSec, ok := findSection(sections, domain.SectionDiff)
-	if !ok {
+	diffRows := m.diffSectionRowCount()
+	if targetRow < 0 || targetRow >= diffRows {
 		return 0, 0, 0, false
 	}
-	if targetRow < diffSec.StartRow || targetRow >= diffSec.StartRow+diffSec.RowCount {
-		return 0, 0, 0, false
-	}
-	localTarget := targetRow - diffSec.StartRow
+	localTarget := targetRow
 	for fi := range m.Diff.Files {
 		f := &m.Diff.Files[fi]
 		dr := diffFileDisplayRows(f)
@@ -1610,6 +1611,12 @@ func (m *PRDetailModel) lookupDiffLine(path string, line int) string {
 	return ""
 }
 
+// SearchActive reports whether the diff search is currently active.
+func (m *PRDetailModel) SearchActive() bool { return m.searchActive }
+
+// IsDiffTabActive reports whether the Diff tab is currently active.
+func (m *PRDetailModel) IsDiffTabActive() bool { return m.activeTab == TabDiff }
+
 // generateDraftID creates a simple unique ID for a draft comment.
 func generateDraftID() string {
 	return fmt.Sprintf("draft-%d", time.Now().UnixNano())
@@ -1623,7 +1630,7 @@ func (m *PRDetailModel) StatusHint() string {
 	if m.confirmDiscardAll {
 		return fmt.Sprintf("Discard all %d drafts? (y/n)", len(m.drafts))
 	}
-	hint := "Tab: Switch Panel | Space: Visual | 1/2/3: Jump to section | R: Refresh | v: Review | C: Comment | a: Approve | /: Search in Diff"
+	hint := "Tab: Switch Panel | Space: Visual | 1/2/3: Switch tab | R: Refresh | v: Review | C: Comment | a: Approve | /: Search in Diff"
 	if len(m.drafts) > 0 {
 		hint += " | D: Discard all drafts"
 	}

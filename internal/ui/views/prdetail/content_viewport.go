@@ -602,6 +602,48 @@ func (m *PRDetailModel) renderContentLines(
 	return out
 }
 
+// renderDescriptionTab renders the Description tab content at the given scroll
+// and viewport dimensions. Returns exactly contentH lines (blank-padded).
+func (m *PRDetailModel) renderDescriptionTab(scroll, contentH, contentWidth int) []string {
+	lines := m.descriptionLines(contentWidth)
+	blank := strings.Repeat(" ", max(contentWidth, 0))
+	out := make([]string, contentH)
+	for i := range contentH {
+		idx := scroll + i
+		if idx >= 0 && idx < len(lines) {
+			out[i] = lines[idx]
+		} else {
+			out[i] = blank
+		}
+	}
+	return out
+}
+
+// renderDiffTab renders the Diff tab content at the given scroll and viewport
+// dimensions. Returns exactly contentH lines (blank-padded).
+func (m *PRDetailModel) renderDiffTab(scroll, contentH, contentWidth int) []string {
+	localStart := scroll
+	localEnd := scroll + contentH
+	return m.renderDiffSectionLines(localStart, localEnd, contentWidth)
+}
+
+// renderCommentsTab renders the Comments tab content at the given scroll and
+// viewport dimensions. Returns exactly contentH lines (blank-padded).
+func (m *PRDetailModel) renderCommentsTab(scroll, contentH, contentWidth int) []string {
+	lines := m.commentLines(contentWidth, m.commentCursor)
+	blank := strings.Repeat(" ", max(contentWidth, 0))
+	out := make([]string, contentH)
+	for i := range contentH {
+		idx := scroll + i
+		if idx >= 0 && idx < len(lines) {
+			out[i] = lines[idx]
+		} else {
+			out[i] = blank
+		}
+	}
+	return out
+}
+
 // renderDiffSectionLines renders the diff section rows [localStart, localEnd).
 // Applies file-level virtualization: only files whose row ranges overlap
 // [localStart, localEnd) are processed. Rendering stops at maxDiffDisplayRows;

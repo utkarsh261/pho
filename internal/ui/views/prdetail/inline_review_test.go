@@ -58,6 +58,7 @@ func makeInlineReviewModel(width, height int) *PRDetailModel {
 	m.DetailLoading = false
 	m.SetTheme(theme.Default())
 	m.leftPanel.Focus = FocusContent
+	m.activeTab = TabDiff
 	m.ContentScroll = 0
 	return m
 }
@@ -447,10 +448,11 @@ func TestVisualModeSpaceInDescriptionIsNoop(t *testing.T) {
 	t.Parallel()
 	m := makeInlineReviewModel(100, 40)
 	m.Detail = &domain.PRPreviewSnapshot{BodyExcerpt: "some description"}
-	m.ContentScroll = 0 // in Description section
+	m.activeTab = TabDescription
+	m.ContentScroll = 0
 	m = pressKey(m, " ")
 	if m.visual.Active {
-		t.Error("expected V to be no-op in Description section")
+		t.Error("expected Space to be no-op in Description tab")
 	}
 }
 
@@ -590,10 +592,9 @@ func TestJumpToCodeFromInlineComment(t *testing.T) {
 	}
 	m.jumpToSection(3)
 	m.commentCursor = 0
-	beforeScroll := m.ContentScroll
 	m = pressKey(m, "enter")
-	if m.ContentScroll == beforeScroll {
-		t.Error("expected ContentScroll to change after Enter on inline comment")
+	if m.activeTab != TabDiff {
+		t.Errorf("expected activeTab=TabDiff after Enter on inline comment, got %d", m.activeTab)
 	}
 	if m.leftPanel.Focus != FocusContent {
 		t.Errorf("expected focus to move to Content, got %v", m.leftPanel.Focus)

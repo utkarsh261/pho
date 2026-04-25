@@ -151,6 +151,7 @@ func TestSearchVirtualizationScrollToOffscreenMatch(t *testing.T) {
 	m, _, _ := openPRDetailWithDiff(t, files, strings.Repeat("desc ", 30))
 	m.prDetail.ContentScroll = 0
 
+	pressRuneKey(t, m, '2')
 	pressRuneKey(t, m, '/')
 	typeQueryText(t, m, "needle")
 	pressKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
@@ -189,6 +190,7 @@ func TestSearchMatchHighlightInRender(t *testing.T) {
 		),
 	}
 	m, _, _ := openPRDetailWithDiff(t, files, "")
+	pressRuneKey(t, m, '2') // switch to Diff tab before rendering
 
 	before := m.View()
 	beforeLine := findLineWith(before, "needle context one")
@@ -197,6 +199,7 @@ func TestSearchMatchHighlightInRender(t *testing.T) {
 	}
 	beforeEsc := strings.Count(beforeLine, "\x1b[")
 
+	pressRuneKey(t, m, '2')
 	pressRuneKey(t, m, '/')
 	typeQueryText(t, m, "needle")
 	pressKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
@@ -219,6 +222,7 @@ func TestSearchClearedOnEscThenSectionJumpWorks(t *testing.T) {
 	}
 	m, _, _ := openPRDetailWithDiff(t, files, strings.Repeat("long description ", 40))
 
+	pressRuneKey(t, m, '2')
 	pressRuneKey(t, m, '/')
 	typeQueryText(t, m, "needle")
 	pressKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
@@ -242,9 +246,14 @@ func TestSearchClearedOnEscThenSectionJumpWorks(t *testing.T) {
 		t.Fatalf("expected n to no-op after search clear, scroll before=%d after=%d", beforeN, m.prDetail.ContentScroll)
 	}
 
+	// Switch to Description then back to Diff to verify tab switching still works.
+	pressRuneKey(t, m, '1')
+	if m.prDetail.IsDiffTabActive() {
+		t.Fatalf("expected switch to Description tab")
+	}
 	pressRuneKey(t, m, '2')
-	if m.prDetail.ContentScroll <= 0 {
-		t.Fatalf("expected section jump to diff after Esc clear, got scroll=%d", m.prDetail.ContentScroll)
+	if !m.prDetail.IsDiffTabActive() {
+		t.Fatalf("expected switch back to Diff tab")
 	}
 }
 
@@ -255,6 +264,7 @@ func TestSearchEnterThenNAndNNavigateStatusSnapshots(t *testing.T) {
 	}
 	m, _, _ := openPRDetailWithDiff(t, files, "")
 
+	pressRuneKey(t, m, '2')
 	pressRuneKey(t, m, '/')
 	typeQueryText(t, m, "needle")
 	pressKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
@@ -286,6 +296,7 @@ func TestSearchQueryWithSpaceKeyWorksSnapshot(t *testing.T) {
 	}
 	m, _, _ := openPRDetailWithDiff(t, files, "")
 
+	pressRuneKey(t, m, '2')
 	pressRuneKey(t, m, '/')
 	typeQueryWithRealSpace(t, m, "alpha beta")
 	pressKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})

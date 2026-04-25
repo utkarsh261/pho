@@ -5,7 +5,6 @@ import (
 
 	diffmodel "github.com/utkarsh261/pho/internal/diff/model"
 	diffsearch "github.com/utkarsh261/pho/internal/diff/search"
-	"github.com/utkarsh261/pho/internal/domain"
 )
 
 // SearchStatusState returns the status-bar payload for the current search state.
@@ -18,6 +17,9 @@ func (m *PRDetailModel) SearchStatusState() (query string, matchIndex int, match
 }
 
 func (m *PRDetailModel) activateSearch() {
+	if m.activeTab != TabDiff {
+		return
+	}
 	m.searchActive = true
 	m.searchQuery = ""
 	m.searchMatches = nil
@@ -172,29 +174,22 @@ func (m *PRDetailModel) scrollToSearchCursor() {
 
 	m.normalizeDiffRows()
 
-	contentWidth := contentViewportWidth(m.rightPanelWidth())
-	sections := m.buildContentSections(contentWidth)
-	diffSec, ok := findSection(sections, domain.SectionDiff)
-	if !ok {
-		return
-	}
-
 	flatLineIndexWithinFile := m.matchDisplayOffsetWithinFile(match)
 	matchDisplayRow := m.Diff.Files[match.FileIndex].StartRow + flatLineIndexWithinFile
 
 	contentHeight := m.contentViewportHeight()
-	totalContentRows := totalRowsInSections(sections)
+	diffRows := m.diffSectionRowCount()
 
-	// When the match is in a file past the truncation boundary, scrolling to it would
-	// overflow into comments. Show the truncation banner instead.
-	if matchDisplayRow >= diffSec.RowCount {
-		scroll := diffSec.StartRow + max(0, diffSec.RowCount-contentHeight)
-		m.ContentScroll = clamp(scroll, 0, max(0, totalContentRows-contentHeight))
+	// When the match is in a file past the truncation boundary, show the
+	// truncation banner instead.
+	if matchDisplayRow >= diffRows {
+		m.switchTab(TabDiff)
+		m.ContentScroll = clamp(max(0, diffRows-contentHeight), 0, m.maxContentScroll())
 		return
 	}
 
-	matchAbsoluteRow := diffSec.StartRow + matchDisplayRow
-	m.ContentScroll = clamp(matchAbsoluteRow-contentHeight/2, 0, max(0, totalContentRows-contentHeight))
+	m.switchTab(TabDiff)
+	m.ContentScroll = clamp(matchDisplayRow-contentHeight/2, 0, m.maxContentScroll())
 }
 
 func (m *PRDetailModel) matchDisplayOffsetWithinFile(match diffsearch.Match) int {
