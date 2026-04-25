@@ -511,6 +511,9 @@ func (m *PRDetailModel) commentLines(contentWidth int, activeIdx int) []string {
 		block := borderStyle.Render(strings.Join(inner, "\n"))
 		lines = append(lines, strings.Split(block, "\n")...)
 	}
+	// Pad with a trailing blank line so the last comment's bottom border
+	// doesn't sit flush against the viewport edge.
+	lines = append(lines, "")
 	return lines
 }
 

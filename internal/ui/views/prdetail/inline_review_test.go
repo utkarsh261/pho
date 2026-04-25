@@ -764,12 +764,13 @@ func TestCommentEntryStartRowsSyncWithDrafts(t *testing.T) {
 	entries := m.commentEntries()
 	startRows := m.commentEntryStartRows(cw)
 	lines := m.commentLines(cw, -1)
-	// commentLines includes section header (3 rows) + all entries with borders.
-	// Total rows should equal section header + sum(entryRowCount + 2 for border)
+	// commentLines includes section header (3 rows) + all entries with borders + trailing blank.
+	// Total rows should equal section header + sum(entryRowCount + 2 for border) + 1 trailing blank
 	expectedRows := 3 // blank + separator + label
 	for _, e := range entries {
 		expectedRows += m.entryRowCount(e, cw) + 2
 	}
+	expectedRows++ // trailing blank line after last entry
 	if len(lines) != expectedRows {
 		t.Errorf("commentLines row count mismatch: got %d, want %d (with 1 draft)", len(lines), expectedRows)
 	}

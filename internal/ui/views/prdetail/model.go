@@ -714,8 +714,10 @@ func (m *PRDetailModel) moveCursorPrevComment() {
 	m.scrollToCommentCursor()
 }
 
-// scrollToCommentCursor scrolls the minimum amount needed to make the focused
-// comment entry fully visible. No-op when the entry already fits in the viewport.
+// scrollToCommentCursor scrolls comment-wise so the focused comment box is
+// fully visible in the viewport. If the comment is taller than the viewport,
+// its top is aligned to the top of the viewport. No-op when the entry already
+// fits.
 func (m *PRDetailModel) scrollToCommentCursor() {
 	if m.commentCursor < 0 {
 		return
@@ -734,11 +736,12 @@ func (m *PRDetailModel) scrollToCommentCursor() {
 
 	switch {
 	case entryTop < viewTop:
-		// Entry top is above viewport: scroll up to show it.
+		// Entry top is above viewport: scroll up to show it from the top.
 		m.ContentScroll = entryTop
 	case entryBottom > viewBottom:
-		// Entry bottom is below viewport: scroll down the minimum to show it.
-		m.ContentScroll = entryBottom - vh
+		// Entry bottom is below viewport: scroll down to show the whole comment
+		// box starting from its top (comment-wise scrolling).
+		m.ContentScroll = entryTop
 	}
 	m.clampContentScroll()
 }
@@ -1271,7 +1274,7 @@ func (m *PRDetailModel) maxContentScroll() int {
 	case TabDiff:
 		return max(0, m.diffSectionRowCount()-vh)
 	case TabComments:
-		cLines := m.commentLines(cw, -1)
+		cLines := m.commentLines(cw, m.commentCursor)
 		return max(0, len(cLines)-vh)
 	}
 	return 0
