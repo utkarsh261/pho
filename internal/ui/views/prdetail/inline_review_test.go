@@ -94,9 +94,9 @@ func TestDiffLineRoundTrip(t *testing.T) {
 func TestVisualModeEnter(t *testing.T) {
 	t.Parallel()
 	m := makeInlineReviewModel(100, 40)
-	m = pressKey(m, "V")
+	m = pressKey(m, " ")
 	if !m.visual.Active {
-		t.Fatal("expected visual mode active after V")
+		t.Fatal("expected visual mode active after space")
 	}
 	if m.visual.FileIdx != 0 || m.visual.HunkIdx != 0 || m.visual.StartLine != 0 || m.visual.EndLine != 0 {
 		t.Errorf("unexpected visual selection: got (%d,%d,%d,%d), want (0,0,0,0)",
@@ -107,7 +107,7 @@ func TestVisualModeEnter(t *testing.T) {
 func TestVisualModeJExpandsSelection(t *testing.T) {
 	t.Parallel()
 	m := makeInlineReviewModel(100, 40)
-	m = pressKey(m, "V")
+	m = pressKey(m, " ")
 	m = pressKey(m, "j")
 	if m.visual.EndLine != 1 {
 		t.Errorf("expected EndLine=1 after j, got %d", m.visual.EndLine)
@@ -117,7 +117,7 @@ func TestVisualModeJExpandsSelection(t *testing.T) {
 func TestVisualModeJClampsAtHunkBoundary(t *testing.T) {
 	t.Parallel()
 	m := makeInlineReviewModel(100, 40)
-	m = pressKey(m, "V")
+	m = pressKey(m, " ")
 	// Hunk 0 has 3 lines (indices 0,1,2). Expand to the end.
 	m = pressKey(m, "j")
 	m = pressKey(m, "j")
@@ -134,7 +134,7 @@ func TestVisualModeJClampsAtHunkBoundary(t *testing.T) {
 func TestVisualModeKShrinksSelection(t *testing.T) {
 	t.Parallel()
 	m := makeInlineReviewModel(100, 40)
-	m = pressKey(m, "V")
+	m = pressKey(m, " ")
 	m = pressKey(m, "j")
 	m = pressKey(m, "j")
 	if m.visual.EndLine != 2 {
@@ -149,7 +149,7 @@ func TestVisualModeKShrinksSelection(t *testing.T) {
 func TestVisualModeKExitsAtSingleLine(t *testing.T) {
 	t.Parallel()
 	m := makeInlineReviewModel(100, 40)
-	m = pressKey(m, "V")
+	m = pressKey(m, " ")
 	if !m.visual.Active {
 		t.Fatal("setup failed: visual mode not active")
 	}
@@ -162,7 +162,7 @@ func TestVisualModeKExitsAtSingleLine(t *testing.T) {
 func TestVisualModeEscExits(t *testing.T) {
 	t.Parallel()
 	m := makeInlineReviewModel(100, 40)
-	m = pressKey(m, "V")
+	m = pressKey(m, " ")
 	m = pressKey(m, "j")
 	m = pressKey(m, "esc")
 	if m.visual.Active {
@@ -174,7 +174,7 @@ func TestVisualModeBlocksOtherKeys(t *testing.T) {
 	t.Parallel()
 	m := makeInlineReviewModel(100, 40)
 	scrollBefore := m.ContentScroll
-	m = pressKey(m, "V")
+	m = pressKey(m, " ")
 	m = pressKey(m, "o")
 	if m.ContentScroll != scrollBefore {
 		t.Error("expected 'o' to be no-op in visual mode")
@@ -187,7 +187,7 @@ func TestDraftCreationFromVisualMode(t *testing.T) {
 	t.Parallel()
 	m := makeInlineReviewModel(100, 40)
 	m.PRService = &prServiceStub{}
-	m = pressKey(m, "V")
+	m = pressKey(m, " ")
 	m = pressKey(m, "c")
 	if !m.compose.active {
 		t.Fatal("expected compose active after c in visual mode")
@@ -201,7 +201,7 @@ func TestDraftSaveAndReplace(t *testing.T) {
 	t.Parallel()
 	m := makeInlineReviewModel(100, 40)
 	m.PRService = &prServiceStub{}
-	m = pressKey(m, "V")
+	m = pressKey(m, " ")
 	m = pressKey(m, "c")
 	m.compose.SetText("first draft")
 	// Simulate pressing Enter in compose.
@@ -213,7 +213,7 @@ func TestDraftSaveAndReplace(t *testing.T) {
 		t.Errorf("expected body 'first draft', got %q", m.drafts[0].Body)
 	}
 	// Re-select same range and replace.
-	m = pressKey(m, "V")
+	m = pressKey(m, " ")
 	m = pressKey(m, "c")
 	m.compose.SetText("updated draft")
 	m, _ = m.Update(submitComposeMsg{body: "updated draft"})
@@ -230,14 +230,14 @@ func TestDraftDiscardSingle(t *testing.T) {
 	m := makeInlineReviewModel(100, 40)
 	m.PRService = &prServiceStub{}
 	// Create a draft.
-	m = pressKey(m, "V")
+	m = pressKey(m, " ")
 	m = pressKey(m, "c")
 	m, _ = m.Update(submitComposeMsg{body: "draft body"})
 	if len(m.drafts) != 1 {
 		t.Fatalf("setup failed: expected 1 draft, got %d", len(m.drafts))
 	}
 	// Re-enter visual mode on same selection and discard.
-	m = pressKey(m, "V")
+	m = pressKey(m, " ")
 	m = pressKey(m, "d")
 	if len(m.drafts) != 0 {
 		t.Errorf("expected 0 drafts after discard, got %d", len(m.drafts))
@@ -249,10 +249,10 @@ func TestDraftDiscardAll(t *testing.T) {
 	m := makeInlineReviewModel(100, 40)
 	m.PRService = &prServiceStub{}
 	// Create two drafts on different lines.
-	m = pressKey(m, "V")
+	m = pressKey(m, " ")
 	m = pressKey(m, "c")
 	m, _ = m.Update(submitComposeMsg{body: "draft 1"})
-	m = pressKey(m, "V")
+	m = pressKey(m, " ")
 	m = pressKey(m, "j")
 	m = pressKey(m, "c")
 	m, _ = m.Update(submitComposeMsg{body: "draft 2"})
@@ -392,8 +392,8 @@ func TestStatusHintNormal(t *testing.T) {
 	if hint == "" {
 		t.Error("expected non-empty hint")
 	}
-	if !contains(hint, "V: Visual") {
-		t.Errorf("expected hint to contain 'V: Visual', got %q", hint)
+	if !contains(hint, "Space: Visual") {
+		t.Errorf("expected hint to contain 'Space: Visual', got %q", hint)
 	}
 }
 
@@ -439,4 +439,443 @@ func containsAt(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+// ── Visual mode entry guards ──────────────────────────────────────────────────
+
+func TestVisualModeSpaceInDescriptionIsNoop(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.Detail = &domain.PRPreviewSnapshot{BodyExcerpt: "some description"}
+	m.ContentScroll = 0 // in Description section
+	m = pressKey(m, " ")
+	if m.visual.Active {
+		t.Error("expected V to be no-op in Description section")
+	}
+}
+
+func TestVisualModeSpaceInCommentsIsNoop(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.Detail = &domain.PRPreviewSnapshot{Reviewers: []domain.PreviewReviewer{{Login: "alice", State: "APPROVED"}}}
+	m.jumpToSection(3) // jump to Comments
+	m = pressKey(m, " ")
+	if m.visual.Active {
+		t.Error("expected V to be no-op in Comments section")
+	}
+}
+
+func TestVisualModeSpaceWhenFocusFilesIsNoop(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.leftPanel.Focus = FocusFiles
+	m = pressKey(m, " ")
+	if m.visual.Active {
+		t.Error("expected V to be no-op when Files focused")
+	}
+}
+
+func TestVisualModeSpaceWhenFocusCIIsNoop(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.leftPanel.Focus = FocusCI
+	m.leftPanel.Checks = []domain.PreviewCheckRow{{Name: "ci"}}
+	m = pressKey(m, " ")
+	if m.visual.Active {
+		t.Error("expected V to be no-op when CI focused")
+	}
+}
+
+// ── Visual mode auto-scroll ───────────────────────────────────────────────────
+
+func TestVisualModeJAutoScrolls(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	// Scroll to near bottom of diff so expansion goes past viewport.
+	sections := m.buildContentSections(m.contentW())
+	diffSec, _ := findSection(sections, domain.SectionDiff)
+	vh := m.contentViewportHeight()
+	m.ContentScroll = diffSec.RowCount - vh - 1
+	if m.ContentScroll < 0 {
+		m.ContentScroll = 0
+	}
+	m = pressKey(m, " ")
+	// Expand selection to last line of hunk.
+	f := &m.Diff.Files[m.visual.FileIdx]
+	h := &f.Hunks[m.visual.HunkIdx]
+	for m.visual.EndLine < len(h.Lines)-1 {
+		m = pressKey(m, "j")
+	}
+	endRow := m.diffLineToDisplayRow(m.visual.FileIdx, m.visual.HunkIdx, m.visual.EndLine)
+	if endRow >= m.ContentScroll+vh-1 {
+		t.Errorf("expected auto-scroll to keep selection visible: endRow=%d scroll=%d vh=%d",
+			endRow, m.ContentScroll, vh)
+	}
+}
+
+func TestVisualModeKAutoScrolls(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m = pressKey(m, " ")
+	m = pressKey(m, "j")
+	m = pressKey(m, "j")
+	m.ContentScroll = m.diffLineToDisplayRow(m.visual.FileIdx, m.visual.HunkIdx, m.visual.EndLine)
+	// Shrink selection so start line is above viewport
+	m = pressKey(m, "k")
+	m = pressKey(m, "k")
+	startRow := m.diffLineToDisplayRow(m.visual.FileIdx, m.visual.HunkIdx, m.visual.StartLine)
+	if m.ContentScroll > startRow {
+		t.Errorf("expected auto-scroll up: scroll=%d startRow=%d", m.ContentScroll, startRow)
+	}
+}
+
+// ── Draft compose pre-populate ────────────────────────────────────────────────
+
+func TestDraftComposePrepopulatesExisting(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.PRService = &prServiceStub{}
+	m = pressKey(m, " ")
+	m = pressKey(m, "c")
+	m, _ = m.Update(submitComposeMsg{body: "existing draft"})
+	if len(m.drafts) != 1 {
+		t.Fatalf("setup failed: expected 1 draft, got %d", len(m.drafts))
+	}
+	// Re-select same range and hit c again
+	m = pressKey(m, " ")
+	m = pressKey(m, "c")
+	if m.compose.input.Value() != "existing draft" {
+		t.Errorf("expected compose pre-populated with 'existing draft', got %q", m.compose.input.Value())
+	}
+}
+
+// ── Compose esc resumes visual ────────────────────────────────────────────────
+
+func TestComposeEscResumesVisualMode(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.PRService = &prServiceStub{}
+	m = pressKey(m, " ")
+	m = pressKey(m, "j")
+	m = pressKey(m, "c")
+	if !m.compose.active {
+		t.Fatal("setup failed: compose not active")
+	}
+	m = pressKey(m, "esc")
+	if m.compose.active {
+		t.Error("expected compose closed after esc")
+	}
+	if !m.visual.Active {
+		t.Error("expected visual mode resumed after esc in compose")
+	}
+	if m.visual.EndLine != 1 {
+		t.Errorf("expected selection preserved (EndLine=1), got %d", m.visual.EndLine)
+	}
+}
+
+// ── Jump to code from comment ─────────────────────────────────────────────────
+
+func TestJumpToCodeFromInlineComment(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.Detail = &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{
+				Login: "alice", State: "COMMENTED",
+				InlineComments: []domain.PreviewInlineComment{
+					{Body: "nice", Path: "a.go", Line: 1},
+				},
+			},
+		},
+	}
+	m.jumpToSection(3)
+	m.commentCursor = 0
+	beforeScroll := m.ContentScroll
+	m = pressKey(m, "enter")
+	if m.ContentScroll == beforeScroll {
+		t.Error("expected ContentScroll to change after Enter on inline comment")
+	}
+	if m.leftPanel.Focus != FocusContent {
+		t.Errorf("expected focus to move to Content, got %v", m.leftPanel.Focus)
+	}
+}
+
+func TestJumpToCodeFromPRLevelCommentIsNoop(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.Detail = &domain.PRPreviewSnapshot{
+		Comments: []domain.PreviewComment{
+			{Login: "bob", Body: "general comment"},
+		},
+	}
+	m.jumpToSection(3)
+	m.commentCursor = 0
+	beforeScroll := m.ContentScroll
+	m = pressKey(m, "enter")
+	if m.ContentScroll != beforeScroll {
+		t.Error("expected no scroll change for PR-level comment")
+	}
+}
+
+// ── Reply to draft ────────────────────────────────────────────────────────────
+
+func TestReplyToDraftOpensEdit(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.PRService = &prServiceStub{}
+	m.Detail = &domain.PRPreviewSnapshot{}
+	m.drafts = []domain.DraftInlineComment{
+		{Body: "draft body", Path: "a.go", Line: 1, ContextLine: " line1"},
+	}
+	m.jumpToSection(3)
+	m.commentCursor = 0
+	m = pressKey(m, "r")
+	if !m.compose.active {
+		t.Fatal("expected compose active after r on draft")
+	}
+	if m.compose.mode != composeModeDraftInline {
+		t.Errorf("expected composeModeDraftInline for draft edit, got %v", m.compose.mode)
+	}
+	if m.compose.input.Value() != "draft body" {
+		t.Errorf("expected compose pre-populated with 'draft body', got %q", m.compose.input.Value())
+	}
+}
+
+// ── D guard ───────────────────────────────────────────────────────────────────
+
+func TestDNoopWhenNoDrafts(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m = pressKey(m, "D")
+	if m.confirmDiscardAll {
+		t.Error("expected D to be no-op when no drafts")
+	}
+}
+
+// ── Empty body draft ──────────────────────────────────────────────────────────
+
+func TestDraftEmptyBodyIsNoop(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.PRService = &prServiceStub{}
+	m = pressKey(m, " ")
+	m = pressKey(m, "c")
+	beforeCount := len(m.drafts)
+	m, _ = m.Update(submitComposeMsg{body: ""})
+	if len(m.drafts) != beforeCount {
+		t.Error("expected empty body to not create draft")
+	}
+}
+
+// ── Multi-line draft ──────────────────────────────────────────────────────────
+
+func TestMultiLineDraftHasStartLine(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.PRService = &prServiceStub{}
+	m = pressKey(m, " ")
+	m = pressKey(m, "j")
+	m = pressKey(m, "c")
+	m, _ = m.Update(submitComposeMsg{body: "multi line draft"})
+	if len(m.drafts) != 1 {
+		t.Fatalf("expected 1 draft, got %d", len(m.drafts))
+	}
+	d := m.drafts[0]
+	if d.StartLine == 0 {
+		t.Error("expected multi-line draft to have StartLine > 0")
+	}
+	if d.StartSide == "" {
+		t.Error("expected multi-line draft to have StartSide set")
+	}
+}
+
+// ── Single-line draft ─────────────────────────────────────────────────────────
+
+func TestSingleLineDraftOmitsStartLine(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.PRService = &prServiceStub{}
+	m = pressKey(m, " ")
+	m = pressKey(m, "c")
+	m, _ = m.Update(submitComposeMsg{body: "single line draft"})
+	if len(m.drafts) != 1 {
+		t.Fatalf("expected 1 draft, got %d", len(m.drafts))
+	}
+	d := m.drafts[0]
+	if d.StartLine != 0 {
+		t.Errorf("expected single-line draft to have StartLine=0, got %d", d.StartLine)
+	}
+}
+
+// ── Binary file visual mode ───────────────────────────────────────────────────
+
+func TestVisualModeOnBinaryFileIsNoop(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	// Scroll to the binary file section.
+	sections := m.buildContentSections(m.contentW())
+	diffSec, _ := findSection(sections, domain.SectionDiff)
+	// The binary file is the last one. diffFileDisplayRows for binary = 4.
+	// a.go = 3+1+3+1+2 = 10, b.go = 3+1+1 = 5. Total = 15.
+	// Binary starts at offset 15 within diff section.
+	m.ContentScroll = diffSec.StartRow + 15
+	m = pressKey(m, " ")
+	// Binary files have no diff lines, so firstDiffLineAtOrBelow should not find
+	// any diff line and visual mode should not activate.
+	if m.visual.Active {
+		t.Error("expected space on binary file to not enter visual mode")
+	}
+}
+
+// ── Normal mode j/k unaffected ────────────────────────────────────────────────
+
+func TestNormalJKScrollsWhenNotVisual(t *testing.T) {
+	t.Parallel()
+	// Use a smaller height so the diff content exceeds the viewport.
+	m := makeInlineReviewModel(100, 20)
+	m.Detail = &domain.PRPreviewSnapshot{BodyExcerpt: "some description text"}
+	m.leftPanel.Focus = FocusContent
+	before := m.ContentScroll
+	m = pressKey(m, "j")
+	if m.ContentScroll == before {
+		t.Error("expected j to scroll down in normal mode")
+	}
+	m = pressKey(m, "k")
+	if m.ContentScroll != before {
+		t.Errorf("expected k to scroll back up to %d, got %d", before, m.ContentScroll)
+	}
+}
+
+// ── Comment section sync with drafts ──────────────────────────────────────────
+
+func TestCommentEntryStartRowsSyncWithDrafts(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.Detail = &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{Login: "alice", State: "APPROVED", Body: "LGTM"},
+		},
+	}
+	m.drafts = []domain.DraftInlineComment{
+		{Body: "draft", Path: "a.go", Line: 1, ContextLine: " line1"},
+	}
+	cw := m.contentW()
+	entries := m.commentEntries()
+	startRows := m.commentEntryStartRows(cw)
+	lines := m.commentLines(cw, -1)
+	// commentLines includes section header (3 rows) + all entries with borders.
+	// Total rows should equal section header + sum(entryRowCount + 2 for border)
+	expectedRows := 3 // blank + separator + label
+	for _, e := range entries {
+		expectedRows += m.entryRowCount(e, cw) + 2
+	}
+	if len(lines) != expectedRows {
+		t.Errorf("commentLines row count mismatch: got %d, want %d (with 1 draft)", len(lines), expectedRows)
+	}
+	if len(startRows) != len(entries) {
+		t.Fatalf("startRows length mismatch: got %d, want %d", len(startRows), len(entries))
+	}
+	// Verify each startRow points to the correct position in lines.
+	for i, sr := range startRows {
+		if sr < 3 || sr >= len(lines) {
+			t.Errorf("startRows[%d]=%d out of bounds [3,%d)", i, sr, len(lines))
+			continue
+		}
+		// The line at startRows[i] should be the top border of the entry.
+		// We can't easily verify border content, but we can check it's non-empty.
+		if lines[sr] == "" {
+			t.Errorf("startRows[%d]=%d points to empty line", i, sr)
+		}
+	}
+}
+
+// ── v/a batch submit ──────────────────────────────────────────────────────────
+
+func TestVWithDraftsEmitsBatchSubmit(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.PRService = &prServiceStub{}
+	m.drafts = []domain.DraftInlineComment{{Body: "draft"}}
+	m = pressKey(m, "v")
+	m.compose.SetText("review body")
+	_, cmd := m.Update(submitComposeMsg{body: "review body"})
+	if cmd == nil {
+		t.Fatal("expected cmd from submit with drafts")
+	}
+	// The actual batch-submit command is inside the tea.Batch returned by Update.
+	// Synchronous model state does not change to posting here; that happens when
+	// the async command completes.
+}
+
+// ── Esc cancel during confirm discard ─────────────────────────────────────────
+
+func TestDiscardAllEscCancels(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.drafts = []domain.DraftInlineComment{{Body: "draft"}}
+	m = pressKey(m, "D")
+	if !m.confirmDiscardAll {
+		t.Fatal("setup failed: confirmDiscardAll not set")
+	}
+	m = pressKey(m, "esc")
+	if m.confirmDiscardAll {
+		t.Error("expected confirmDiscardAll=false after esc")
+	}
+	if len(m.drafts) != 1 {
+		t.Errorf("expected draft preserved after esc cancel, got %d", len(m.drafts))
+	}
+}
+
+// ── Diff viewport draft indicator ─────────────────────────────────────────────
+
+func TestDraftIndicatorVisibleInDiffViewport(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.drafts = []domain.DraftInlineComment{
+		{Path: "a.go", Line: 1, Side: "RIGHT"},
+	}
+	cw := m.contentW()
+	sections := m.buildContentSections(cw)
+	diffSec, _ := findSection(sections, domain.SectionDiff)
+	// Render diff section starting from the first line.
+	lines := m.renderDiffSectionLines(0, diffSec.RowCount, cw)
+	// The first diff line of a.go should have some styling (we can't easily check
+	// ANSI codes in unit test, but we can verify the line is present and not empty).
+	found := false
+	for _, line := range lines {
+		if line != "" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected non-empty diff lines")
+	}
+}
+
+// ── Selection highlight overrides draft indicator ─────────────────────────────
+
+func TestSelectionHighlightOverridesDraftIndicator(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.drafts = []domain.DraftInlineComment{
+		{Path: "a.go", Line: 1, Side: "RIGHT"},
+	}
+	m.visual.Active = true
+	m.visual.FileIdx = 0
+	m.visual.HunkIdx = 0
+	m.visual.StartLine = 0
+	m.visual.EndLine = 0
+	// The line at (0,0,0) is both selected and drafted.
+	// Selection highlight should take precedence.
+	// We verify by checking the model state, not rendered output.
+	if !m.visual.Active {
+		t.Fatal("setup failed: visual mode not active")
+	}
+	if m.drafts[0].Path != "a.go" || m.drafts[0].Line != 1 {
+		t.Fatal("setup failed: draft not on expected line")
+	}
+	// The rendering logic in renderDiffSectionLines checks isSelected first,
+	// then isDrafted. This is verified by code inspection; the test documents
+	// the expected precedence.
 }

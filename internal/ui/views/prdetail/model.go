@@ -183,6 +183,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 
 	// Forward all messages to compose so textinput receives tick events for cursor blink.
 	var composeCmd tea.Cmd
+	composeWasActive := m.compose.active
 	m.compose, composeCmd = m.compose.Update(msg)
 
 	switch msg := msg.(type) {
@@ -265,6 +266,9 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 	case submitComposeMsg:
 		body := msg.body
 		if m.compose.mode == composeModeDraftInline {
+			if body == "" {
+				return m, tea.Batch(spinCmd, composeCmd)
+			}
 			draft := m.buildDraftFromVisualSelection(body)
 			m.upsertDraft(draft)
 			m.persistDrafts()
@@ -290,6 +294,10 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 			postCmd := cmds.SubmitReviewWithDraftsCmd(m.PRService, m.Summary.ID, body, event, m.drafts)
 			return m, tea.Batch(spinCmd, composeCmd, postCmd)
 		}
+		// No drafts: review comment with empty body is a no-op.
+		if m.compose.mode == composeModeReviewComment && body == "" {
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
 		var postCmd tea.Cmd
 		if m.compose.mode == composeModeReviewComment {
 			postCmd = cmds.PostReviewCommentCmd(m.PRService, m.Summary.ID, body)
@@ -301,6 +309,11 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 	case submitApproveMsg:
 		if m.PRService == nil {
 			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		// When drafts exist, batch-submit them as an approved review.
+		if len(m.drafts) > 0 {
+			postCmd := cmds.SubmitReviewWithDraftsCmd(m.PRService, m.Summary.ID, msg.body, "APPROVE", m.drafts)
+			return m, tea.Batch(spinCmd, composeCmd, postCmd)
 		}
 		return m, tea.Batch(spinCmd, composeCmd, cmds.ApprovePRCmd(m.PRService, m.Summary.ID, msg.body))
 
@@ -392,6 +405,11 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 	case tea.KeyMsg:
 		if m.compose.active {
 			// Key already routed to compose.Update above; skip handleKey.
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		// If compose was just closed from draft-inline mode (via Esc), keep visual
+		// mode active instead of letting handleKey process the Esc key.
+		if composeWasActive && !m.compose.active && m.compose.mode == composeModeDraftInline && msg.String() == "esc" {
 			return m, tea.Batch(spinCmd, composeCmd)
 		}
 		next, cmd := m.handleKey(msg)
@@ -841,7 +859,7 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		case "c":
 			if m.PRService != nil {
 				draft := m.findDraftForSelection()
-				m.compose.Open(composeModeDraftInline, commentEntry{})
+				m.compose.Open(composeModeDraftInline, commentEntry{}, len(m.drafts))
 				if draft != nil {
 					m.compose.SetText(draft.Body)
 				}
@@ -894,17 +912,17 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		return m.handleRefresh()
 	case "C":
 		if m.PRService != nil {
-			m.compose.Open(composeModeNew, commentEntry{})
+			m.compose.Open(composeModeNew, commentEntry{}, len(m.drafts))
 		}
 		return m, nil
 	case "a":
 		if m.PRService != nil {
-			m.compose.Open(composeModeApprove, commentEntry{})
+			m.compose.Open(composeModeApprove, commentEntry{}, len(m.drafts))
 		}
 		return m, nil
 	case "v":
 		if m.PRService != nil {
-			m.compose.Open(composeModeReviewComment, commentEntry{})
+			m.compose.Open(composeModeReviewComment, commentEntry{}, len(m.drafts))
 		}
 		return m, nil
 	case "r":
@@ -914,15 +932,15 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 				entry := entries[m.commentCursor]
 				if entry.isDraft {
 					// Re-open draft inline for editing.
-					m.compose.Open(composeModeDraftInline, commentEntry{})
+					m.compose.Open(composeModeDraftInline, commentEntry{}, len(m.drafts))
 					m.compose.SetText(entry.body)
 				} else {
-					m.compose.Open(composeModeReply, entry)
+					m.compose.Open(composeModeReply, entry, len(m.drafts))
 				}
 			}
 		}
 		return m, nil
-	case "V":
+	case " ":
 		if m.leftPanel.Focus == FocusContent && m.isInDiffSection() {
 			m.enterVisualMode()
 		}
@@ -1345,7 +1363,8 @@ func (m *PRDetailModel) firstDiffLineAtOrBelow(targetRow int) (fileIdx, hunkIdx,
 		dr := diffFileDisplayRows(f)
 		if localTarget < dr {
 			if f.IsBinary {
-				return fi, 0, 0, true
+				// Skip binary files — no diff lines to select.
+				return 0, 0, 0, false
 			}
 			localTarget -= 3 // skip blank, separator, header
 			if localTarget <= 0 {
@@ -1604,7 +1623,7 @@ func (m *PRDetailModel) StatusHint() string {
 	if m.confirmDiscardAll {
 		return fmt.Sprintf("Discard all %d drafts? (y/n)", len(m.drafts))
 	}
-	hint := "Tab: Switch Panel | V: Visual | 1/2/3: Jump to section | R: Refresh | v: Review | C: Comment | a: Approve | /: Search in Diff"
+	hint := "Tab: Switch Panel | Space: Visual | 1/2/3: Jump to section | R: Refresh | v: Review | C: Comment | a: Approve | /: Search in Diff"
 	if len(m.drafts) > 0 {
 		hint += " | D: Discard all drafts"
 	}

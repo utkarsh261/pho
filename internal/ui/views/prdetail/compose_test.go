@@ -56,7 +56,7 @@ func TestBuildReplyBodyMultilineQuoting(t *testing.T) {
 
 func newActiveCompose(th *theme.Theme) ComposeModel {
 	c := newComposeModel(th)
-	c.Open(composeModeNew, commentEntry{})
+	c.Open(composeModeNew, commentEntry{}, 0)
 	return c
 }
 
@@ -179,7 +179,7 @@ func TestComposeViewIdleGolden(t *testing.T) {
 		t.Run(fmt.Sprintf("w%d", w), func(t *testing.T) {
 			t.Parallel()
 			c := newComposeModel(th)
-			c.Open(composeModeNew, commentEntry{})
+			c.Open(composeModeNew, commentEntry{}, 0)
 			got := descStripANSI(c.View(w))
 			checkGolden(t, got, fmt.Sprintf("compose_idle_w%d.txt", w))
 		})
@@ -193,7 +193,7 @@ func TestComposeViewReplyGolden(t *testing.T) {
 		t.Run(fmt.Sprintf("w%d", w), func(t *testing.T) {
 			t.Parallel()
 			c := newComposeModel(th)
-			c.Open(composeModeReply, commentEntry{login: "alice"})
+			c.Open(composeModeReply, commentEntry{login: "alice"}, 0)
 			got := descStripANSI(c.View(w))
 			checkGolden(t, got, fmt.Sprintf("compose_reply_w%d.txt", w))
 		})
@@ -207,7 +207,7 @@ func TestComposeViewPostingGolden(t *testing.T) {
 		t.Run(fmt.Sprintf("w%d", w), func(t *testing.T) {
 			t.Parallel()
 			c := newComposeModel(th)
-			c.Open(composeModeNew, commentEntry{})
+			c.Open(composeModeNew, commentEntry{}, 0)
 			c.status = composeStatusPosting
 			got := descStripANSI(c.View(w))
 			checkGolden(t, got, fmt.Sprintf("compose_posting_w%d.txt", w))
@@ -222,7 +222,7 @@ func TestComposeViewSuccessGolden(t *testing.T) {
 		t.Run(fmt.Sprintf("w%d", w), func(t *testing.T) {
 			t.Parallel()
 			c := newComposeModel(th)
-			c.Open(composeModeNew, commentEntry{})
+			c.Open(composeModeNew, commentEntry{}, 0)
 			c.status = composeStatusSuccess
 			got := descStripANSI(c.View(w))
 			checkGolden(t, got, fmt.Sprintf("compose_success_w%d.txt", w))
@@ -237,7 +237,7 @@ func TestComposeViewErrorGolden(t *testing.T) {
 		t.Run(fmt.Sprintf("w%d", w), func(t *testing.T) {
 			t.Parallel()
 			c := newComposeModel(th)
-			c.Open(composeModeNew, commentEntry{})
+			c.Open(composeModeNew, commentEntry{}, 0)
 			c.status = composeStatusError
 			c.errMsg = "403 Forbidden"
 			got := descStripANSI(c.View(w))

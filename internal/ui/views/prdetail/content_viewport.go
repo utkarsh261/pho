@@ -632,6 +632,43 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 
 	cw := max(contentWidth, 1)
 
+	// Build a set of hunk line indices covered by drafts so the indicator
+	// highlights the full selected range, even when it spans both LEFT
+	// (deletion) and RIGHT (addition) sides.
+	type hunkLineKey struct{ fileIdx, hunkIdx, lineIdx int }
+	draftCovered := make(map[hunkLineKey]bool)
+	for _, d := range m.drafts {
+		for fi, f := range m.Diff.Files {
+			if f.NewPath != d.Path && f.OldPath != d.Path {
+				continue
+			}
+			for hi, h := range f.Hunks {
+				startLI, endLI := -1, -1
+				for li, dl := range h.Lines {
+					for _, a := range dl.Anchors {
+						if a.Path != d.Path || a.Line == nil {
+							continue
+						}
+						if d.StartLine > 0 && a.Side == d.StartSide && *a.Line == d.StartLine {
+							startLI = li
+						}
+						if a.Side == d.Side && *a.Line == d.Line {
+							endLI = li
+						}
+					}
+				}
+				if endLI >= 0 {
+					if startLI < 0 {
+						startLI = endLI
+					}
+					for li := startLI; li <= endLI; li++ {
+						draftCovered[hunkLineKey{fi, hi, li}] = true
+					}
+				}
+			}
+		}
+	}
+
 	// Determine whether truncation is needed (recompute real total here).
 	realTotal := 0
 	for i := range m.Diff.Files {
@@ -745,16 +782,7 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 					// Apply visual selection highlight or draft indicator.
 					isSelected := m.visual.Active && m.visual.FileIdx == i && m.visual.HunkIdx == hi &&
 						li >= m.visual.StartLine && li <= m.visual.EndLine
-					isDrafted := false
-					if !isSelected && dl.Anchors != nil && len(dl.Anchors) > 0 {
-						a := dl.Anchors[0]
-						for _, d := range m.drafts {
-							if d.Path == a.Path && a.Line != nil && d.Line == *a.Line && d.Side == a.Side {
-								isDrafted = true
-								break
-							}
-						}
-					}
+					isDrafted := !isSelected && draftCovered[hunkLineKey{i, hi, li}]
 
 					if isSelected {
 						if m.theme != nil {

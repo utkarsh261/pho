@@ -1,6 +1,7 @@
 package prdetail
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -40,14 +41,15 @@ type openEditorComposeMsg struct{ draft string }
 
 // ComposeModel is the bottom two-row compose pane shown when writing a comment.
 type ComposeModel struct {
-	active  bool
-	mode    composeMode
-	target  commentEntry // populated for reply mode; zero value for new comment
-	input   textinput.Model
-	rawBody string // full multi-line text from $EDITOR; empty when user is typing in input
-	status  composeStatus
-	errMsg  string
-	theme   *theme.Theme
+	active     bool
+	mode       composeMode
+	target     commentEntry // populated for reply mode; zero value for new comment
+	input      textinput.Model
+	rawBody    string // full multi-line text from $EDITOR; empty when user is typing in input
+	status     composeStatus
+	errMsg     string
+	theme      *theme.Theme
+	draftCount int // number of draft inline comments (shown in review/approve hints)
 }
 
 func newComposeModel(th *theme.Theme) ComposeModel {
@@ -60,10 +62,11 @@ func newComposeModel(th *theme.Theme) ComposeModel {
 }
 
 // Open activates the compose pane in the given mode.
-func (c *ComposeModel) Open(mode composeMode, target commentEntry) {
+func (c *ComposeModel) Open(mode composeMode, target commentEntry, draftCount int) {
 	c.active = true
 	c.mode = mode
 	c.target = target
+	c.draftCount = draftCount
 	c.status = composeStatusIdle
 	c.errMsg = ""
 	c.input.Reset()
@@ -123,6 +126,11 @@ func (c ComposeModel) Update(msg tea.Msg) (ComposeModel, tea.Cmd) {
 		if c.mode == composeModeApprove {
 			c.status = composeStatusPosting
 			return c, func() tea.Msg { return submitApproveMsg{body: body} }
+		}
+		if c.mode == composeModeReviewComment {
+			// Allow empty body when drafts exist; PRDetailModel handles the no-op.
+			c.status = composeStatusPosting
+			return c, func() tea.Msg { return submitComposeMsg{body: body} }
 		}
 		if body == "" {
 			return c, nil // silent no-op
@@ -207,10 +215,18 @@ func (c *ComposeModel) View(width int) string {
 			hint = "Enter: Send   Ctrl+E: $EDITOR   Esc: Cancel"
 		case composeModeApprove:
 			prefix = "Approve PR ▸ "
-			hint = "Enter: Approve   Ctrl+E: $EDITOR   Esc: Cancel"
+			if c.draftCount > 0 {
+				hint = fmt.Sprintf("Enter: Approve   Ctrl+E: $EDITOR   Esc: Cancel   (includes +%d draft comments)", c.draftCount)
+			} else {
+				hint = "Enter: Approve   Ctrl+E: $EDITOR   Esc: Cancel"
+			}
 		case composeModeReviewComment:
 			prefix = "Review comment ▸ "
-			hint = "Enter: Send   Ctrl+E: $EDITOR   Esc: Cancel"
+			if c.draftCount > 0 {
+				hint = fmt.Sprintf("Enter: Send   Ctrl+E: $EDITOR   Esc: Cancel   (includes +%d draft comments)", c.draftCount)
+			} else {
+				hint = "Enter: Send   Ctrl+E: $EDITOR   Esc: Cancel"
+			}
 		case composeModeDraftInline:
 			prefix = "Draft inline comment ▸ "
 			hint = "Enter: Save   Ctrl+E: $EDITOR   Esc: Cancel"
