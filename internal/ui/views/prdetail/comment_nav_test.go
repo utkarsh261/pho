@@ -206,24 +206,24 @@ func TestRKeyOpensReplyComposeWithCursor(t *testing.T) {
 	}
 }
 
-func TestCKeyOpensNewCompose(t *testing.T) {
+func TestShiftCKeyOpensNewCompose(t *testing.T) {
 	t.Parallel()
 	m := makeCommentModel(100, 40)
 	m.PRService = &prServiceStub{}
-	m = pressKey(m, "c")
+	m = pressKey(m, "C")
 	if !m.compose.active {
-		t.Error("expected compose to open after c")
+		t.Error("expected compose to open after C")
 	}
 	if m.compose.mode != composeModeNew {
 		t.Errorf("expected composeModeNew, got %v", m.compose.mode)
 	}
 }
 
-func TestCKeyNoopWithoutPRService(t *testing.T) {
+func TestShiftCKeyNoopWithoutPRService(t *testing.T) {
 	t.Parallel()
 	m := makeCommentModel(100, 40)
 	m.PRService = nil
-	m = pressKey(m, "c")
+	m = pressKey(m, "C")
 	if m.compose.active {
 		t.Error("expected compose to stay closed when PRService is nil")
 	}
@@ -236,7 +236,7 @@ func TestComposeActiveBlocksNavigation(t *testing.T) {
 	m := makeCommentModel(100, 40)
 	m.PRService = &prServiceStub{}
 	scrollBefore := m.ContentScroll
-	m = pressKey(m, "c") // open compose
+	m = pressKey(m, "C") // open compose
 	m = pressKey(m, "j") // should go to compose, not scroll
 	// Content scroll should not change because j was consumed by compose.
 	if m.ContentScroll != scrollBefore {

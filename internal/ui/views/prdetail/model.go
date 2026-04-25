@@ -710,7 +710,7 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		return m, m.emitBackToDashboard()
 	case "R":
 		return m.handleRefresh()
-	case "c":
+	case "C":
 		if m.PRService != nil {
 			m.compose.Open(composeModeNew, commentEntry{})
 		}

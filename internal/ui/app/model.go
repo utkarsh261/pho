@@ -1070,7 +1070,7 @@ func (m *Model) syncStatus() {
 		m.status.SelectedRepo = ""
 	}
 	if m.currentView() == domain.PrimaryViewPRDetail {
-		m.status.HintOverride = "Tab: Switch Panel | 1/2/3: Jump to section | R: Refresh | v: Review | c: Comment | a: Approve | /: Search in Diff"
+		m.status.HintOverride = "Tab: Switch Panel | 1/2/3: Jump to section | R: Refresh | v: Review | C: Comment | a: Approve | /: Search in Diff"
 	} else {
 		m.status.HintOverride = ""
 	}
