@@ -148,6 +148,21 @@ type PreviewInlineComment struct {
 	Line  int // 0 if unknown
 }
 
+// DraftInlineComment is a user-created inline comment that has not been
+// submitted to GitHub yet. It persists across app restarts via cache.
+type DraftInlineComment struct {
+	ID        string    // UUID (client-generated)
+	Path      string    // file path
+	Line      int       // end line number
+	Side      string    // "RIGHT" | "LEFT"
+	StartLine int       // start line (0 for single-line)
+	StartSide string    // start side (empty for single-line)
+	Body      string
+	ContextLine string  // the raw diff line text for display
+	HeadSHA   string    // commit SHA this draft is anchored to
+	CreatedAt time.Time
+}
+
 type PreviewReviewer struct {
 	Login          string
 	State          string

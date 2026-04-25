@@ -336,3 +336,15 @@ func (s *prServiceStub) LoadDiff(_ context.Context, _ domain.Repository, _ int, 
 func (s *prServiceStub) PostComment(_ context.Context, _, _ string) error       { return nil }
 func (s *prServiceStub) PostReviewComment(_ context.Context, _, _ string) error { return nil }
 func (s *prServiceStub) ApprovePR(_ context.Context, _, _ string) error         { return nil }
+func (s *prServiceStub) SubmitReviewWithComments(_ context.Context, _, _, _ string, _ []domain.DraftInlineComment) error {
+	return nil
+}
+func (s *prServiceStub) SaveDraftComments(_ context.Context, _ domain.Repository, _ int, _ string, _ []domain.DraftInlineComment) error {
+	return nil
+}
+func (s *prServiceStub) LoadDraftComments(_ context.Context, _ domain.Repository, _ int, _ string) ([]domain.DraftInlineComment, error) {
+	return nil, nil
+}
+func (s *prServiceStub) DeleteDraftComments(_ context.Context, _ domain.Repository, _ int, _ string) error {
+	return nil
+}

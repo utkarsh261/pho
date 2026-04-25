@@ -18,9 +18,10 @@ import (
 
 const (
 	// Cache key prefixes.
-	cacheKindPreview = "preview"
-	cacheKindDiff    = "diff"
-	cacheVersion     = 1
+	cacheKindPreview      = "preview"
+	cacheKindDiff         = "diff"
+	cacheKindDraftInline  = "draft_inline"
+	cacheVersion          = 1
 
 	// Preview cache TTL (shared with dashboard).
 	cacheTTL = 2 * time.Minute
@@ -119,6 +120,59 @@ func (s *PRService) ApprovePR(ctx context.Context, prID string, body string) err
 		s.logWarn("approve pr failed", "prID", prID, "err", err)
 		return err
 	}
+	return nil
+}
+
+// SubmitReviewWithComments submits a PR review with inline comments.
+func (s *PRService) SubmitReviewWithComments(ctx context.Context, prID, body, event string, comments []domain.DraftInlineComment) error {
+	s.logDebug("submit review with comments", "prID", prID, "event", event, "comments", len(comments))
+	if err := s.Client.SubmitReviewWithComments(ctx, s.Host, prID, body, event, comments); err != nil {
+		s.logWarn("submit review with comments failed", "prID", prID, "err", err)
+		return err
+	}
+	return nil
+}
+
+// SaveDraftComments persists draft inline comments for a PR.
+func (s *PRService) SaveDraftComments(ctx context.Context, repo domain.Repository, number int, headSHA string, drafts []domain.DraftInlineComment) error {
+	key := draftInlineCacheKey(repo.Host, repoFullName(repo), number, headSHA)
+	meta := draftInlineMeta(key, repo, number, headSHA, s.Now().UTC())
+	if err := s.Cache.Write(ctx, key, drafts, meta); err != nil {
+		s.logWarn("save draft comments failed", "key", key, "err", err)
+		return err
+	}
+	s.logDebug("draft comments saved", "key", key, "count", len(drafts))
+	return nil
+}
+
+// LoadDraftComments loads draft inline comments for a PR.
+// If headSHA is empty or doesn't match the stored SHA, returns empty slice.
+func (s *PRService) LoadDraftComments(ctx context.Context, repo domain.Repository, number int, headSHA string) ([]domain.DraftInlineComment, error) {
+	if headSHA == "" {
+		return nil, nil
+	}
+	key := draftInlineCacheKey(repo.Host, repoFullName(repo), number, headSHA)
+	var drafts []domain.DraftInlineComment
+	_, found, err := s.Cache.L2.Get(ctx, key, &drafts)
+	if err != nil {
+		s.logWarn("load draft comments failed", "key", key, "err", err)
+		return nil, err
+	}
+	if !found {
+		return nil, nil
+	}
+	s.logDebug("draft comments loaded", "key", key, "count", len(drafts))
+	return drafts, nil
+}
+
+// DeleteDraftComments removes draft inline comments for a PR.
+func (s *PRService) DeleteDraftComments(ctx context.Context, repo domain.Repository, number int, headSHA string) error {
+	key := draftInlineCacheKey(repo.Host, repoFullName(repo), number, headSHA)
+	if err := s.Cache.Delete(ctx, key); err != nil {
+		s.logWarn("delete draft comments failed", "key", key, "err", err)
+		return err
+	}
+	s.logDebug("draft comments deleted", "key", key)
 	return nil
 }
 
@@ -286,6 +340,26 @@ func diffMeta(key string, repo domain.Repository, number int, fetchedAt time.Tim
 		FetchedAt: fetchedAt,
 		ExpiresAt: farFuture,
 		Encoding:  "gob",
+	}
+}
+
+func draftInlineCacheKey(host, repo string, number int, sha string) string {
+	return fmt.Sprintf("draft_inline:v1:host=%s:repo=%s:pr=%d:sha=%s", host, repo, number, sha)
+}
+
+func draftInlineMeta(key string, repo domain.Repository, number int, headSHA string, fetchedAt time.Time) domain.CacheMeta {
+	// Draft comments persist indefinitely — no expiry.
+	farFuture := fetchedAt.Add(365 * 24 * time.Hour)
+	return domain.CacheMeta{
+		Key:       key,
+		Kind:      cacheKindDraftInline,
+		Version:   cacheVersion,
+		Host:      repo.Host,
+		Repo:      repoFullName(repo),
+		PRNumber:  &number,
+		FetchedAt: fetchedAt,
+		ExpiresAt: farFuture,
+		Encoding:  "json",
 	}
 }
 

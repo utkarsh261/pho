@@ -237,14 +237,18 @@ func (m *PRDetailModel) diffSectionRowCount() int {
 
 // commentEntry is a single comment or review entry in the Comments section.
 type commentEntry struct {
-	login string
-	state string // review state ("APPROVED", "COMMENTED", etc.) or "" for plain comments
-	ts    time.Time
-	body  string
+	login       string
+	state       string // review state ("APPROVED", "COMMENTED", etc.) or "" for plain comments
+	ts          time.Time
+	body        string
+	path        string  // empty for PR-level comments
+	line        int     // 0 for PR-level comments
+	contextLine string  // the raw diff line text
+	isDraft     bool
 }
 
 // commentEntries returns the sorted slice of comment/review entries for the current PR.
-// Entries are sorted chronologically (oldest first); zero-timestamp entries go last.
+// Draft entries appear first, followed by real entries sorted chronologically.
 // Returns nil when detail is not loaded.
 func (m *PRDetailModel) commentEntries() []commentEntry {
 	if m.Detail == nil {
@@ -252,17 +256,44 @@ func (m *PRDetailModel) commentEntries() []commentEntry {
 	}
 	var entries []commentEntry
 
+	// Drafts first.
+	for _, d := range m.drafts {
+		entries = append(entries, commentEntry{
+			login:       "[DRAFT]",
+			ts:          d.CreatedAt,
+			body:        d.Body,
+			path:        d.Path,
+			line:        d.Line,
+			contextLine: d.ContextLine,
+			isDraft:     true,
+		})
+	}
+
+	// Real inline comments from reviewers.
 	for _, r := range m.Detail.Reviewers {
 		if r.Login == "" {
 			continue
 		}
+		// Add inline comments as individual entries.
+		for _, ic := range r.InlineComments {
+			entries = append(entries, commentEntry{
+				login:       r.Login,
+				state:       r.State,
+				ts:          r.SubmittedAt,
+				body:        ic.Body,
+				path:        ic.Path,
+				line:        ic.Line,
+				contextLine: m.lookupDiffLine(ic.Path, ic.Line),
+			})
+		}
+		// Add the review summary entry only if it has a body or no inline comments.
 		state := r.State
 		if state == "" {
 			state = "COMMENTED"
 		}
 		body := r.Body
 		if body == "" && len(r.InlineComments) > 0 {
-			body = buildInlineBody(r.InlineComments)
+			continue // skip empty summary when inline comments exist
 		}
 		entries = append(entries, commentEntry{
 			login: r.Login,
@@ -283,9 +314,11 @@ func (m *PRDetailModel) commentEntries() []commentEntry {
 		})
 	}
 
-	// Insertion-sort by timestamp: zero times go last.
-	for i := 1; i < len(entries); i++ {
-		for j := i; j > 0; j-- {
+	// Sort non-draft entries by timestamp: zero times go last.
+	// Drafts stay at the top (indices 0..draftCount-1).
+	draftCount := len(m.drafts)
+	for i := draftCount + 1; i < len(entries); i++ {
+		for j := i; j > draftCount; j-- {
 			a, b := entries[j-1], entries[j]
 			aZero, bZero := a.ts.IsZero(), b.ts.IsZero()
 			if aZero && !bZero {
@@ -301,13 +334,18 @@ func (m *PRDetailModel) commentEntries() []commentEntry {
 }
 
 // entryRowCount returns the display-row count for a single comment entry at cw columns.
-// Layout: 1 header + (if body: 1 blank + bodyLines) + 1 trailing blank.
+// Layout: 1 header + (if path: 1 blank + 1 path:line + 1 contextLine) + (if body: 1 blank + bodyLines) + 1 trailing blank.
 // Body wraps at innerW = cw-2 to match the width inside the rounded border in commentLines.
 // Must exactly mirror what commentLines() generates for each entry.
 func (m *PRDetailModel) entryRowCount(e commentEntry, cw int) int {
 	rows := 1 // header line
-	if e.body != "" {
+	if e.path != "" && e.line > 0 {
 		rows++ // blank after header
+		rows++ // path:line line
+		rows++ // context line
+	}
+	if e.body != "" {
+		rows++ // blank before body
 		innerW := max(cw-2, 1)
 		if m.mdRenderer != nil {
 			rows += len(m.mdRenderer.Render(e.body, innerW))
@@ -405,23 +443,47 @@ func (m *PRDetailModel) commentLines(contentWidth int, activeIdx int) []string {
 			}
 		}
 
-		// Active entry gets a right-aligned reply hint in the header.
+		// Active entry gets a right-aligned hint in the header.
 		if active {
-			hint := "[r: Reply]"
-			if m.theme != nil {
-				hint = m.theme.MutedTxt.Render(hint)
+			var hint string
+			if e.path != "" && e.line > 0 {
+				hint = "[Enter]"
+			} else if !e.isDraft {
+				hint = "[r: Reply]"
 			}
-			pad := innerW - lipgloss.Width(headerText) - lipgloss.Width(hint)
-			if pad > 0 {
-				headerText += strings.Repeat(" ", pad) + hint
-			} else {
-				headerText += " " + hint
+			if hint != "" {
+				if m.theme != nil {
+					hint = m.theme.MutedTxt.Render(hint)
+				}
+				pad := innerW - lipgloss.Width(headerText) - lipgloss.Width(hint)
+				if pad > 0 {
+					headerText += strings.Repeat(" ", pad) + hint
+				} else {
+					headerText += " " + hint
+				}
 			}
 		}
 
 		// Collect inner lines (same structure for active and inactive).
 		var inner []string
 		inner = append(inner, headerText)
+		if e.path != "" && e.line > 0 {
+			inner = append(inner, "")
+			loc := fmt.Sprintf("%s:%d", e.path, e.line)
+			if m.theme != nil {
+				loc = m.theme.MutedTxt.Render(loc)
+			}
+			inner = append(inner, loc)
+			ctxLine := e.contextLine
+			if ctxLine == "" {
+				ctxLine = " "
+			}
+			// Render context line in a subtle/monospace style.
+			if m.theme != nil {
+				ctxLine = lipgloss.NewStyle().Foreground(m.theme.Muted).Render(ctxLine)
+			}
+			inner = append(inner, ctxLine)
+		}
 		if e.body != "" {
 			inner = append(inner, "")
 			bodyW := innerW
@@ -659,9 +721,9 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 			rows = append(rows, displayRow{truncStyle.Render("📄 Binary file (no diff available)")})
 		} else {
 			// rows 3+: hunk headers + diff lines
-			for _, hunk := range f.Hunks {
+			for hi, hunk := range f.Hunks {
 				rows = append(rows, displayRow{hunkHeaderStyle.Render(hunk.Header)})
-				for _, dl := range hunk.Lines {
+				for li, dl := range hunk.Lines {
 					baseStyle := lipgloss.NewStyle()
 					switch dl.Kind {
 					case "addition":
@@ -679,6 +741,33 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 						otherWordStyle,
 						currentLineBg,
 					)
+
+					// Apply visual selection highlight or draft indicator.
+					isSelected := m.visual.Active && m.visual.FileIdx == i && m.visual.HunkIdx == hi &&
+						li >= m.visual.StartLine && li <= m.visual.EndLine
+					isDrafted := false
+					if !isSelected && dl.Anchors != nil && len(dl.Anchors) > 0 {
+						a := dl.Anchors[0]
+						for _, d := range m.drafts {
+							if d.Path == a.Path && a.Line != nil && d.Line == *a.Line && d.Side == a.Side {
+								isDrafted = true
+								break
+							}
+						}
+					}
+
+					if isSelected {
+						if m.theme != nil {
+							s = m.theme.ListSelected.Width(cw).Render(s)
+						} else {
+							s = lipgloss.NewStyle().Reverse(true).Width(cw).Render(s)
+						}
+					} else if isDrafted {
+						if m.theme != nil {
+							s = m.theme.ListOpened.Width(cw).Render(s)
+						}
+					}
+
 					rows = append(rows, displayRow{s})
 					globalLineIndex++
 				}

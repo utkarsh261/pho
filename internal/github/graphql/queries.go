@@ -31,6 +31,16 @@ func buildSubmitReviewMutation(event string) string {
 func buildApprovePullRequestMutation() string { return buildSubmitReviewMutation("APPROVE") }
 func buildReviewCommentMutation() string      { return buildSubmitReviewMutation("COMMENT") }
 
+func buildSubmitReviewWithCommentsMutation() string {
+	return `mutation SubmitReviewWithComments($pullRequestId: ID!, $body: String, $event: PullRequestReviewEvent, $threads: [DraftPullRequestReviewThread]) {
+  addPullRequestReview(input: {pullRequestId: $pullRequestId, body: $body, event: $event, threads: $threads}) {
+    pullRequestReview {
+      id
+    }
+  }
+}`
+}
+
 func buildViewerQuery() string {
 	return `query ViewerQuery {
   viewer {

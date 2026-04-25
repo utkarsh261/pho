@@ -17,6 +17,7 @@ type GitHubClient interface {
 	PostComment(ctx context.Context, host, pullRequestID, body string) error
 	PostReviewComment(ctx context.Context, host, pullRequestID, body string) error
 	ApprovePullRequest(ctx context.Context, host, pullRequestID, body string) error
+	SubmitReviewWithComments(ctx context.Context, host, pullRequestID, body, event string, comments []domain.DraftInlineComment) error
 	// FetchAllPRs fetches a page of all PRs (any state) for the jump index.
 	// Returns summaries, hasNextPage, endCursor, error.
 	FetchAllPRs(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)

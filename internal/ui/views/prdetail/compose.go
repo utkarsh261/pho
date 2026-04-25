@@ -17,6 +17,7 @@ const (
 	composeModeReply                            // quote-reply to an existing entry
 	composeModeApprove                          // approve the PR with an optional comment
 	composeModeReviewComment                    // submit a review with COMMENT decision
+	composeModeDraftInline                      // draft inline comment on selected diff lines
 )
 
 type composeStatus int
@@ -210,6 +211,9 @@ func (c *ComposeModel) View(width int) string {
 		case composeModeReviewComment:
 			prefix = "Review comment ▸ "
 			hint = "Enter: Send   Ctrl+E: $EDITOR   Esc: Cancel"
+		case composeModeDraftInline:
+			prefix = "Draft inline comment ▸ "
+			hint = "Enter: Save   Ctrl+E: $EDITOR   Esc: Cancel"
 		default:
 			prefix = "New comment ▸ "
 			hint = "Enter: Send   Ctrl+E: $EDITOR   Esc: Cancel"

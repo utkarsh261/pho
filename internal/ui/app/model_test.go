@@ -155,6 +155,18 @@ func (s *stubPRService) LoadDiff(ctx context.Context, repo domain.Repository, nu
 func (s *stubPRService) PostComment(_ context.Context, _, _ string) error       { return nil }
 func (s *stubPRService) PostReviewComment(_ context.Context, _, _ string) error { return nil }
 func (s *stubPRService) ApprovePR(_ context.Context, _, _ string) error         { return nil }
+func (s *stubPRService) SubmitReviewWithComments(_ context.Context, _, _, _ string, _ []domain.DraftInlineComment) error {
+	return nil
+}
+func (s *stubPRService) SaveDraftComments(_ context.Context, _ domain.Repository, _ int, _ string, _ []domain.DraftInlineComment) error {
+	return nil
+}
+func (s *stubPRService) LoadDraftComments(_ context.Context, _ domain.Repository, _ int, _ string) ([]domain.DraftInlineComment, error) {
+	return nil, nil
+}
+func (s *stubPRService) DeleteDraftComments(_ context.Context, _ domain.Repository, _ int, _ string) error {
+	return nil
+}
 
 func TestColdStartThenDashboardLoadedPopulates(t *testing.T) {
 	t.Parallel()

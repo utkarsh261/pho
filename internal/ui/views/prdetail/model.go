@@ -4,6 +4,7 @@
 package prdetail
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -64,6 +65,15 @@ func (m *PRDetailModel) contentViewportHeight() int {
 	return max(innerH-2, 1)
 }
 
+// visualModeState tracks the active visual-mode selection in the diff.
+type visualModeState struct {
+	Active    bool
+	FileIdx   int
+	HunkIdx   int
+	StartLine int // index into hunk.Lines
+	EndLine   int // index into hunk.Lines (inclusive)
+}
+
 type PRDetailModel struct {
 	Summary domain.PullRequestSummary
 
@@ -111,6 +121,11 @@ type PRDetailModel struct {
 	cachedBody       string
 	cachedBodyWidth  int
 	cachedBodyHeight int
+
+	// Inline review drafts
+	visual            visualModeState
+	drafts            []domain.DraftInlineComment
+	confirmDiscardAll bool
 }
 
 // NewModel creates a new PRDetailModel for the given PR.
@@ -243,10 +258,20 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		// Sync files into left panel.
 		m.leftPanel.Files = m.Diff.Files
 		m.leftPanel.Loading = false
+		// Load persisted drafts for this PR/SHA.
+		m.loadDrafts()
 		return m, tea.Batch(spinCmd, composeCmd)
 
 	case submitComposeMsg:
 		body := msg.body
+		if m.compose.mode == composeModeDraftInline {
+			draft := m.buildDraftFromVisualSelection(body)
+			m.upsertDraft(draft)
+			m.persistDrafts()
+			m.compose.Close()
+			m.exitVisualMode()
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
 		if m.compose.mode == composeModeReply && m.commentCursor >= 0 {
 			entries := m.commentEntries()
 			if m.commentCursor < len(entries) {
@@ -255,6 +280,15 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		}
 		if m.PRService == nil {
 			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		// When drafts exist, batch-submit them with the review event.
+		if len(m.drafts) > 0 && (m.compose.mode == composeModeReviewComment || m.compose.mode == composeModeApprove) {
+			event := "COMMENT"
+			if m.compose.mode == composeModeApprove {
+				event = "APPROVE"
+			}
+			postCmd := cmds.SubmitReviewWithDraftsCmd(m.PRService, m.Summary.ID, body, event, m.drafts)
+			return m, tea.Batch(spinCmd, composeCmd, postCmd)
 		}
 		var postCmd tea.Cmd
 		if m.compose.mode == composeModeReviewComment {
@@ -321,6 +355,28 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		}))
 
 	case cmds.ApprovalFailed:
+		m.compose.status = composeStatusError
+		m.compose.errMsg = msg.Err.Error()
+		return m, tea.Batch(spinCmd, composeCmd)
+
+	case cmds.ReviewPosted:
+		m.compose.status = composeStatusSuccess
+		m.drafts = nil
+		if m.PRService != nil {
+			headSHA := ""
+			if m.Diff != nil {
+				headSHA = m.Diff.HeadSHA
+			}
+			if headSHA == "" {
+				headSHA = m.Summary.HeadRefOID
+			}
+			_ = m.PRService.DeleteDraftComments(context.Background(), m.Repo, m.Summary.Number, headSHA)
+		}
+		return m, tea.Batch(spinCmd, composeCmd, tea.Tick(1500*time.Millisecond, func(time.Time) tea.Msg {
+			return composeSuccessDismissMsg{}
+		}))
+
+	case cmds.ReviewFailed:
 		m.compose.status = composeStatusError
 		m.compose.errMsg = msg.Err.Error()
 		return m, tea.Batch(spinCmd, composeCmd)
@@ -682,9 +738,135 @@ func (m *PRDetailModel) scrollToCommentCursor() {
 	m.clampContentScroll()
 }
 
+// expandVisualSelectionDown grows the selection by one line downward within the hunk.
+func (m *PRDetailModel) expandVisualSelectionDown() {
+	if !m.visual.Active || m.Diff == nil {
+		return
+	}
+	f := &m.Diff.Files[m.visual.FileIdx]
+	h := &f.Hunks[m.visual.HunkIdx]
+	if m.visual.EndLine+1 < len(h.Lines) {
+		m.visual.EndLine++
+		// Auto-scroll to keep selection visible.
+		endRow := m.diffLineToDisplayRow(m.visual.FileIdx, m.visual.HunkIdx, m.visual.EndLine)
+		vh := m.contentViewportHeight()
+		if endRow >= m.ContentScroll+vh {
+			m.ContentScroll = endRow - vh + 1
+			m.clampContentScroll()
+		}
+	}
+}
+
+// shrinkVisualSelectionUp shrinks the selection by one line upward.
+// If selection is single-line, exits visual mode.
+func (m *PRDetailModel) shrinkVisualSelectionUp() {
+	if !m.visual.Active {
+		return
+	}
+	if m.visual.EndLine > m.visual.StartLine {
+		m.visual.EndLine--
+		// Auto-scroll to keep selection visible.
+		startRow := m.diffLineToDisplayRow(m.visual.FileIdx, m.visual.HunkIdx, m.visual.StartLine)
+		if startRow < m.ContentScroll {
+			m.ContentScroll = startRow
+			m.clampContentScroll()
+		}
+	} else {
+		m.exitVisualMode()
+	}
+}
+
+// isInDiffSection reports whether the content viewport is currently showing
+// the Diff section.
+func (m *PRDetailModel) isInDiffSection() bool {
+	cw := contentViewportWidth(m.rightPanelWidth())
+	sections := m.buildContentSections(cw)
+	diffSec, ok := findSection(sections, domain.SectionDiff)
+	if !ok || diffSec.RowCount == 0 {
+		return false
+	}
+	vh := m.contentViewportHeight()
+	viewEnd := m.ContentScroll + vh
+	return m.ContentScroll < diffSec.StartRow+diffSec.RowCount && viewEnd > diffSec.StartRow
+}
+
+// jumpToCommentCode scrolls the diff viewport to the code line referenced by
+// the focused comment entry.
+func (m *PRDetailModel) jumpToCommentCode() {
+	if m.commentCursor < 0 {
+		return
+	}
+	entries := m.commentEntries()
+	if m.commentCursor >= len(entries) {
+		return
+	}
+	entry := entries[m.commentCursor]
+	if entry.path == "" || entry.line <= 0 {
+		return
+	}
+	// Find the diff line matching (path, line).
+	if m.Diff == nil {
+		return
+	}
+	for fi, f := range m.Diff.Files {
+		for hi, h := range f.Hunks {
+			for li, dl := range h.Lines {
+				for _, a := range dl.Anchors {
+					if a.Path == entry.path && a.Line != nil && *a.Line == entry.line {
+						m.ContentScroll = m.diffLineToDisplayRow(fi, hi, li)
+						m.leftPanel.Focus = FocusContent
+						m.clampContentScroll()
+						return
+					}
+				}
+			}
+		}
+	}
+}
+
 // handleKey routes keyboard input within the PR detail view.
 func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 	if m.searchActive && m.handleSearchKey(msg) {
+		m.LastKey = ""
+		return m, nil
+	}
+
+	// Visual mode consumes only its own keys.
+	if m.visual.Active {
+		switch msg.String() {
+		case "j", "down":
+			m.expandVisualSelectionDown()
+		case "k", "up":
+			m.shrinkVisualSelectionUp()
+		case "c":
+			if m.PRService != nil {
+				draft := m.findDraftForSelection()
+				m.compose.Open(composeModeDraftInline, commentEntry{})
+				if draft != nil {
+					m.compose.SetText(draft.Body)
+				}
+			}
+		case "d":
+			if m.removeDraftAt(m.visual.FileIdx, m.visual.HunkIdx, m.visual.StartLine, m.visual.EndLine) {
+				m.persistDrafts()
+			}
+		case "esc":
+			m.exitVisualMode()
+		}
+		m.LastKey = ""
+		return m, nil
+	}
+
+	// Confirm discard state.
+	if m.confirmDiscardAll {
+		switch msg.String() {
+		case "y":
+			m.drafts = nil
+			m.persistDrafts()
+			m.confirmDiscardAll = false
+		case "n", "esc":
+			m.confirmDiscardAll = false
+		}
 		m.LastKey = ""
 		return m, nil
 	}
@@ -729,8 +911,25 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		if m.PRService != nil && m.commentCursor >= 0 {
 			entries := m.commentEntries()
 			if m.commentCursor < len(entries) {
-				m.compose.Open(composeModeReply, entries[m.commentCursor])
+				entry := entries[m.commentCursor]
+				if entry.isDraft {
+					// Re-open draft inline for editing.
+					m.compose.Open(composeModeDraftInline, commentEntry{})
+					m.compose.SetText(entry.body)
+				} else {
+					m.compose.Open(composeModeReply, entry)
+				}
 			}
+		}
+		return m, nil
+	case "V":
+		if m.leftPanel.Focus == FocusContent && m.isInDiffSection() {
+			m.enterVisualMode()
+		}
+		return m, nil
+	case "D":
+		if len(m.drafts) > 0 {
+			m.confirmDiscardAll = true
 		}
 		return m, nil
 	case "o":
@@ -762,6 +961,8 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 			m.jumpToFile(m.leftPanel.FileIndex)
 		} else if m.leftPanel.Focus == FocusCI {
 			return m, m.emitOpenBrowserCI()
+		} else if m.leftPanel.Focus == FocusContent && m.isInCommentsSection() && m.commentCursor >= 0 {
+			m.jumpToCommentCode()
 		}
 	case "h", "left":
 		m.jumpFileViewer()
@@ -1101,6 +1302,313 @@ func (m *PRDetailModel) handleRefresh() (*PRDetailModel, tea.Cmd) {
 		cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true),
 		cmds.LoadDiffCmd(m.PRService, m.Repo, m.Summary.Number, headSHA, true),
 	)
+}
+
+// ── Visual mode & draft helpers ───────────────────────────────────────────────
+
+// diffLineToDisplayRow returns the absolute display row for a diff line.
+func (m *PRDetailModel) diffLineToDisplayRow(fileIdx, hunkIdx, lineIdx int) int {
+	if m.Diff == nil {
+		return 0
+	}
+	sections := m.buildContentSections(contentViewportWidth(m.rightPanelWidth()))
+	diffSec, _ := findSection(sections, domain.SectionDiff)
+	row := diffSec.StartRow
+	for i := 0; i < fileIdx; i++ {
+		row += diffFileDisplayRows(&m.Diff.Files[i])
+	}
+	row += 3 // blank + separator + header
+	f := &m.Diff.Files[fileIdx]
+	for i := 0; i < hunkIdx; i++ {
+		row += 1 + len(f.Hunks[i].Lines)
+	}
+	row += 1 + lineIdx // hunk header + line offset
+	return row
+}
+
+// firstDiffLineAtOrBelow finds the first actual DiffLine at or after targetRow.
+func (m *PRDetailModel) firstDiffLineAtOrBelow(targetRow int) (fileIdx, hunkIdx, lineIdx int, found bool) {
+	if m.Diff == nil || len(m.Diff.Files) == 0 {
+		return 0, 0, 0, false
+	}
+	sections := m.buildContentSections(contentViewportWidth(m.rightPanelWidth()))
+	diffSec, ok := findSection(sections, domain.SectionDiff)
+	if !ok {
+		return 0, 0, 0, false
+	}
+	if targetRow < diffSec.StartRow || targetRow >= diffSec.StartRow+diffSec.RowCount {
+		return 0, 0, 0, false
+	}
+	localTarget := targetRow - diffSec.StartRow
+	for fi := range m.Diff.Files {
+		f := &m.Diff.Files[fi]
+		dr := diffFileDisplayRows(f)
+		if localTarget < dr {
+			if f.IsBinary {
+				return fi, 0, 0, true
+			}
+			localTarget -= 3 // skip blank, separator, header
+			if localTarget <= 0 {
+				return fi, 0, 0, true
+			}
+			for hi, hunk := range f.Hunks {
+				if localTarget == 0 {
+					return fi, hi, 0, true
+				}
+				localTarget--
+				if localTarget < len(hunk.Lines) {
+					return fi, hi, localTarget, true
+				}
+				localTarget -= len(hunk.Lines)
+			}
+			lastHunk := len(f.Hunks) - 1
+			if lastHunk >= 0 {
+				lastLines := len(f.Hunks[lastHunk].Lines)
+				if lastLines > 0 {
+					return fi, lastHunk, lastLines-1, true
+				}
+			}
+			return fi, 0, 0, true
+		}
+		localTarget -= dr
+	}
+	return 0, 0, 0, false
+}
+
+// enterVisualMode activates visual mode anchored at the first diff line at or
+// below the current ContentScroll position.
+func (m *PRDetailModel) enterVisualMode() {
+	fi, hi, li, ok := m.firstDiffLineAtOrBelow(m.ContentScroll)
+	if !ok {
+		return
+	}
+	m.visual = visualModeState{
+		Active:    true,
+		FileIdx:   fi,
+		HunkIdx:   hi,
+		StartLine: li,
+		EndLine:   li,
+	}
+}
+
+// exitVisualMode deactivates visual mode.
+func (m *PRDetailModel) exitVisualMode() {
+	m.visual.Active = false
+}
+
+// buildDraftFromVisualSelection creates a DraftInlineComment from the current
+// visual selection and the provided body text.
+func (m *PRDetailModel) buildDraftFromVisualSelection(body string) domain.DraftInlineComment {
+	if !m.visual.Active || m.Diff == nil {
+		return domain.DraftInlineComment{}
+	}
+	f := &m.Diff.Files[m.visual.FileIdx]
+	h := &f.Hunks[m.visual.HunkIdx]
+	firstLine := h.Lines[m.visual.StartLine]
+	lastLine := h.Lines[m.visual.EndLine]
+
+	draft := domain.DraftInlineComment{
+		ID:          generateDraftID(),
+		Path:        lastLine.Anchors[0].Path,
+		Line:        *lastLine.Anchors[0].Line,
+		Side:        lastLine.Anchors[0].Side,
+		Body:        body,
+		ContextLine: lastLine.Raw,
+		HeadSHA:     lastLine.Anchors[0].CommitSHA,
+		CreatedAt:   time.Now(),
+	}
+	if m.visual.StartLine != m.visual.EndLine && firstLine.Anchors != nil && len(firstLine.Anchors) > 0 {
+		draft.StartLine = *firstLine.Anchors[0].Line
+		draft.StartSide = firstLine.Anchors[0].Side
+	}
+	return draft
+}
+
+// upsertDraft replaces an existing draft on the exact same range or appends a new one.
+func (m *PRDetailModel) upsertDraft(draft domain.DraftInlineComment) {
+	for i, d := range m.drafts {
+		if d.Path == draft.Path && d.Line == draft.Line && d.Side == draft.Side &&
+			d.StartLine == draft.StartLine && d.StartSide == draft.StartSide {
+			m.drafts[i] = draft
+			return
+		}
+	}
+	m.drafts = append(m.drafts, draft)
+}
+
+// removeDraftAt removes any draft that overlaps the given file/hunk/line range.
+func (m *PRDetailModel) removeDraftAt(fileIdx, hunkIdx, startLine, endLine int) bool {
+	if m.Diff == nil {
+		return false
+	}
+	f := &m.Diff.Files[fileIdx]
+	h := &f.Hunks[hunkIdx]
+	if startLine < 0 || startLine >= len(h.Lines) || endLine < 0 || endLine >= len(h.Lines) {
+		return false
+	}
+	firstLine := h.Lines[startLine]
+	lastLine := h.Lines[endLine]
+	path := lastLine.Anchors[0].Path
+	line := *lastLine.Anchors[0].Line
+	side := lastLine.Anchors[0].Side
+	startLineNum := 0
+	startSide := ""
+	if startLine != endLine && firstLine.Anchors != nil && len(firstLine.Anchors) > 0 {
+		startLineNum = *firstLine.Anchors[0].Line
+		startSide = firstLine.Anchors[0].Side
+	}
+
+	for i, d := range m.drafts {
+		if d.Path == path && d.Side == side && d.Line == line {
+			// Single-line draft match.
+			if d.StartLine == 0 && startLineNum == 0 {
+				m.drafts = append(m.drafts[:i], m.drafts[i+1:]...)
+				return true
+			}
+			// Multi-line draft match.
+			if d.StartLine == startLineNum && d.StartSide == startSide {
+				m.drafts = append(m.drafts[:i], m.drafts[i+1:]...)
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// draftOverlapsSelection reports whether any draft overlaps the visual selection.
+func (m *PRDetailModel) draftOverlapsSelection() bool {
+	if !m.visual.Active || m.Diff == nil {
+		return false
+	}
+	f := &m.Diff.Files[m.visual.FileIdx]
+	h := &f.Hunks[m.visual.HunkIdx]
+	firstLine := h.Lines[m.visual.StartLine]
+	lastLine := h.Lines[m.visual.EndLine]
+	path := lastLine.Anchors[0].Path
+	line := *lastLine.Anchors[0].Line
+	side := lastLine.Anchors[0].Side
+	startLineNum := 0
+	startSide := ""
+	if m.visual.StartLine != m.visual.EndLine && firstLine.Anchors != nil && len(firstLine.Anchors) > 0 {
+		startLineNum = *firstLine.Anchors[0].Line
+		startSide = firstLine.Anchors[0].Side
+	}
+
+	for _, d := range m.drafts {
+		if d.Path == path && d.Side == side && d.Line == line {
+			if d.StartLine == 0 && startLineNum == 0 {
+				return true
+			}
+			if d.StartLine == startLineNum && d.StartSide == startSide {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// findDraftForSelection returns the draft matching the exact current visual
+// selection, or nil if none exists.
+func (m *PRDetailModel) findDraftForSelection() *domain.DraftInlineComment {
+	if !m.visual.Active || m.Diff == nil {
+		return nil
+	}
+	f := &m.Diff.Files[m.visual.FileIdx]
+	h := &f.Hunks[m.visual.HunkIdx]
+	firstLine := h.Lines[m.visual.StartLine]
+	lastLine := h.Lines[m.visual.EndLine]
+	path := lastLine.Anchors[0].Path
+	line := *lastLine.Anchors[0].Line
+	side := lastLine.Anchors[0].Side
+	startLineNum := 0
+	startSide := ""
+	if m.visual.StartLine != m.visual.EndLine && firstLine.Anchors != nil && len(firstLine.Anchors) > 0 {
+		startLineNum = *firstLine.Anchors[0].Line
+		startSide = firstLine.Anchors[0].Side
+	}
+
+	for i := range m.drafts {
+		d := &m.drafts[i]
+		if d.Path == path && d.Side == side && d.Line == line {
+			if d.StartLine == 0 && startLineNum == 0 {
+				return d
+			}
+			if d.StartLine == startLineNum && d.StartSide == startSide {
+				return d
+			}
+		}
+	}
+	return nil
+}
+
+// persistDrafts saves the current drafts to the cache.
+func (m *PRDetailModel) persistDrafts() {
+	if m.PRService == nil {
+		return
+	}
+	headSHA := ""
+	if m.Diff != nil {
+		headSHA = m.Diff.HeadSHA
+	}
+	if headSHA == "" {
+		headSHA = m.Summary.HeadRefOID
+	}
+	_ = m.PRService.SaveDraftComments(context.Background(), m.Repo, m.Summary.Number, headSHA, m.drafts)
+}
+
+// loadDrafts loads drafts from the cache for the current PR.
+func (m *PRDetailModel) loadDrafts() {
+	if m.PRService == nil {
+		return
+	}
+	headSHA := ""
+	if m.Diff != nil {
+		headSHA = m.Diff.HeadSHA
+	}
+	if headSHA == "" {
+		headSHA = m.Summary.HeadRefOID
+	}
+	drafts, _ := m.PRService.LoadDraftComments(context.Background(), m.Repo, m.Summary.Number, headSHA)
+	m.drafts = drafts
+}
+
+// lookupDiffLine finds the raw diff line text for a given path:line.
+func (m *PRDetailModel) lookupDiffLine(path string, line int) string {
+	if m.Diff == nil {
+		return ""
+	}
+	for _, f := range m.Diff.Files {
+		for _, h := range f.Hunks {
+			for _, dl := range h.Lines {
+				for _, a := range dl.Anchors {
+					if a.Path == path && a.Line != nil && *a.Line == line {
+						return dl.Raw
+					}
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// generateDraftID creates a simple unique ID for a draft comment.
+func generateDraftID() string {
+	return fmt.Sprintf("draft-%d", time.Now().UnixNano())
+}
+
+// StatusHint returns the status bar hint text for the current state.
+func (m *PRDetailModel) StatusHint() string {
+	if m.visual.Active {
+		return "j/k: Select lines | c: Comment | d: Discard | Esc: Exit visual"
+	}
+	if m.confirmDiscardAll {
+		return fmt.Sprintf("Discard all %d drafts? (y/n)", len(m.drafts))
+	}
+	hint := "Tab: Switch Panel | V: Visual | 1/2/3: Jump to section | R: Refresh | v: Review | C: Comment | a: Approve | /: Search in Diff"
+	if len(m.drafts) > 0 {
+		hint += " | D: Discard all drafts"
+	}
+	return hint
 }
 
 func (m *PRDetailModel) emitBackToDashboard() tea.Cmd {
