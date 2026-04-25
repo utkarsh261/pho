@@ -61,8 +61,6 @@ func dispatchGlobal(msg tea.KeyMsg) Result {
 		return Result{Action: CycleFocus{Direction: FocusNext}}
 	case tea.KeyShiftTab:
 		return Result{Action: CycleFocus{Direction: FocusPrev}}
-	case tea.KeyEsc:
-		return Result{Action: Quit{}}
 	case tea.KeyRunes:
 		if len(msg.Runes) != 1 {
 			return Result{}
