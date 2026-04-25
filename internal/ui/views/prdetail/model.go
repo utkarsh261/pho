@@ -132,6 +132,7 @@ func NewModel(summary domain.PullRequestSummary, repo domain.Repository, prServi
 	m.leftPanel.Loading = loading
 	m.leftPanel.Focus = FocusContent
 	m.leftPanel.LastOpenedIndex = 0
+	m.leftPanel.CICursor = 0
 	m.mdRenderer = markdown.New()
 	return m
 }
@@ -700,6 +701,8 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		if m.leftPanel.Focus == FocusContent && m.Width >= MinWidthForSidebar {
 			m.leftPanel.Focus = FocusFiles
 			m.resetCommentCursor()
+		} else if m.leftPanel.Focus == FocusCI && m.Width >= MinWidthForSidebar {
+			m.leftPanel.Focus = FocusFiles
 		} else {
 			return m, m.emitBackToDashboard()
 		}
@@ -757,6 +760,8 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 	case "enter":
 		if m.leftPanel.Focus == FocusFiles {
 			m.jumpToFile(m.leftPanel.FileIndex)
+		} else if m.leftPanel.Focus == FocusCI {
+			return m, m.emitOpenBrowserCI()
 		}
 	case "h", "left":
 		m.jumpFileViewer()
@@ -849,6 +854,7 @@ func (m *PRDetailModel) cycleForward() {
 	switch m.leftPanel.Focus {
 	case FocusFiles:
 		if len(m.leftPanel.Checks) > 0 {
+			m.leftPanel.CICursor = 0
 			m.leftPanel.Focus = FocusCI
 		} else {
 			m.leftPanel.Focus = FocusContent
@@ -872,6 +878,7 @@ func (m *PRDetailModel) cycleBackward() {
 		m.leftPanel.Focus = FocusFiles
 	case FocusContent:
 		if len(m.leftPanel.Checks) > 0 {
+			m.leftPanel.CICursor = 0
 			m.leftPanel.Focus = FocusCI
 		} else {
 			m.leftPanel.Focus = FocusFiles
@@ -893,8 +900,9 @@ func (m *PRDetailModel) scrollDown() {
 			// If CI has checks, move focus there.
 			m.leftPanel.FileIndex = last
 			if len(m.leftPanel.Checks) > 0 {
-				m.leftPanel.Focus = FocusCI
+				m.leftPanel.CICursor = 0
 				m.leftPanel.CIScroll = 0
+				m.leftPanel.Focus = FocusCI
 			}
 			return
 		}
@@ -903,8 +911,12 @@ func (m *PRDetailModel) scrollDown() {
 		if len(m.leftPanel.Checks) == 0 {
 			return
 		}
-		visibleCI := m.ciVisibleRows()
-		m.leftPanel.CIScroll = clamp(m.leftPanel.CIScroll+1, 0, max(0, len(m.leftPanel.Checks)-visibleCI))
+		m.leftPanel.CICursor++
+		last := len(m.leftPanel.Checks) - 1
+		if m.leftPanel.CICursor > last {
+			m.leftPanel.CICursor = last
+		}
+		m.ensureCIVisible()
 	case FocusContent:
 		m.ContentScroll++
 		m.clampContentScroll()
@@ -920,13 +932,14 @@ func (m *PRDetailModel) scrollUp() {
 		m.leftPanel.FileIndex--
 		m.ensureFileVisible()
 	case FocusCI:
-		if m.leftPanel.CIScroll <= 0 {
+		if m.leftPanel.CICursor <= 0 {
 			// move focus back to Files.
 			m.leftPanel.Focus = FocusFiles
 			m.leftPanel.FilesScroll = 0
 			return
 		}
-		m.leftPanel.CIScroll--
+		m.leftPanel.CICursor--
+		m.ensureCIVisible()
 	case FocusContent:
 		m.ContentScroll--
 		m.clampContentScroll()
@@ -1058,6 +1071,16 @@ func (m *PRDetailModel) ensureFileVisible() {
 	}
 }
 
+// ensureCIVisible scrolls CIScroll so CICursor is visible.
+func (m *PRDetailModel) ensureCIVisible() {
+	visible := m.ciVisibleRows()
+	if m.leftPanel.CICursor < m.leftPanel.CIScroll {
+		m.leftPanel.CIScroll = m.leftPanel.CICursor
+	} else if m.leftPanel.CICursor >= m.leftPanel.CIScroll+visible {
+		m.leftPanel.CIScroll = m.leftPanel.CICursor - visible + 1
+	}
+}
+
 // handleRefresh clears cached data and refires both load commands with force=true
 // in parallel. Clearing m.Detail and m.Diff causes the right viewport to show
 // loading placeholders immediately, giving visual confirmation that a refresh is
@@ -1090,6 +1113,19 @@ func (m *PRDetailModel) emitOpenBrowser() tea.Cmd {
 	}
 }
 
+func (m *PRDetailModel) emitOpenBrowserCI() tea.Cmd {
+	if m.leftPanel.CICursor < 0 || m.leftPanel.CICursor >= len(m.leftPanel.Checks) {
+		return nil
+	}
+	url := m.leftPanel.Checks[m.leftPanel.CICursor].URL
+	if url == "" {
+		return nil
+	}
+	return func() tea.Msg {
+		return OpenBrowserCI{URL: url}
+	}
+}
+
 // BackToDashboard is emitted when the user presses q (or Esc while search is inactive) in PR detail.
 type BackToDashboard struct{}
 
@@ -1097,4 +1133,9 @@ type BackToDashboard struct{}
 type OpenBrowserPR struct {
 	Repo   string
 	Number int
+}
+
+// OpenBrowserCI is emitted when the user presses Enter on a CI check row.
+type OpenBrowserCI struct {
+	URL string
 }

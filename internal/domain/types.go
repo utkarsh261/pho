@@ -167,6 +167,7 @@ type PreviewCheckRow struct {
 	Name    string
 	State   string
 	Context string
+	URL     string
 }
 
 type PreviewFileStat struct {

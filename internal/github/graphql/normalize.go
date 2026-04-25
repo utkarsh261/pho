@@ -334,10 +334,15 @@ func previewChecks(nodes []model.StatusContextNode) []domain.PreviewCheckRow {
 		if context == "" {
 			context = node.DetailsURL
 		}
+		url := node.DetailsURL
+		if url == "" {
+			url = node.TargetUrl
+		}
 		out = append(out, domain.PreviewCheckRow{
 			Name:    name,
 			State:   state,
 			Context: context,
+			URL:     url,
 		})
 	}
 	return out

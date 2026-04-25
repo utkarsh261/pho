@@ -216,6 +216,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.handleBackToDashboard()
 	case prdetail.OpenBrowserPR:
 		return m, openBrowserForPRCmd(m.selectedRepoForURL(msg.Repo), msg.Repo, msg.Number)
+	case prdetail.OpenBrowserCI:
+		return m, func() tea.Msg {
+			if err := openURL(msg.URL); err != nil {
+				return browserOpenFailed{URL: msg.URL, Err: err}
+			}
+			return nil
+		}
 	case cmds.PRDetailLoaded:
 		// Always route to prDetail if it exists, even when the dashboard is the
 		// active view. If the user ESCs before an in-flight response arrives, the

@@ -36,6 +36,7 @@ type LeftPanelModel struct {
 	CIScroll        int // index of first visible CI row
 	FileIndex       int // index of the highlighted (cursor) file
 	LastOpenedIndex int // index of the file last opened (Enter/l); persists when focus leaves files
+	CICursor        int // index of the highlighted (cursor) CI check
 
 	Focus PRDetailFocus
 
@@ -249,7 +250,7 @@ func (m *LeftPanelModel) renderCIArea(outerHeight int) string {
 		if checkIdx >= len(m.Checks) {
 			break
 		}
-		rows = append(rows, m.renderCIRow(m.Checks[checkIdx]))
+		rows = append(rows, m.renderCIRow(m.Checks[checkIdx], checkIdx))
 	}
 	for len(rows) < innerH {
 		rows = append(rows, "")
@@ -277,9 +278,13 @@ func (m *LeftPanelModel) renderCIArea(outerHeight int) string {
 	return lipgloss.JoinVertical(lipgloss.Left, headBox, bodyBox)
 }
 
-func (m *LeftPanelModel) renderCIRow(check domain.PreviewCheckRow) string {
+func (m *LeftPanelModel) renderCIRow(check domain.PreviewCheckRow, idx int) string {
+	isSelected := idx == m.CICursor && m.Focus == FocusCI
+
+	// Use a plain icon for selected rows so ANSI reset codes inside the styled
+	// icon don't wipe out the ListSelected background highlight.
 	icon := ciIconChar(check)
-	if m.theme != nil {
+	if m.theme != nil && !isSelected {
 		icon = ciIconStyled(check, m.theme)
 	}
 
@@ -287,6 +292,12 @@ func (m *LeftPanelModel) renderCIRow(check domain.PreviewCheckRow) string {
 	status := formatCIStatus(check.State)             // exactly lpCIStatusWidth chars
 
 	row := icon + " " + name + " " + status
+	if isSelected {
+		if m.theme != nil {
+			return m.theme.ListSelected.Width(lpInner).Render(row)
+		}
+		return lipgloss.NewStyle().Reverse(true).Width(lpInner).Render(row)
+	}
 	return fitLine(row, lpInner)
 }
 

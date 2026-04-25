@@ -257,6 +257,7 @@ type StatusContextNode struct {
 	Conclusion string `json:"conclusion,omitempty"`
 	State      string `json:"state,omitempty"`
 	DetailsURL string `json:"detailsUrl,omitempty"`
+	TargetUrl  string `json:"targetUrl,omitempty"`
 }
 
 // ReviewConnection carries preview review rows.
