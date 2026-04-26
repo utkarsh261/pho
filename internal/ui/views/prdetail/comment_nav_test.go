@@ -2,6 +2,7 @@ package prdetail
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -241,6 +242,100 @@ func TestComposeActiveBlocksNavigation(t *testing.T) {
 	// Content scroll should not change because j was consumed by compose.
 	if m.ContentScroll != scrollBefore {
 		t.Errorf("expected scroll unchanged while compose active, got %d (was %d)", m.ContentScroll, scrollBefore)
+	}
+}
+
+func TestComposePostingAllowsNavigation(t *testing.T) {
+	t.Parallel()
+	m := makeCommentModel(100, 40)
+	m.PRService = &prServiceStub{}
+	m = pressKey(m, "C") // open compose
+	m.compose.status = composeStatusPosting // simulate posting in-flight
+	m = pressKey(m, "j") // should navigate, not be swallowed
+	if m.commentCursor != 0 {
+		t.Errorf("expected commentCursor=0 after j during posting, got %d", m.commentCursor)
+	}
+}
+
+func TestComposePostingRendersNewTab(t *testing.T) {
+	t.Parallel()
+	m := makeDiffCursorModel(100, 40) // has a Diff with files
+	m.PRService = &prServiceStub{}
+	m.switchTab(TabComments)
+	m = pressKey(m, "C") // open compose
+	m.compose.status = composeStatusPosting // simulate posting in-flight
+	// Pre-warm the view cache while on Comments tab.
+	_ = m.View()
+	m = pressKey(m, "2") // switch to Diff tab
+	view := m.View()
+	// The view should reflect the Diff tab, not the cached Comments tab.
+	if m.activeTab != TabDiff {
+		t.Fatalf("expected activeTab=TabDiff, got %v", m.activeTab)
+	}
+	// Diff tab content includes file headers; Comments tab does not.
+	found := false
+	for _, f := range m.Diff.Files {
+		if f.OldPath != "" && viewContains(view, f.OldPath) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected View() to render Diff tab content during posting, but got cached Comments tab")
+	}
+}
+
+func viewContains(s, substr string) bool {
+	return len(substr) > 0 && strings.Contains(s, substr)
+}
+
+// ── comment cursor gg/G/ctrl+d/ctrl+u ─────────────────────────────────────────
+
+func TestCommentCursorGG(t *testing.T) {
+	t.Parallel()
+	m := makeCommentModel(100, 40)
+	m = pressKey(m, "j") // activate cursor at 0
+	m = pressKey(m, "j") // move to 1
+	if m.commentCursor != 1 {
+		t.Fatalf("expected cursor=1, got %d", m.commentCursor)
+	}
+	m = pressKey(m, "g")
+	m = pressKey(m, "g")
+	if m.commentCursor != 0 {
+		t.Errorf("expected cursor=0 after gg, got %d", m.commentCursor)
+	}
+}
+
+func TestCommentCursorG(t *testing.T) {
+	t.Parallel()
+	m := makeCommentModel(100, 40)
+	m = pressKey(m, "G")
+	entries := m.commentEntries()
+	last := len(entries) - 1
+	if m.commentCursor != last {
+		t.Errorf("expected cursor=%d after G, got %d", last, m.commentCursor)
+	}
+}
+
+func TestCommentCursorCtrlD(t *testing.T) {
+	t.Parallel()
+	m := makeCommentModel(100, 40)
+	m = pressKey(m, "j") // activate at 0
+	before := m.commentCursor
+	m = pressKey(m, "ctrl+d")
+	if m.commentCursor <= before {
+		t.Errorf("expected ctrl+d to advance cursor, got %d (was %d)", m.commentCursor, before)
+	}
+}
+
+func TestCommentCursorCtrlU(t *testing.T) {
+	t.Parallel()
+	m := makeCommentModel(100, 40)
+	m = pressKey(m, "G") // jump to last
+	before := m.commentCursor
+	m = pressKey(m, "ctrl+u")
+	if m.commentCursor >= before {
+		t.Errorf("expected ctrl+u to move cursor up, got %d (was %d)", m.commentCursor, before)
 	}
 }
 

@@ -216,10 +216,13 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 						currentLineBg,
 					)
 
-					// Apply visual selection highlight or draft indicator.
+					// Apply visual selection highlight, cursor highlight, or draft indicator.
 					isSelected := m.visual.Active && m.visual.FileIdx == i && m.visual.HunkIdx == hi &&
 						li >= m.visual.StartLine && li <= m.visual.EndLine
-					isDrafted := !isSelected && m.draftCovered[hunkLineKey{i, hi, li}]
+					isCursor := !isSelected && m.activeTab == TabDiff && m.leftPanel.Focus == FocusContent &&
+						m.validDiffCursor() &&
+						m.diffCursor.FileIdx == i && m.diffCursor.HunkIdx == hi && m.diffCursor.LineIdx == li
+					isDrafted := !isSelected && !isCursor && m.draftCovered[hunkLineKey{i, hi, li}]
 
 					if isSelected {
 						if m.theme != nil {
@@ -227,6 +230,8 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 						} else {
 							s = lipgloss.NewStyle().Reverse(true).Width(cw).Render(s)
 						}
+					} else if isCursor {
+						s = lipgloss.NewStyle().Reverse(true).Width(cw).Render(s)
 					} else if isDrafted {
 						if m.theme != nil {
 							s = m.theme.ListOpened.Width(cw).Render(s)

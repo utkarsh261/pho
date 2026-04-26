@@ -190,6 +190,11 @@ func (m *PRDetailModel) scrollToSearchCursor() {
 
 	m.switchTab(TabDiff)
 	m.ContentScroll = clamp(matchDisplayRow-contentHeight/2, 0, m.maxContentScroll())
+
+	// Sync diff cursor to the search match line.
+	if fi, hi, li, found := m.firstDiffLineAtOrBelow(matchDisplayRow); found {
+		m.diffCursor = diffCursorLine{FileIdx: fi, HunkIdx: hi, LineIdx: li}
+	}
 }
 
 func (m *PRDetailModel) matchDisplayOffsetWithinFile(match diffsearch.Match) int {
