@@ -1042,6 +1042,7 @@ func (m *PRDetailModel) jumpToFile(idx int) {
 	}
 	m.leftPanel.LastOpenedIndex = idx
 	m.switchTab(TabDiff)
+	m.leftPanel.Focus = FocusContent
 	fileOffset := 0
 	for i := range idx {
 		fileOffset += diffFileDisplayRows(&m.Diff.Files[i])
@@ -1282,6 +1283,7 @@ func (m *PRDetailModel) switchTab(tab contentTab) {
 	m.activeTab = tab
 	m.leftPanel.Focus = FocusContent
 	m.resetCommentCursor()
+	m.confirmDiscardAll = false
 	if m.visual.Active {
 		m.exitVisualMode()
 	}
@@ -1482,6 +1484,7 @@ func (m *PRDetailModel) upsertDraft(draft domain.DraftInlineComment) {
 			d.StartLine == draft.StartLine && d.StartSide == draft.StartSide {
 			m.drafts[i] = draft
 			m.rebuildDraftCovered()
+			m.commentEntriesDirty = true
 			return
 		}
 	}
@@ -1537,41 +1540,6 @@ func (m *PRDetailModel) removeDraftAt(fileIdx, hunkIdx, startLine, endLine int) 
 				m.drafts = append(m.drafts[:i], m.drafts[i+1:]...)
 				m.rebuildDraftCovered()
 				m.commentEntriesDirty = true
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// draftOverlapsSelection reports whether any draft overlaps the visual selection.
-func (m *PRDetailModel) draftOverlapsSelection() bool {
-	if !m.validVisualState() {
-		return false
-	}
-	f := &m.Diff.Files[m.visual.FileIdx]
-	h := &f.Hunks[m.visual.HunkIdx]
-	firstLine := h.Lines[m.visual.StartLine]
-	lastLine := h.Lines[m.visual.EndLine]
-	if len(lastLine.Anchors) == 0 {
-		return false
-	}
-	path := lastLine.Anchors[0].Path
-	line := *lastLine.Anchors[0].Line
-	side := lastLine.Anchors[0].Side
-	startLineNum := 0
-	startSide := ""
-	if m.visual.StartLine != m.visual.EndLine && len(firstLine.Anchors) > 0 {
-		startLineNum = *firstLine.Anchors[0].Line
-		startSide = firstLine.Anchors[0].Side
-	}
-
-	for _, d := range m.drafts {
-		if d.Path == path && d.Side == side && d.Line == line {
-			if d.StartLine == 0 && startLineNum == 0 {
-				return true
-			}
-			if d.StartLine == startLineNum && d.StartSide == startSide {
 				return true
 			}
 		}

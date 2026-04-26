@@ -74,18 +74,6 @@ func TestBuildDraftGuardsMissingFile(t *testing.T) {
 	}
 }
 
-func TestDraftOverlapsGuardsMissingFile(t *testing.T) {
-	t.Parallel()
-	m := makeInlineReviewModel(100, 40)
-	m.visual.Active = true
-	m.visual.FileIdx = 99
-	m.visual.HunkIdx = 0
-	m.visual.StartLine = 0
-	m.visual.EndLine = 0
-	// Must not panic.
-	_ = m.draftOverlapsSelection()
-}
-
 func TestFindDraftGuardsMissingFile(t *testing.T) {
 	t.Parallel()
 	m := makeInlineReviewModel(100, 40)
@@ -186,5 +174,29 @@ func TestComposeEscResumesVisualModeNoFlicker(t *testing.T) {
 	}
 	if m.visual.EndLine != 1 {
 		t.Errorf("expected selection preserved (EndLine=1), got %d", m.visual.EndLine)
+	}
+}
+
+func TestSwitchTabClearsConfirmDiscardAll(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.PRService = &prServiceStub{}
+	m.activeTab = TabDiff
+	m.confirmDiscardAll = true
+	m.switchTab(TabDescription)
+	if m.confirmDiscardAll {
+		t.Error("expected confirmDiscardAll=false after tab switch")
+	}
+}
+
+func TestEnterOnFileMovesFocusToContent(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.activeTab = TabDiff
+	m.leftPanel.Focus = FocusFiles
+	m.leftPanel.FileIndex = 0
+	m = pressKey(m, "enter")
+	if m.leftPanel.Focus != FocusContent {
+		t.Errorf("expected focus=FocusContent after enter on file, got %v", m.leftPanel.Focus)
 	}
 }
