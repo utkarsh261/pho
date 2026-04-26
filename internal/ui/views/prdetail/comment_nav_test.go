@@ -2,6 +2,7 @@ package prdetail
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -242,6 +243,50 @@ func TestComposeActiveBlocksNavigation(t *testing.T) {
 	if m.ContentScroll != scrollBefore {
 		t.Errorf("expected scroll unchanged while compose active, got %d (was %d)", m.ContentScroll, scrollBefore)
 	}
+}
+
+func TestComposePostingAllowsNavigation(t *testing.T) {
+	t.Parallel()
+	m := makeCommentModel(100, 40)
+	m.PRService = &prServiceStub{}
+	m = pressKey(m, "C") // open compose
+	m.compose.status = composeStatusPosting // simulate posting in-flight
+	m = pressKey(m, "j") // should navigate, not be swallowed
+	if m.commentCursor != 0 {
+		t.Errorf("expected commentCursor=0 after j during posting, got %d", m.commentCursor)
+	}
+}
+
+func TestComposePostingRendersNewTab(t *testing.T) {
+	t.Parallel()
+	m := makeDiffCursorModel(100, 40) // has a Diff with files
+	m.PRService = &prServiceStub{}
+	m.switchTab(TabComments)
+	m = pressKey(m, "C") // open compose
+	m.compose.status = composeStatusPosting // simulate posting in-flight
+	// Pre-warm the view cache while on Comments tab.
+	_ = m.View()
+	m = pressKey(m, "2") // switch to Diff tab
+	view := m.View()
+	// The view should reflect the Diff tab, not the cached Comments tab.
+	if m.activeTab != TabDiff {
+		t.Fatalf("expected activeTab=TabDiff, got %v", m.activeTab)
+	}
+	// Diff tab content includes file headers; Comments tab does not.
+	found := false
+	for _, f := range m.Diff.Files {
+		if f.OldPath != "" && viewContains(view, f.OldPath) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected View() to render Diff tab content during posting, but got cached Comments tab")
+	}
+}
+
+func viewContains(s, substr string) bool {
+	return len(substr) > 0 && strings.Contains(s, substr)
 }
 
 // ── commentEntryStartRows sync with commentLines ──────────────────────────────

@@ -454,7 +454,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		return m, tea.Batch(spinCmd, composeCmd)
 
 	case tea.KeyMsg:
-		if m.compose.active {
+		if m.compose.active && m.compose.status == composeStatusIdle {
 			// Key already routed to compose.Update above; skip handleKey.
 			return m, tea.Batch(spinCmd, composeCmd)
 		}
@@ -481,7 +481,7 @@ func (m *PRDetailModel) View() string {
 	bodyH := m.effectiveBodyH()
 
 	var body string
-	if m.compose.active && m.cachedBody != "" &&
+	if m.compose.active && m.compose.status == composeStatusIdle && m.cachedBody != "" &&
 		m.cachedBodyWidth == m.Width && m.cachedBodyHeight == bodyH {
 		// Compose is open and nothing in the body has changed — reuse last render
 		// so that text input navigation (arrow keys, backspace, etc.) is instant.
