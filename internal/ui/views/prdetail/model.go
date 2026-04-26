@@ -977,13 +977,13 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		m.cycleBackward()
 		m.resetCommentCursor()
 	case "j", "down":
-		if m.activeTab == TabComments {
+		if m.leftPanel.Focus == FocusContent && m.activeTab == TabComments {
 			m.moveCursorNextComment()
 			return m, nil
 		}
 		m.scrollDown()
 	case "k", "up":
-		if m.activeTab == TabComments && m.commentCursor >= 0 {
+		if m.leftPanel.Focus == FocusContent && m.activeTab == TabComments && m.commentCursor >= 0 {
 			m.moveCursorPrevComment()
 			return m, nil
 		}

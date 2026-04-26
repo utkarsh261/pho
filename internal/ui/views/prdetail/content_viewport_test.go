@@ -66,68 +66,8 @@ func (m *PRDetailModel) contentW() int {
 	return contentViewportWidth(m.rightPanelWidth())
 }
 
-// ── ContentSection precompute tests ──────────────────────────────────────────
-
-// TestContentSectionStartRowsAdditive verifies that each section's StartRow equals
-// the sum of all preceding sections' RowCounts.
-func TestContentSectionStartRowsAdditive(t *testing.T) {
-	t.Parallel()
-
-	// 3 files × 10 rows each = 30 diff rows
-	files := makeFilesWithDisplayRows(3, 10)
-	m := makePRDetail(100, 30, files, nil)
-	m.Detail = makeDetailWithBody("description text")
-	m.Diff = makeDiff(files)
-	m.DiffLoading = false
-	m.DetailLoading = false
-	m.Detail.Reviewers = []domain.PreviewReviewer{{Login: "alice", State: "APPROVED"}}
-
-	sections := m.buildContentSections(m.contentW())
-
-	if len(sections) < 2 {
-		t.Fatalf("expected at least 2 sections, got %d", len(sections))
-	}
-
-	cursor := 0
-	for _, sec := range sections {
-		if sec.StartRow != cursor {
-			t.Errorf("section %d: expected StartRow=%d, got %d", sec.Section, cursor, sec.StartRow)
-		}
-		cursor += sec.RowCount
-	}
-}
-
-// TestViewportEmptyDescriptionStartsAtDiff verifies that when the PR body is empty,
-// Description.RowCount = 0 and Diff.StartRow = 0.
-func TestViewportEmptyDescriptionStartsAtDiff(t *testing.T) {
-	t.Parallel()
-
-	files := makeFilesWithDisplayRows(1, 5)
-	m := makePRDetail(100, 30, files, nil)
-	m.Detail = makeDetailWithBody("") // empty body
-	m.Diff = makeDiff(files)
-	m.DiffLoading = false
-	m.DetailLoading = false
-
-	sections := m.buildContentSections(m.contentW())
-
-	desc, _ := findSection(sections, domain.SectionDescription)
-	if desc.RowCount != 0 {
-		t.Errorf("expected Description.RowCount=0 for empty body, got %d", desc.RowCount)
-	}
-
-	diff, ok := findSection(sections, domain.SectionDiff)
-	if !ok {
-		t.Fatal("expected SectionDiff to be present")
-	}
-	if diff.StartRow != 0 {
-		t.Errorf("expected SectionDiff.StartRow=0 with empty description, got %d", diff.StartRow)
-	}
-}
-
 // TestViewportNoCommentsShowsPlaceholder verifies that when no reviews exist the
-// Comments section is still present (RowCount >= 1) and contains the "No reviews"
-// placeholder text so that pressing '3' always lands somewhere.
+// Comments section still shows the "No reviews" placeholder.
 func TestViewportNoCommentsShowsPlaceholder(t *testing.T) {
 	t.Parallel()
 
@@ -141,53 +81,17 @@ func TestViewportNoCommentsShowsPlaceholder(t *testing.T) {
 	m.SetTheme(theme.Default())
 
 	cw := m.contentW()
-	sections := m.buildContentSections(cw)
-
-	sec, ok := findSection(sections, domain.SectionComments)
-	if !ok {
-		t.Fatal("expected Comments section to be present even with no reviews")
+	lines := m.commentLines(cw, -1)
+	if len(lines) == 0 {
+		t.Fatal("expected commentLines to return non-nil")
 	}
-	if sec.RowCount < 1 {
-		t.Errorf("expected RowCount >= 1 for placeholder, got %d", sec.RowCount)
-	}
-
-	// Rendered output at the comments section start should contain the placeholder.
-	lines := m.renderContentLines(sections, sec.StartRow, 5, cw)
 	joined := strings.Join(lines, "\n")
 	if !strings.Contains(joined, "No reviews") {
 		t.Errorf("expected 'No reviews' placeholder in rendered output, got:\n%s", joined)
 	}
 }
 
-// TestViewportAllSectionsEmpty verifies that when all sections are empty, the rendered
-// output contains "No content".
-func TestViewportAllSectionsEmpty(t *testing.T) {
-	t.Parallel()
-
-	// No detail, no diff, no loading.
-	m := makePRDetail(100, 30, nil, nil)
-	// Detail = nil, DetailLoading = false → desc RowCount = 0
-	// Diff = nil, DiffLoading = false → diff RowCount = 0
-	// Comments = nil → Comments omitted
-	m.SetTheme(theme.Default())
-
-	cw := m.contentW()
-	sections := m.buildContentSections(cw)
-
-	total := totalRowsInSections(sections)
-	if total != 0 {
-		t.Errorf("expected totalRows=0 for all-empty state, got %d", total)
-	}
-
-	// Rendered output should contain "No content".
-	lines := m.renderContentLines(sections, 0, 10, cw)
-	joined := strings.Join(lines, "\n")
-	if !strings.Contains(joined, "No content") {
-		t.Errorf("expected 'No content' in output, got:\n%s", joined)
-	}
-}
-
-// TestViewportSectionJump verifies pressing "2" scrolls to the Diff section's StartRow
+// TestViewportSectionJump verifies pressing "2" switches to the Diff tab
 // and moves focus to the content viewport.
 func TestViewportSectionJump(t *testing.T) {
 	t.Parallel()
@@ -199,18 +103,6 @@ func TestViewportSectionJump(t *testing.T) {
 	m.DiffLoading = false
 	m.DetailLoading = false
 	m.leftPanel.Focus = FocusFiles
-
-	// Discover where the Diff section starts.
-	sections := m.buildContentSections(m.contentW())
-	diff, ok := findSection(sections, domain.SectionDiff)
-	if !ok {
-		t.Fatal("expected SectionDiff to exist")
-	}
-	if diff.StartRow == 0 && diff.RowCount > 0 {
-		// Description was empty — jump would still be correct but can't distinguish
-		// from already-at-top; skip this particular scenario check.
-		t.Skip("description is empty; Diff.StartRow=0, jump is still valid but indistinguishable")
-	}
 
 	m = pressKey(m, "2")
 
@@ -417,65 +309,6 @@ func TestCtrlUPageUpClampedAtZero(t *testing.T) {
 
 	if m.ContentScroll != 0 {
 		t.Errorf("expected ContentScroll=0 after Ctrl+U at top, got %d", m.ContentScroll)
-	}
-}
-
-// ── Overscan / render tests ───────────────────────────────────────────────────
-
-// TestViewportOverscanBelowFold verifies that renderContentLines returns exactly
-// contentH lines and that content below the visible fold (within overscan) is
-// available in the collected map without causing blank outputs above the fold.
-func TestViewportOverscanBelowFold(t *testing.T) {
-	t.Parallel()
-
-	// Create enough content to have rows well below the fold.
-	files := makeFilesWithDisplayRows(5, 20) // 100 diff rows
-	m := makePRDetail(100, 30, files, nil)
-	m.Detail = makeDetailWithBody("header body text")
-	m.Diff = makeDiff(files)
-	m.DiffLoading = false
-	m.DetailLoading = false
-	m.SetTheme(theme.Default())
-
-	cw := m.contentW()
-	sections := m.buildContentSections(cw)
-	contentH := m.contentViewportHeight()
-
-	lines := m.renderContentLines(sections, 0, contentH, cw)
-
-	if len(lines) != contentH {
-		t.Errorf("expected exactly %d content lines, got %d", contentH, len(lines))
-	}
-}
-
-// TestViewportScrolledMidContent verifies that when scrolled to the middle of the
-// diff section, the rendered lines correspond to that section's content.
-func TestViewportScrolledMidContent(t *testing.T) {
-	t.Parallel()
-
-	files := makeFilesWithDisplayRows(3, 15) // 45 diff rows
-	m := makePRDetail(100, 30, files, nil)
-	m.Detail = makeDetailWithBody("description text")
-	m.Diff = makeDiff(files)
-	m.DiffLoading = false
-	m.DetailLoading = false
-	m.SetTheme(theme.Default())
-
-	cw := m.contentW()
-	sections := m.buildContentSections(cw)
-	contentH := m.contentViewportHeight()
-
-	diffSec, ok := findSection(sections, domain.SectionDiff)
-	if !ok {
-		t.Fatal("expected SectionDiff to exist")
-	}
-
-	// Scroll to the middle of the diff section.
-	midScroll := diffSec.StartRow + diffSec.RowCount/2
-	lines := m.renderContentLines(sections, midScroll, contentH, cw)
-
-	if len(lines) != contentH {
-		t.Errorf("expected exactly %d lines at mid-scroll, got %d", contentH, len(lines))
 	}
 }
 

@@ -449,15 +449,9 @@ func TestLegacyCacheDisplayRowsZero(t *testing.T) {
 
 	// Diff section must have the correct row count computed from hunks.
 	// Each file: 3 overhead + 1 hunk header + 3 lines = 7 rows.  3 files = 21.
-	cw := m.contentW()
-	sections := m.buildContentSections(cw)
-	diff, ok := findSection(sections, domain.SectionDiff)
-	if !ok {
-		t.Fatal("expected SectionDiff to be present")
-	}
 	wantRows := 3 * diffFileDisplayRows(&m.Diff.Files[0])
-	if diff.RowCount != wantRows {
-		t.Errorf("expected diff.RowCount=%d (from hunks), got %d", wantRows, diff.RowCount)
+	if got := m.diffSectionRowCount(); got != wantRows {
+		t.Errorf("expected diffSectionRowCount=%d (from hunks), got %d", wantRows, got)
 	}
 
 	// Pressing '2' must switch to the Diff tab.
@@ -527,15 +521,8 @@ func makeTestFile(path string, lines int) diffmodel.DiffFile {
 	return f
 }
 
-// diffSectionStart returns the absolute content-scroll row where the diff section begins.
-func diffSectionStart(m *PRDetailModel) int {
-	sections := m.buildContentSections(m.contentW())
-	sec, _ := findSection(sections, domain.SectionDiff)
-	return sec.StartRow
-}
-
 // TestEnterOnFileFirstFileScrollsToDiffStart verifies that pressing Enter on
-// file 0 sets ContentScroll to the diff section's start row.
+// file 0 switches to Diff tab and sets ContentScroll to 0 (tab-relative).
 func TestEnterOnFileFirstFileScrollsToDiffStart(t *testing.T) {
 	t.Parallel()
 
@@ -544,16 +531,15 @@ func TestEnterOnFileFirstFileScrollsToDiffStart(t *testing.T) {
 		makeTestFile("b.go", 3),
 	}
 	m := makePRDetail(120, 40, files, nil)
-	m.Detail = makeDetailWithBody("") // no description → diff starts at row 0
+	m.Detail = makeDetailWithBody("") // no description
 	m.Diff = makeDiff(files)
 	m.leftPanel.Focus = FocusFiles
 	m.leftPanel.FileIndex = 0
 
 	m = pressKey(m, "enter")
 
-	want := diffSectionStart(m)
-	if m.ContentScroll != want {
-		t.Errorf("expected ContentScroll=%d (diff section start) after Enter on file 0, got %d", want, m.ContentScroll)
+	if m.ContentScroll != 0 {
+		t.Errorf("expected ContentScroll=0 after Enter on file 0, got %d", m.ContentScroll)
 	}
 	if m.leftPanel.Focus != FocusContent {
 		t.Errorf("expected FocusContent after Enter on file, got %v", m.leftPanel.Focus)
@@ -561,7 +547,7 @@ func TestEnterOnFileFirstFileScrollsToDiffStart(t *testing.T) {
 }
 
 // TestEnterOnFileSecondFileScrollsPastFirstFile verifies that pressing Enter on
-// file 1 sets ContentScroll = diffSection.StartRow + displayRows(file0).
+// file 1 sets ContentScroll to the display-row offset of file 1 within the Diff tab.
 // Height=15 → contentViewportHeight≈6, small enough that 16 total diff rows
 // exceed the viewport and maxContentScroll > 0.
 func TestEnterOnFileSecondFileScrollsPastFirstFile(t *testing.T) {
@@ -579,9 +565,8 @@ func TestEnterOnFileSecondFileScrollsPastFirstFile(t *testing.T) {
 
 	m = pressKey(m, "enter")
 
-	base := diffSectionStart(m)
 	file0Rows := diffFileDisplayRows(&files[0])
-	want := base + file0Rows
+	want := file0Rows
 	if m.ContentScroll != want {
 		t.Errorf("expected ContentScroll=%d after Enter on file 1, got %d", want, m.ContentScroll)
 	}

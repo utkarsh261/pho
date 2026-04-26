@@ -494,10 +494,8 @@ func TestVisualModeJAutoScrolls(t *testing.T) {
 	t.Parallel()
 	m := makeInlineReviewModel(100, 40)
 	// Scroll to near bottom of diff so expansion goes past viewport.
-	sections := m.buildContentSections(m.contentW())
-	diffSec, _ := findSection(sections, domain.SectionDiff)
 	vh := m.contentViewportHeight()
-	m.ContentScroll = diffSec.RowCount - vh - 1
+	m.ContentScroll = m.diffSectionRowCount() - vh - 1
 	if m.ContentScroll < 0 {
 		m.ContentScroll = 0
 	}
@@ -714,12 +712,9 @@ func TestVisualModeOnBinaryFileIsNoop(t *testing.T) {
 	t.Parallel()
 	m := makeInlineReviewModel(100, 40)
 	// Scroll to the binary file section.
-	sections := m.buildContentSections(m.contentW())
-	diffSec, _ := findSection(sections, domain.SectionDiff)
-	// The binary file is the last one. diffFileDisplayRows for binary = 4.
 	// a.go = 3+1+3+1+2 = 10, b.go = 3+1+1 = 5. Total = 15.
-	// Binary starts at offset 15 within diff section.
-	m.ContentScroll = diffSec.StartRow + 15
+	// Binary starts at tab-relative offset 15 within Diff tab.
+	m.ContentScroll = 15
 	m = pressKey(m, " ")
 	// Binary files have no diff lines, so firstDiffLineAtOrBelow should not find
 	// any diff line and visual mode should not activate.
@@ -744,6 +739,35 @@ func TestNormalJKScrollsWhenNotVisual(t *testing.T) {
 	m = pressKey(m, "k")
 	if m.ContentScroll != before {
 		t.Errorf("expected k to scroll back up to %d, got %d", before, m.ContentScroll)
+	}
+}
+
+// TestJKWithCommentsTabAndFilesFocus verifies that when focus is on Files (not
+// Content), j/k move the file cursor even if the active tab is Comments.
+func TestJKWithCommentsTabAndFilesFocus(t *testing.T) {
+	t.Parallel()
+	files := []diffmodel.DiffFile{
+		{OldPath: "a.go", NewPath: "a.go", Status: "modified"},
+		{OldPath: "b.go", NewPath: "b.go", Status: "modified"},
+	}
+	m := makePRDetail(100, 40, files, nil)
+	m.Detail = &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{Login: "alice", State: "APPROVED", Body: "LGTM"},
+		},
+	}
+	m.Diff = makeDiffForMapper()
+	m.activeTab = TabComments
+	m.leftPanel.Focus = FocusFiles
+	m.leftPanel.FileIndex = 0
+
+	beforeIdx := m.leftPanel.FileIndex
+	m = pressKey(m, "j")
+	if m.leftPanel.FileIndex == beforeIdx {
+		t.Error("expected j to move file cursor when focus is on Files")
+	}
+	if m.commentCursor >= 0 {
+		t.Errorf("expected commentCursor unchanged (-1), got %d", m.commentCursor)
 	}
 }
 
@@ -837,10 +861,8 @@ func TestDraftIndicatorVisibleInDiffViewport(t *testing.T) {
 		{Path: "a.go", Line: 1, Side: "RIGHT"},
 	}
 	cw := m.contentW()
-	sections := m.buildContentSections(cw)
-	diffSec, _ := findSection(sections, domain.SectionDiff)
-	// Render diff section starting from the first line.
-	lines := m.renderDiffSectionLines(0, diffSec.RowCount, cw)
+	// Render full diff section.
+	lines := m.renderDiffSectionLines(0, m.diffSectionRowCount(), cw)
 	// The first diff line of a.go should have some styling (we can't easily check
 	// ANSI codes in unit test, but we can verify the line is present and not empty).
 	found := false

@@ -9,7 +9,6 @@ import (
 	"github.com/muesli/termenv"
 
 	diffmodel "github.com/utkarsh261/pho/internal/diff/model"
-	"github.com/utkarsh261/pho/internal/domain"
 	"github.com/utkarsh261/pho/internal/ui/theme"
 )
 
@@ -342,14 +341,8 @@ func TestDiffRenderTruncationAt20000Rows(t *testing.T) {
 	m.SetTheme(theme.Default())
 
 	// diffSectionRowCount must return maxDiffDisplayRows+1.
-	cw := m.contentW()
-	sections := m.buildContentSections(cw)
-	diff, ok := findSection(sections, domain.SectionDiff)
-	if !ok {
-		t.Fatal("expected SectionDiff to be present")
-	}
-	if diff.RowCount != maxDiffDisplayRows+1 {
-		t.Errorf("expected RowCount=%d (cap+banner), got %d", maxDiffDisplayRows+1, diff.RowCount)
+	if got := m.diffSectionRowCount(); got != maxDiffDisplayRows+1 {
+		t.Errorf("expected diffSectionRowCount=%d (cap+banner), got %d", maxDiffDisplayRows+1, got)
 	}
 
 	// Render a 2-row window that straddles the truncation point:
