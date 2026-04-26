@@ -39,7 +39,7 @@ func makeCommentModel(width, height int) *PRDetailModel {
 	m.SetTheme(theme.Default())
 	m.leftPanel.Focus = FocusContent
 	// Jump to comments section so j/k activates comment navigation.
-	m.jumpToSection(3)
+	m.switchTab(TabComments)
 	return m
 }
 
@@ -206,24 +206,24 @@ func TestRKeyOpensReplyComposeWithCursor(t *testing.T) {
 	}
 }
 
-func TestCKeyOpensNewCompose(t *testing.T) {
+func TestShiftCKeyOpensNewCompose(t *testing.T) {
 	t.Parallel()
 	m := makeCommentModel(100, 40)
 	m.PRService = &prServiceStub{}
-	m = pressKey(m, "c")
+	m = pressKey(m, "C")
 	if !m.compose.active {
-		t.Error("expected compose to open after c")
+		t.Error("expected compose to open after C")
 	}
 	if m.compose.mode != composeModeNew {
 		t.Errorf("expected composeModeNew, got %v", m.compose.mode)
 	}
 }
 
-func TestCKeyNoopWithoutPRService(t *testing.T) {
+func TestShiftCKeyNoopWithoutPRService(t *testing.T) {
 	t.Parallel()
 	m := makeCommentModel(100, 40)
 	m.PRService = nil
-	m = pressKey(m, "c")
+	m = pressKey(m, "C")
 	if m.compose.active {
 		t.Error("expected compose to stay closed when PRService is nil")
 	}
@@ -236,7 +236,7 @@ func TestComposeActiveBlocksNavigation(t *testing.T) {
 	m := makeCommentModel(100, 40)
 	m.PRService = &prServiceStub{}
 	scrollBefore := m.ContentScroll
-	m = pressKey(m, "c") // open compose
+	m = pressKey(m, "C") // open compose
 	m = pressKey(m, "j") // should go to compose, not scroll
 	// Content scroll should not change because j was consumed by compose.
 	if m.ContentScroll != scrollBefore {
@@ -336,3 +336,15 @@ func (s *prServiceStub) LoadDiff(_ context.Context, _ domain.Repository, _ int, 
 func (s *prServiceStub) PostComment(_ context.Context, _, _ string) error       { return nil }
 func (s *prServiceStub) PostReviewComment(_ context.Context, _, _ string) error { return nil }
 func (s *prServiceStub) ApprovePR(_ context.Context, _, _ string) error         { return nil }
+func (s *prServiceStub) SubmitReviewWithComments(_ context.Context, _, _, _ string, _ []domain.DraftInlineComment) error {
+	return nil
+}
+func (s *prServiceStub) SaveDraftComments(_ context.Context, _ domain.Repository, _ int, _ string, _ []domain.DraftInlineComment) error {
+	return nil
+}
+func (s *prServiceStub) LoadDraftComments(_ context.Context, _ domain.Repository, _ int, _ string) ([]domain.DraftInlineComment, error) {
+	return nil, nil
+}
+func (s *prServiceStub) DeleteDraftComments(_ context.Context, _ domain.Repository, _ int, _ string) error {
+	return nil
+}

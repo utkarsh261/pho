@@ -214,8 +214,11 @@ func TestViewportSectionJump(t *testing.T) {
 
 	m = pressKey(m, "2")
 
-	if m.ContentScroll != diff.StartRow {
-		t.Errorf("expected ContentScroll=%d after '2' jump, got %d", diff.StartRow, m.ContentScroll)
+	if m.activeTab != TabDiff {
+		t.Errorf("expected activeTab=TabDiff after '2', got %d", m.activeTab)
+	}
+	if m.ContentScroll != 0 {
+		t.Errorf("expected ContentScroll=0 after '2' jump, got %d", m.ContentScroll)
 	}
 	if m.leftPanel.Focus != FocusContent {
 		t.Errorf("expected focus to move to FocusContent after section jump, got %v", m.leftPanel.Focus)
@@ -236,13 +239,17 @@ func TestViewportSectionJumpEmptySection(t *testing.T) {
 	m.leftPanel.Focus = FocusFiles
 	m.ContentScroll = 0
 
-	m = pressKey(m, "1") // try to jump to empty Description
+	m = pressKey(m, "1") // already on Description tab → no-op
 
+	if m.activeTab != TabDescription {
+		t.Errorf("expected activeTab=TabDescription after '1', got %d", m.activeTab)
+	}
+	// Re-pressing current tab is a no-op; focus stays unchanged.
 	if m.leftPanel.Focus != FocusFiles {
-		t.Errorf("expected focus unchanged after jump to empty section, got %v", m.leftPanel.Focus)
+		t.Errorf("expected focus unchanged when re-pressing current tab, got %v", m.leftPanel.Focus)
 	}
 	if m.ContentScroll != 0 {
-		t.Errorf("expected ContentScroll unchanged after jump to empty section, got %d", m.ContentScroll)
+		t.Errorf("expected ContentScroll=0 after jump to empty section, got %d", m.ContentScroll)
 	}
 }
 
@@ -383,6 +390,7 @@ func TestCtrlDPageDown(t *testing.T) {
 	m.DiffLoading = false
 	m.DetailLoading = false
 	m.leftPanel.Focus = FocusContent
+	m.activeTab = TabDiff
 	m.ContentScroll = 0
 
 	half := m.contentViewportHeight() / 2

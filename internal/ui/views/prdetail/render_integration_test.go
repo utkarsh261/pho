@@ -92,6 +92,7 @@ func TestRenderDiffHunkHeaderAppearsInView(t *testing.T) {
 	m.DiffLoading = false
 	m.DetailLoading = false
 	m.leftPanel.Focus = FocusContent
+	m.activeTab = TabDiff
 	m.SetTheme(theme.Default())
 
 	out := plainText(m.View())
@@ -124,6 +125,7 @@ func TestRenderDiffLinesAppearInView(t *testing.T) {
 	m.DiffLoading = false
 	m.DetailLoading = false
 	m.leftPanel.Focus = FocusContent
+	m.activeTab = TabDiff
 	m.SetTheme(theme.Default())
 
 	out := plainText(m.View())
@@ -251,13 +253,14 @@ func TestTabIndicatorDiffActiveWhenDescriptionEmpty(t *testing.T) {
 	m.DiffLoading = false
 	m.DetailLoading = false
 	m.leftPanel.Focus = FocusContent
+	m.activeTab = TabDiff
 	m.ContentScroll = 0
 	m.SetTheme(theme.Default())
 
 	out := plainText(m.View())
 
 	if !strings.Contains(out, "● Diff") {
-		t.Errorf("expected '● Diff' when description is empty and scroll=0; got:\n%s", out)
+		t.Errorf("expected '● Diff' when on Diff tab; got:\n%s", out)
 	}
 }
 
@@ -457,11 +460,14 @@ func TestLegacyCacheDisplayRowsZero(t *testing.T) {
 		t.Errorf("expected diff.RowCount=%d (from hunks), got %d", wantRows, diff.RowCount)
 	}
 
-	// Pressing '2' must scroll to the diff start.
+	// Pressing '2' must switch to the Diff tab.
 	m.leftPanel.Focus = FocusFiles
 	m = pressKey(m, "2")
-	if m.ContentScroll != diff.StartRow {
-		t.Errorf("expected ContentScroll=%d after '2', got %d", diff.StartRow, m.ContentScroll)
+	if m.activeTab != TabDiff {
+		t.Errorf("expected activeTab=TabDiff after '2', got %d", m.activeTab)
+	}
+	if m.ContentScroll != 0 {
+		t.Errorf("expected ContentScroll=0 after '2', got %d", m.ContentScroll)
 	}
 
 	// Rendered output must contain diff file header bars.
@@ -600,13 +606,12 @@ func TestEnterOnFileWithDescriptionAccountsForDescRows(t *testing.T) {
 
 	m = pressKey(m, "enter")
 
-	// The diff section must start after the description rows.
-	base := diffSectionStart(m)
-	if base == 0 {
-		t.Error("expected diff section to start after description rows, got StartRow=0")
+	// Switching to Diff tab should set ContentScroll to 0 (relative).
+	if m.activeTab != TabDiff {
+		t.Errorf("expected activeTab=TabDiff, got %d", m.activeTab)
 	}
-	if m.ContentScroll != base {
-		t.Errorf("expected ContentScroll=%d, got %d", base, m.ContentScroll)
+	if m.ContentScroll != 0 {
+		t.Errorf("expected ContentScroll=0, got %d", m.ContentScroll)
 	}
 }
 

@@ -479,6 +479,18 @@ func (s *prService) PostComment(ctx context.Context, prID, body string) error {
 
 func (s *prService) PostReviewComment(_ context.Context, _, _ string) error { return nil }
 func (s *prService) ApprovePR(_ context.Context, _, _ string) error          { return nil }
+func (s *prService) SubmitReviewWithComments(_ context.Context, _, _, _ string, _ []domain.DraftInlineComment) error {
+	return nil
+}
+func (s *prService) SaveDraftComments(_ context.Context, _ domain.Repository, _ int, _ string, _ []domain.DraftInlineComment) error {
+	return nil
+}
+func (s *prService) LoadDraftComments(_ context.Context, _ domain.Repository, _ int, _ string) ([]domain.DraftInlineComment, error) {
+	return nil, nil
+}
+func (s *prService) DeleteDraftComments(_ context.Context, _ domain.Repository, _ int, _ string) error {
+	return nil
+}
 
 func splitRepo(full string) (string, string, bool) {
 	for i := 0; i < len(full); i++ {

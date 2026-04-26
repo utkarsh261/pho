@@ -36,6 +36,10 @@ type PRService interface {
 	PostComment(ctx context.Context, prID string, body string) error
 	PostReviewComment(ctx context.Context, prID string, body string) error
 	ApprovePR(ctx context.Context, prID string, body string) error
+	SubmitReviewWithComments(ctx context.Context, prID, body, event string, comments []domain.DraftInlineComment) error
+	SaveDraftComments(ctx context.Context, repo domain.Repository, number int, headSHA string, drafts []domain.DraftInlineComment) error
+	LoadDraftComments(ctx context.Context, repo domain.Repository, number int, headSHA string) ([]domain.DraftInlineComment, error)
+	DeleteDraftComments(ctx context.Context, repo domain.Repository, number int, headSHA string) error
 }
 
 type PRDetailLoaded struct {
@@ -120,6 +124,12 @@ type ApprovalPosted struct{}
 
 // ApprovalFailed is emitted when submitting a PR review approval fails.
 type ApprovalFailed struct{ Err error }
+
+// ReviewPosted is emitted when a PR review with inline comments has been successfully submitted.
+type ReviewPosted struct{}
+
+// ReviewFailed is emitted when submitting a PR review with inline comments fails.
+type ReviewFailed struct{ Err error }
 
 type RefreshStarted struct {
 	Key string
@@ -243,6 +253,15 @@ func ApprovePRCmd(svc PRService, prID, body string) tea.Cmd {
 			return ApprovalFailed{Err: err}
 		}
 		return ApprovalPosted{}
+	}
+}
+
+func SubmitReviewWithDraftsCmd(svc PRService, prID, body, event string, drafts []domain.DraftInlineComment) tea.Cmd {
+	return func() tea.Msg {
+		if err := svc.SubmitReviewWithComments(context.Background(), prID, body, event, drafts); err != nil {
+			return ReviewFailed{Err: err}
+		}
+		return ReviewPosted{}
 	}
 }
 

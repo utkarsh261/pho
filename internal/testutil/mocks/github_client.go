@@ -22,6 +22,7 @@ type MockGitHubClient struct {
 	PostCommentFn          func(ctx context.Context, host, pullRequestID, body string) error
 	PostReviewCommentFn    func(ctx context.Context, host, pullRequestID, body string) error
 	ApprovePullRequestFn   func(ctx context.Context, host, pullRequestID, body string) error
+	SubmitReviewWithCommentsFn func(ctx context.Context, host, pullRequestID, body, event string, comments []domain.DraftInlineComment) error
 	FetchAllPRsFn          func(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
 
 	// Call counters — incremented on each call.
@@ -29,6 +30,7 @@ type MockGitHubClient struct {
 	FetchPreviewCalls       int
 	PostCommentCalls        int
 	ApprovePullRequestCalls int
+	SubmitReviewWithCommentsCalls int
 }
 
 func (m *MockGitHubClient) FetchViewer(ctx context.Context, host string) (string, error) {
@@ -89,6 +91,14 @@ func (m *MockGitHubClient) ApprovePullRequest(ctx context.Context, host, pullReq
 	}
 	m.ApprovePullRequestCalls++
 	return m.ApprovePullRequestFn(ctx, host, pullRequestID, body)
+}
+
+func (m *MockGitHubClient) SubmitReviewWithComments(ctx context.Context, host, pullRequestID, body, event string, comments []domain.DraftInlineComment) error {
+	if m.SubmitReviewWithCommentsFn == nil {
+		panic("MockGitHubClient.SubmitReviewWithComments called but SubmitReviewWithCommentsFn is nil")
+	}
+	m.SubmitReviewWithCommentsCalls++
+	return m.SubmitReviewWithCommentsFn(ctx, host, pullRequestID, body, event, comments)
 }
 
 func (m *MockGitHubClient) FetchAllPRs(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error) {

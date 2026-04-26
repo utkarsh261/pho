@@ -37,19 +37,11 @@ func makeSearchFile(path string, lines ...string) diffmodel.DiffFile {
 func expectedSearchScroll(m *PRDetailModel, match diffsearch.Match) int {
 	m.normalizeDiffRows()
 
-	contentWidth := contentViewportWidth(m.rightPanelWidth())
-	sections := m.buildContentSections(contentWidth)
-	diffSec, ok := findSection(sections, domain.SectionDiff)
-	if !ok {
-		return 0
-	}
 	flatLineIndexWithinFile := m.matchDisplayOffsetWithinFile(match)
 	matchDisplayRow := m.Diff.Files[match.FileIndex].StartRow + flatLineIndexWithinFile
-	matchAbsoluteRow := diffSec.StartRow + matchDisplayRow
 	contentHeight := m.contentViewportHeight()
-	totalContentRows := totalRowsInSections(sections)
 
-	return clamp(matchAbsoluteRow-contentHeight/2, 0, max(0, totalContentRows-contentHeight))
+	return clamp(matchDisplayRow-contentHeight/2, 0, m.maxContentScroll())
 }
 
 func typeQuery(m *PRDetailModel, query string) *PRDetailModel {
@@ -68,6 +60,7 @@ func TestSearchActivatesOnSlash(t *testing.T) {
 	m := makePRDetail(120, 30, files, nil)
 	m.Diff = makeDiff(files)
 
+	m.activeTab = TabDiff
 	m = pressKey(m, "/")
 
 	if !m.searchActive {
@@ -94,6 +87,7 @@ func TestSearchQueryUpdatesMatches(t *testing.T) {
 	m := makePRDetail(120, 30, files, nil)
 	m.Diff = makeDiff(files)
 
+	m.activeTab = TabDiff
 	m = pressKey(m, "/")
 	m = typeQuery(m, "RETURN")
 
@@ -117,6 +111,7 @@ func TestSearchQueryAllowsSpace(t *testing.T) {
 	m := makePRDetail(120, 30, files, nil)
 	m.Diff = makeDiff(files)
 
+	m.activeTab = TabDiff
 	m = pressKey(m, "/")
 	m = typeQuery(m, "multi word")
 
@@ -137,6 +132,7 @@ func TestSearchZeroMatchesStatusBar(t *testing.T) {
 	m := makePRDetail(120, 30, files, nil)
 	m.Diff = makeDiff(files)
 
+	m.activeTab = TabDiff
 	m = pressKey(m, "/")
 	m = typeQuery(m, "xyzquux")
 
@@ -175,6 +171,7 @@ func TestSearchEnterScrollsToFirstMatch(t *testing.T) {
 	m.Diff = makeDiff(files)
 	m.ContentScroll = 0
 
+	m.activeTab = TabDiff
 	m = pressKey(m, "/")
 	m = typeQuery(m, "needle")
 	m = pressKey(m, "enter")
@@ -198,6 +195,7 @@ func TestSearchNNextWrapsAtEnd(t *testing.T) {
 	m := makePRDetail(120, 20, files, nil)
 	m.Diff = makeDiff(files)
 
+	m.activeTab = TabDiff
 	m = pressKey(m, "/")
 	m = typeQuery(m, "hit")
 	m = pressKey(m, "enter")
@@ -227,6 +225,7 @@ func TestSearchNPrevWrapsAtStart(t *testing.T) {
 	m := makePRDetail(120, 20, files, nil)
 	m.Diff = makeDiff(files)
 
+	m.activeTab = TabDiff
 	m = pressKey(m, "/")
 	m = typeQuery(m, "hit")
 	m = pressKey(m, "enter")
@@ -256,6 +255,7 @@ func TestSearchNNoopWhenNoMatches(t *testing.T) {
 	m := makePRDetail(120, 20, files, nil)
 	m.Diff = makeDiff(files)
 
+	m.activeTab = TabDiff
 	m = pressKey(m, "/")
 	m = typeQuery(m, "xyzquux")
 	m = pressKey(m, "enter")
@@ -290,6 +290,7 @@ func TestSearchEscClearsAllState(t *testing.T) {
 	m := makePRDetail(120, 20, files, nil)
 	m.Diff = makeDiff(files)
 
+	m.activeTab = TabDiff
 	m = pressKey(m, "/")
 	m = typeQuery(m, "needle")
 
@@ -327,6 +328,7 @@ func TestSearchPersistsAcrossTabFocus(t *testing.T) {
 	m.Diff = makeDiff(files)
 	m.leftPanel.Focus = FocusFiles
 
+	m.activeTab = TabDiff
 	m = pressKey(m, "/")
 	m = typeQuery(m, "hit")
 	m = pressKey(m, "enter")
@@ -363,6 +365,7 @@ func TestSearchScrollAfterEachN(t *testing.T) {
 	m.Detail = makeDetailWithBody(strings.Repeat("desc ", 20))
 	m.Diff = makeDiff(files)
 
+	m.activeTab = TabDiff
 	m = pressKey(m, "/")
 	m = typeQuery(m, "target")
 	if len(m.searchMatches) < 3 {

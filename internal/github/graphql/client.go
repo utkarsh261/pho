@@ -105,6 +105,37 @@ func (c *Client) ApprovePullRequest(ctx context.Context, host, pullRequestID, bo
 	return err
 }
 
+// SubmitReviewWithComments submits a PR review with inline comments via GraphQL.
+func (c *Client) SubmitReviewWithComments(ctx context.Context, host, pullRequestID, body, event string, comments []domain.DraftInlineComment) error {
+	threads := make([]map[string]any, 0, len(comments))
+	for _, d := range comments {
+		thread := map[string]any{
+			"path": d.Path,
+			"body": d.Body,
+			"line": d.Line,
+			"side": d.Side,
+		}
+		if d.StartLine > 0 {
+			thread["startLine"] = d.StartLine
+			thread["startSide"] = d.StartSide
+		}
+		threads = append(threads, thread)
+	}
+	vars := map[string]any{
+		"pullRequestId": pullRequestID,
+		"body":          body,
+		"event":         event,
+		"threads":       threads,
+	}
+	if body == "" {
+		vars["body"] = nil
+	}
+	_, err := queryGraphQL[model.AddPullRequestReviewData](c, ctx, host, func(_ githubpkg.GitHubHostProfile) string {
+		return buildSubmitReviewWithCommentsMutation()
+	}, vars)
+	return err
+}
+
 // FetchViewer resolves the current viewer login for a host.
 func (c *Client) FetchViewer(ctx context.Context, host string) (string, error) {
 	c.log.Debug("fetch viewer", "host", host)
