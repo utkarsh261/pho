@@ -1,6 +1,7 @@
 package prdetail
 
 import (
+	"strings"
 	"testing"
 
 	diffmodel "github.com/utkarsh261/pho/internal/diff/model"
@@ -716,10 +717,14 @@ func TestVisualModeOnBinaryFileIsNoop(t *testing.T) {
 	// Binary starts at tab-relative offset 15 within Diff tab.
 	m.ContentScroll = 15
 	m = pressKey(m, " ")
-	// Binary files have no diff lines, so firstDiffLineAtOrBelow should not find
-	// any diff line and visual mode should not activate.
-	if m.visual.Active {
-		t.Error("expected space on binary file to not enter visual mode")
+	// With cursor-based navigation, visual mode finds the nearest valid diff line
+	// (which is b.go's line, right before the binary file) since the binary file is
+	// skipped by firstDiffLineAtOrBelow.
+	if !m.visual.Active {
+		t.Error("expected visual mode to activate (anchored at nearest diff line)")
+	}
+	if m.visual.FileIdx != 1 {
+		t.Errorf("expected visual mode on file 1 (b.go), got file %d", m.visual.FileIdx)
 	}
 }
 
@@ -727,14 +732,22 @@ func TestVisualModeOnBinaryFileIsNoop(t *testing.T) {
 
 func TestNormalJKScrollsWhenNotVisual(t *testing.T) {
 	t.Parallel()
-	// Use a smaller height so the diff content exceeds the viewport.
+	// On the Description tab, j/k still scroll content.
 	m := makeInlineReviewModel(100, 20)
-	m.Detail = &domain.PRPreviewSnapshot{BodyExcerpt: "some description text"}
+	m.Detail = &domain.PRPreviewSnapshot{BodyExcerpt: strings.Repeat("word ", 500)}
+	m.switchTab(TabDescription)
 	m.leftPanel.Focus = FocusContent
+
+	cw := contentViewportWidth(m.rightPanelWidth())
+	lines := m.descriptionLines(cw)
+	if len(lines) < 5 {
+		t.Skipf("description too short (%d lines) for scroll test", len(lines))
+	}
+
 	before := m.ContentScroll
 	m = pressKey(m, "j")
 	if m.ContentScroll == before {
-		t.Error("expected j to scroll down in normal mode")
+		t.Error("expected j to scroll down in Description tab")
 	}
 	m = pressKey(m, "k")
 	if m.ContentScroll != before {
