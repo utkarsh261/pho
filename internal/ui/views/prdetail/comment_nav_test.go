@@ -289,6 +289,56 @@ func viewContains(s, substr string) bool {
 	return len(substr) > 0 && strings.Contains(s, substr)
 }
 
+// ── comment cursor gg/G/ctrl+d/ctrl+u ─────────────────────────────────────────
+
+func TestCommentCursorGG(t *testing.T) {
+	t.Parallel()
+	m := makeCommentModel(100, 40)
+	m = pressKey(m, "j") // activate cursor at 0
+	m = pressKey(m, "j") // move to 1
+	if m.commentCursor != 1 {
+		t.Fatalf("expected cursor=1, got %d", m.commentCursor)
+	}
+	m = pressKey(m, "g")
+	m = pressKey(m, "g")
+	if m.commentCursor != 0 {
+		t.Errorf("expected cursor=0 after gg, got %d", m.commentCursor)
+	}
+}
+
+func TestCommentCursorG(t *testing.T) {
+	t.Parallel()
+	m := makeCommentModel(100, 40)
+	m = pressKey(m, "G")
+	entries := m.commentEntries()
+	last := len(entries) - 1
+	if m.commentCursor != last {
+		t.Errorf("expected cursor=%d after G, got %d", last, m.commentCursor)
+	}
+}
+
+func TestCommentCursorCtrlD(t *testing.T) {
+	t.Parallel()
+	m := makeCommentModel(100, 40)
+	m = pressKey(m, "j") // activate at 0
+	before := m.commentCursor
+	m = pressKey(m, "ctrl+d")
+	if m.commentCursor <= before {
+		t.Errorf("expected ctrl+d to advance cursor, got %d (was %d)", m.commentCursor, before)
+	}
+}
+
+func TestCommentCursorCtrlU(t *testing.T) {
+	t.Parallel()
+	m := makeCommentModel(100, 40)
+	m = pressKey(m, "G") // jump to last
+	before := m.commentCursor
+	m = pressKey(m, "ctrl+u")
+	if m.commentCursor >= before {
+		t.Errorf("expected ctrl+u to move cursor up, got %d (was %d)", m.commentCursor, before)
+	}
+}
+
 // ── commentEntryStartRows sync with commentLines ──────────────────────────────
 
 // TestCommentEntryStartRowsSyncWithCommentLines is the critical guard that ensures

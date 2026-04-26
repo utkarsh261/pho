@@ -87,9 +87,9 @@ type visualModeState struct {
 // diffCursorLine identifies a single diff line for cursor-based navigation.
 // FileIdx==-1 means the cursor is invalid/unset.
 type diffCursorLine struct {
-	FileIdx  int
-	HunkIdx  int
-	LineIdx  int
+	FileIdx int
+	HunkIdx int
+	LineIdx int
 }
 
 // scrollPadding is the number of lines of context kept between the cursor
@@ -160,8 +160,8 @@ type PRDetailModel struct {
 	draftCovered      map[hunkLineKey]bool // precomputed for diff rendering
 
 	// Diff indices (rebuilt when Diff changes)
-	diffLineIndex    map[string]map[int]string              // path → line → raw text
-	diffAnchorIndex  map[string]map[int]map[string][3]int   // path → line → side → {fileIdx, hunkIdx, lineIdx}
+	diffLineIndex   map[string]map[int]string            // path → line → raw text
+	diffAnchorIndex map[string]map[int]map[string][3]int // path → line → side → {fileIdx, hunkIdx, lineIdx}
 
 	// Comment entries cache (invalidated when Detail or drafts change)
 	cachedCommentEntries []commentEntry
@@ -185,7 +185,7 @@ func NewModel(summary domain.PullRequestSummary, repo domain.Repository, prServi
 		DiffLoading:   loading,
 		spinner:       s,
 		commentCursor: -1,
-		diffCursor:     diffCursorLine{FileIdx: -1},
+		diffCursor:    diffCursorLine{FileIdx: -1},
 		compose:       newComposeModel(nil),
 		activeTab:     TabDescription,
 	}
@@ -783,6 +783,62 @@ func (m *PRDetailModel) scrollToCommentCursor() {
 	m.clampContentScroll()
 }
 
+// moveCommentCursorBy shifts the comment cursor by approximately delta display
+// rows, clamping to the first/last entry. Positive delta moves down; negative
+// moves up. The viewport is scrolled so the new entry is visible.
+func (m *PRDetailModel) moveCommentCursorBy(delta int) {
+	entries := m.commentEntries()
+	if len(entries) == 0 {
+		return
+	}
+	cw := contentViewportWidth(m.rightPanelWidth())
+	startRows := m.commentEntryStartRows(cw)
+	if startRows == nil {
+		return
+	}
+	if m.commentCursor < 0 {
+		if delta >= 0 {
+			m.commentCursor = 0
+		} else {
+			m.commentCursor = len(entries) - 1
+		}
+		m.scrollToCommentCursor()
+		return
+	}
+	currentTop := startRows[m.commentCursor]
+	targetTop := currentTop + delta
+	if targetTop <= startRows[0] {
+		m.commentCursor = 0
+		m.scrollToCommentCursor()
+		return
+	}
+	last := len(startRows) - 1
+	if targetTop >= startRows[last] {
+		m.commentCursor = last
+		m.scrollToCommentCursor()
+		return
+	}
+	// Find the entry whose start row is closest to target without going past it.
+	best := m.commentCursor
+	bestDist := abs(targetTop - startRows[best])
+	for i, sr := range startRows {
+		d := abs(targetTop - sr)
+		if d < bestDist {
+			best = i
+			bestDist = d
+		}
+	}
+	m.commentCursor = best
+	m.scrollToCommentCursor()
+}
+
+func abs(a int) int {
+	if a < 0 {
+		return -a
+	}
+	return a
+}
+
 // validVisualState reports whether m.visual indices are in bounds for the
 // current m.Diff. Call before accessing m.Diff.Files[FileIdx] or f.Hunks[HunkIdx].
 func (m *PRDetailModel) validVisualState() bool {
@@ -1316,6 +1372,12 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 				m.diffCursor = diffCursorLine{FileIdx: fi, HunkIdx: hi, LineIdx: li}
 				m.ContentScroll = 0
 				m.syncFilePanelToCursor()
+			} else if m.leftPanel.Focus == FocusContent && m.activeTab == TabComments {
+				entries := m.commentEntries()
+				if len(entries) > 0 {
+					m.commentCursor = 0
+					m.scrollToCommentCursor()
+				}
 			} else {
 				m.scrollToTop()
 			}
@@ -1330,6 +1392,12 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 			m.diffCursor = diffCursorLine{FileIdx: fi, HunkIdx: hi, LineIdx: li}
 			m.scrollToCursor(scrollPadding)
 			m.syncFilePanelToCursor()
+		} else if m.leftPanel.Focus == FocusContent && m.activeTab == TabComments {
+			entries := m.commentEntries()
+			if len(entries) > 0 {
+				m.commentCursor = len(entries) - 1
+				m.scrollToCommentCursor()
+			}
 		} else {
 			m.scrollToBottom()
 		}
@@ -1340,12 +1408,20 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 			m.scrollToCursor(scrollPadding)
 			return m, nil
 		}
+		if m.leftPanel.Focus == FocusContent && m.activeTab == TabComments {
+			m.moveCommentCursorBy(m.contentViewportHeight() / 2)
+			return m, nil
+		}
 		m.scrollHalfPageDown()
 	case "ctrl+u":
 		if m.leftPanel.Focus == FocusContent && m.activeTab == TabDiff {
 			m.ensureDiffCursor()
 			m.moveCursorBy(-(m.contentViewportHeight() / 2))
 			m.scrollToCursor(scrollPadding)
+			return m, nil
+		}
+		if m.leftPanel.Focus == FocusContent && m.activeTab == TabComments {
+			m.moveCommentCursorBy(-(m.contentViewportHeight() / 2))
 			return m, nil
 		}
 		m.scrollHalfPageUp()
@@ -1696,12 +1772,12 @@ func (m *PRDetailModel) diffLineToDisplayRow(fileIdx, hunkIdx, lineIdx int) int 
 		return 0
 	}
 	row := 0
-	for i := 0; i < fileIdx; i++ {
+	for i := range fileIdx {
 		row += diffFileDisplayRows(&m.Diff.Files[i])
 	}
 	row += diffFileHeaderRows // blank + separator + header
 	f := &m.Diff.Files[fileIdx]
-	for i := 0; i < hunkIdx; i++ {
+	for i := range hunkIdx {
 		row += 1 + len(f.Hunks[i].Lines)
 	}
 	row += 1 + lineIdx // hunk header + line offset
@@ -1753,7 +1829,7 @@ func (m *PRDetailModel) firstDiffLineAtOrBelow(targetRow int) (fileIdx, hunkIdx,
 			if lastHunk >= 0 {
 				lastLines := len(f.Hunks[lastHunk].Lines)
 				if lastLines > 0 {
-					return fi, lastHunk, lastLines-1, true
+					return fi, lastHunk, lastLines - 1, true
 				}
 			}
 			return fi, 0, 0, true
@@ -1808,9 +1884,9 @@ func (m *PRDetailModel) enterVisualMode() {
 func (m *PRDetailModel) exitVisualMode() {
 	if m.validVisualState() {
 		m.diffCursor = diffCursorLine{
-			FileIdx:  m.visual.FileIdx,
-			HunkIdx:  m.visual.HunkIdx,
-			LineIdx:  m.visual.StartLine,
+			FileIdx: m.visual.FileIdx,
+			HunkIdx: m.visual.HunkIdx,
+			LineIdx: m.visual.StartLine,
 		}
 	}
 	m.visual.Active = false
