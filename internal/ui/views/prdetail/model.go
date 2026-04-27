@@ -991,15 +991,13 @@ func (m *PRDetailModel) ensureDiffCursor() {
 	targetRow := m.ContentScroll
 	for i, row := range m.navigableRows {
 		if row >= targetRow {
-			m.navIdx = i
-			m.diffCursor = m.navigableLines[i]
+			m.setDiffCursor(m.navigableLines[i])
 			return
 		}
 	}
 	// Fallback to last navigable line.
 	if len(m.navigableLines) > 0 {
-		m.navIdx = len(m.navigableLines) - 1
-		m.diffCursor = m.navigableLines[m.navIdx]
+		m.setDiffCursor(m.navigableLines[len(m.navigableLines)-1])
 		return
 	}
 	m.invalidateDiffCursor()
@@ -1053,7 +1051,7 @@ func (m *PRDetailModel) moveCursorDown() {
 	}
 	if m.navIdx >= 0 && m.navIdx < len(m.navigableLines)-1 {
 		m.navIdx++
-		m.diffCursor = m.navigableLines[m.navIdx]
+		m.setDiffCursor(m.navigableLines[m.navIdx])
 		m.syncFilePanelToCursor()
 	}
 }
@@ -1065,7 +1063,7 @@ func (m *PRDetailModel) moveCursorUp() {
 	}
 	if m.navIdx > 0 {
 		m.navIdx--
-		m.diffCursor = m.navigableLines[m.navIdx]
+		m.setDiffCursor(m.navigableLines[m.navIdx])
 		m.syncFilePanelToCursor()
 	}
 }
@@ -1082,7 +1080,7 @@ func (m *PRDetailModel) moveCursorBy(delta int) {
 	} else if m.navIdx >= len(m.navigableLines) {
 		m.navIdx = len(m.navigableLines) - 1
 	}
-	m.diffCursor = m.navigableLines[m.navIdx]
+	m.setDiffCursor(m.navigableLines[m.navIdx])
 	m.syncFilePanelToCursor()
 }
 
@@ -1324,8 +1322,7 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		if m.LastKey == "g" {
 			if m.isInDiffSection() {
 				if len(m.navigableLines) > 0 {
-					m.navIdx = 0
-					m.diffCursor = m.navigableLines[0]
+					m.setDiffCursor(m.navigableLines[0])
 					m.ContentScroll = 0
 					m.syncFilePanelToCursor()
 				}
@@ -1346,8 +1343,7 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 	case "G":
 		if m.isInDiffSection() {
 			if len(m.navigableLines) > 0 {
-				m.navIdx = len(m.navigableLines) - 1
-				m.diffCursor = m.navigableLines[m.navIdx]
+				m.setDiffCursor(m.navigableLines[len(m.navigableLines)-1])
 				m.scrollToCursor(scrollPadding)
 				m.syncFilePanelToCursor()
 			}
