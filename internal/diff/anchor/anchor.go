@@ -5,7 +5,7 @@ import (
 )
 
 func Generate(dm *model.DiffModel, commitSHA string) {
-	if dm == nil || commitSHA == "" {
+	if dm == nil {
 		return
 	}
 

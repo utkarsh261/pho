@@ -1801,6 +1801,35 @@ func (m *PRDetailModel) exitVisualMode() {
 	m.visual.Active = false
 }
 
+// anchorForLine returns the best available anchor data for a diff line.
+// It uses the generated anchor if present; otherwise it infers path, line
+// number and side from the line kind and surrounding file so that inline
+// comments can be created even when anchors were not populated (e.g. empty
+// head SHA on hosts that don't expose headRefOid).
+func anchorForLine(file *model.DiffFile, line *model.DiffLine) (path string, lineNum int, side string, ok bool) {
+	if len(line.Anchors) > 0 && line.Anchors[0].Side != "" {
+		a := line.Anchors[0]
+		return a.Path, *a.Line, a.Side, true
+	}
+	path = file.NewPath
+	if file.Status == "removed" {
+		path = file.OldPath
+	}
+	switch line.Kind {
+	case "context", "addition":
+		if line.NewLine == nil {
+			return "", 0, "", false
+		}
+		return path, *line.NewLine, "RIGHT", true
+	case "deletion":
+		if line.OldLine == nil {
+			return "", 0, "", false
+		}
+		return path, *line.OldLine, "LEFT", true
+	}
+	return "", 0, "", false
+}
+
 // buildDraftFromVisualSelection creates a DraftInlineComment from the current
 // visual selection and the provided body text.
 func (m *PRDetailModel) buildDraftFromVisualSelection(body string) domain.DraftInlineComment {
@@ -1812,23 +1841,26 @@ func (m *PRDetailModel) buildDraftFromVisualSelection(body string) domain.DraftI
 	firstLine := h.Lines[m.visual.StartLine]
 	lastLine := h.Lines[m.visual.EndLine]
 
-	if len(lastLine.Anchors) == 0 {
+	path, lineNum, side, ok := anchorForLine(f, &lastLine)
+	if !ok {
 		return domain.DraftInlineComment{}
 	}
 
 	draft := domain.DraftInlineComment{
 		ID:          generateDraftID(),
-		Path:        lastLine.Anchors[0].Path,
-		Line:        *lastLine.Anchors[0].Line,
-		Side:        lastLine.Anchors[0].Side,
+		Path:        path,
+		Line:        lineNum,
+		Side:        side,
 		Body:        body,
 		ContextLine: lastLine.Raw,
-		HeadSHA:     lastLine.Anchors[0].CommitSHA,
+		HeadSHA:     m.headSHA(),
 		CreatedAt:   time.Now(),
 	}
-	if m.visual.StartLine != m.visual.EndLine && len(firstLine.Anchors) > 0 {
-		draft.StartLine = *firstLine.Anchors[0].Line
-		draft.StartSide = firstLine.Anchors[0].Side
+	if m.visual.StartLine != m.visual.EndLine {
+		if _, sl, ss, sok := anchorForLine(f, &firstLine); sok {
+			draft.StartLine = sl
+			draft.StartSide = ss
+		}
 	}
 	return draft
 }

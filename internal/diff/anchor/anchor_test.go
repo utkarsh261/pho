@@ -138,12 +138,16 @@ func TestGenerateEmptySHA(t *testing.T) {
 	}
 	Generate(dm, "")
 
-	// No anchors should be generated with empty SHA.
+	// Anchors should still be generated even with empty SHA (CommitSHA will be empty).
 	for _, file := range dm.Files {
 		for _, hunk := range file.Hunks {
 			for _, line := range hunk.Lines {
-				if len(line.Anchors) != 0 {
-					t.Errorf("expected 0 anchors with empty SHA, got %d", len(line.Anchors))
+				if len(line.Anchors) == 0 {
+					t.Errorf("expected anchors even with empty SHA, got 0")
+					continue
+				}
+				if line.Anchors[0].CommitSHA != "" {
+					t.Errorf("expected empty CommitSHA, got %q", line.Anchors[0].CommitSHA)
 				}
 			}
 		}

@@ -193,6 +193,7 @@ func (s *PRService) loadDiffInner(ctx context.Context, repo domain.Repository, n
 		_, _, found, _ = s.Cache.StaleWhileRevalidate(ctx, key, &cached, nil)
 		if found {
 			s.logDebug("diff cache hit", "key", key, "number", number)
+			anchor.Generate(&cached, headSHA)
 			return cached, true, nil
 		}
 	} else if force && headSHA != "" {
@@ -205,6 +206,7 @@ func (s *PRService) loadDiffInner(ctx context.Context, repo domain.Repository, n
 	if err != nil {
 		if found && headSHA != "" {
 			s.logWarn("diff fetch failed, returning stale", "key", key, "number", number, "err", err)
+			anchor.Generate(&cached, headSHA)
 			return cached, true, fmt.Errorf("refresh diff %s: %w", repo.FullName, err)
 		}
 		return model.DiffModel{}, false, fmt.Errorf("fetch raw diff: %w", err)
@@ -214,6 +216,7 @@ func (s *PRService) loadDiffInner(ctx context.Context, repo domain.Repository, n
 	if err != nil {
 		if found {
 			s.logWarn("diff parse failed, returning stale", "key", key, "err", err)
+			anchor.Generate(&cached, headSHA)
 			return cached, true, fmt.Errorf("parse diff: %w", err)
 		}
 		return model.DiffModel{}, false, fmt.Errorf("parse diff: %w", err)
