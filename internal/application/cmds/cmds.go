@@ -18,10 +18,10 @@ type DiscoveryService interface {
 }
 
 type DashboardService interface {
-	LoadRepo(ctx context.Context, repo domain.Repository, force bool) (domain.DashboardSnapshot, error)
-	LoadInvolving(ctx context.Context, repo domain.Repository, viewer string, force bool) (domain.InvolvingSnapshot, error)
-	LoadRecent(ctx context.Context, repo domain.Repository, force bool) (domain.RecentSnapshot, error)
-	LoadPreview(ctx context.Context, repo string, number int) (domain.PRPreviewSnapshot, error)
+	LoadRepo(ctx context.Context, repo domain.Repository, force bool) (domain.DashboardSnapshot, bool, error)
+	LoadInvolving(ctx context.Context, repo domain.Repository, viewer string, force bool) (domain.InvolvingSnapshot, bool, error)
+	LoadRecent(ctx context.Context, repo domain.Repository, force bool) (domain.RecentSnapshot, bool, error)
+	LoadPreview(ctx context.Context, repo string, number int, force bool) (domain.PRPreviewSnapshot, error)
 	LoadAllPRsPage(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
 }
 
@@ -160,32 +160,32 @@ func DiscoverReposCmd(svc DiscoveryService, root string) tea.Cmd {
 
 func LoadDashboardCmd(svc DashboardService, repo domain.Repository, force bool) tea.Cmd {
 	return func() tea.Msg {
-		snap, err := svc.LoadRepo(context.Background(), repo, force)
-		return DashboardLoaded{Repo: repoKey(repo), Snapshot: snap, Err: err}
+		snap, fromCache, err := svc.LoadRepo(context.Background(), repo, force)
+		return DashboardLoaded{Repo: repoKey(repo), Snapshot: snap, FromCache: fromCache, Err: err}
 	}
 }
 
 func LoadInvolvingCmd(svc DashboardService, repo domain.Repository, viewer string, force bool) tea.Cmd {
 	return func() tea.Msg {
-		snap, err := svc.LoadInvolving(context.Background(), repo, viewer, force)
-		return InvolvingLoaded{Repo: repoKey(repo), Snapshot: snap, Err: err}
+		snap, fromCache, err := svc.LoadInvolving(context.Background(), repo, viewer, force)
+		return InvolvingLoaded{Repo: repoKey(repo), Snapshot: snap, FromCache: fromCache, Err: err}
 	}
 }
 
 func LoadRecentCmd(svc DashboardService, repo domain.Repository, force bool) tea.Cmd {
 	return func() tea.Msg {
-		snap, err := svc.LoadRecent(context.Background(), repo, force)
-		return RecentLoaded{Repo: repoKey(repo), Snapshot: snap, Err: err}
+		snap, fromCache, err := svc.LoadRecent(context.Background(), repo, force)
+		return RecentLoaded{Repo: repoKey(repo), Snapshot: snap, FromCache: fromCache, Err: err}
 	}
 }
 
-func LoadPreviewCmd(svc DashboardService, repo string, number int, host string) tea.Cmd {
+func LoadPreviewCmd(svc DashboardService, repo string, number int, host string, force bool) tea.Cmd {
 	return func() tea.Msg {
 		repoArg := repo
 		if host != "" {
 			repoArg = host + "/" + repo
 		}
-		snap, err := svc.LoadPreview(context.Background(), repoArg, number)
+		snap, err := svc.LoadPreview(context.Background(), repoArg, number, force)
 		return PreviewLoaded{Repo: repo, Number: number, Preview: snap, Err: err}
 	}
 }

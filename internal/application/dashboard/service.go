@@ -24,10 +24,10 @@ const (
 
 type DashboardService interface {
 	SelectInitialRepo(repos []domain.Repository, cwd string) (*domain.Repository, error)
-	LoadRepo(ctx context.Context, repo domain.Repository, force bool) (domain.DashboardSnapshot, error)
-	LoadInvolving(ctx context.Context, repo domain.Repository, viewer string, force bool) (domain.InvolvingSnapshot, error)
-	LoadRecent(ctx context.Context, repo domain.Repository, force bool) (domain.RecentSnapshot, error)
-	LoadPreview(ctx context.Context, repo string, number int) (domain.PRPreviewSnapshot, error)
+	LoadRepo(ctx context.Context, repo domain.Repository, force bool) (domain.DashboardSnapshot, bool, error)
+	LoadInvolving(ctx context.Context, repo domain.Repository, viewer string, force bool) (domain.InvolvingSnapshot, bool, error)
+	LoadRecent(ctx context.Context, repo domain.Repository, force bool) (domain.RecentSnapshot, bool, error)
+	LoadPreview(ctx context.Context, repo string, number int, force bool) (domain.PRPreviewSnapshot, error)
 	LoadAllPRsPage(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
 }
 
@@ -37,7 +37,6 @@ type Service struct {
 	Classifier   SummaryTabClassifier
 	DefaultHost  string
 	Now          func() time.Time
-	BackgroundFn func(func())
 }
 
 func NewService(cacheCoordinator *cache.Coordinator, client githubclient.GitHubClient) *Service {
@@ -69,34 +68,25 @@ func (s *Service) SelectInitialRepo(repos []domain.Repository, cwd string) (*dom
 	return &selected, nil
 }
 
-func (s *Service) LoadRepo(ctx context.Context, repo domain.Repository, force bool) (domain.DashboardSnapshot, error) {
+func (s *Service) LoadRepo(ctx context.Context, repo domain.Repository, force bool) (domain.DashboardSnapshot, bool, error) {
 	if err := s.ensureReady(); err != nil {
-		return domain.DashboardSnapshot{}, err
+		return domain.DashboardSnapshot{}, false, err
 	}
 	repo = normalizeRepository(repo)
 	key := dashboardCacheKey(repo, "prs")
 
 	var cached domain.DashboardSnapshot
-	found := false
+	var found bool
 	if !force {
-		_, _, found, _ = s.Cache.StaleWhileRevalidate(ctx, key, &cached, func(string) {
-			s.spawn(func() {
-				_, _ = s.LoadRepo(context.Background(), repo, true)
-			})
-		})
+		_, _, found, _ = s.Cache.StaleWhileRevalidate(ctx, key, &cached, nil)
 		if found {
-			return cached, nil
+			return cached, true, nil
 		}
-	} else {
-		found = false
 	}
 
 	prs, total, truncated, cursor, err := s.Client.FetchDashboardPRs(ctx, repo)
 	if err != nil {
-		if found {
-			return cached, fmt.Errorf("refresh dashboard %s: %w", repo.FullName, err)
-		}
-		return domain.DashboardSnapshot{}, err
+		return domain.DashboardSnapshot{}, false, err
 	}
 
 	out := domain.DashboardSnapshot{
@@ -110,39 +100,29 @@ func (s *Service) LoadRepo(ctx context.Context, repo domain.Repository, force bo
 
 	meta := dashboardMeta(key, repo, cacheKindDashboardPRs, nil, out.FetchedAt)
 	if err := s.Cache.Write(ctx, key, out, meta); err != nil {
-		return out, err
+		return out, false, err
 	}
-	return out, nil
+	return out, false, nil
 }
 
-func (s *Service) LoadInvolving(ctx context.Context, repo domain.Repository, viewer string, force bool) (domain.InvolvingSnapshot, error) {
+func (s *Service) LoadInvolving(ctx context.Context, repo domain.Repository, viewer string, force bool) (domain.InvolvingSnapshot, bool, error) {
 	if err := s.ensureReady(); err != nil {
-		return domain.InvolvingSnapshot{}, err
+		return domain.InvolvingSnapshot{}, false, err
 	}
 	repo = normalizeRepository(repo)
 	key := dashboardCacheKey(repo, "involving")
 
 	var cached domain.InvolvingSnapshot
-	found := false
 	if !force {
-		_, _, found, _ = s.Cache.StaleWhileRevalidate(ctx, key, &cached, func(string) {
-			s.spawn(func() {
-				_, _ = s.LoadInvolving(context.Background(), repo, viewer, true)
-			})
-		})
+		_, _, found, _ := s.Cache.StaleWhileRevalidate(ctx, key, &cached, nil)
 		if found {
-			return cached, nil
+			return cached, true, nil
 		}
-	} else {
-		found = false
 	}
 
 	prs, total, truncated, err := s.Client.FetchInvolvingPRs(ctx, repo, viewer)
 	if err != nil {
-		if found {
-			return cached, fmt.Errorf("refresh involving %s: %w", repo.FullName, err)
-		}
-		return domain.InvolvingSnapshot{}, err
+		return domain.InvolvingSnapshot{}, false, err
 	}
 
 	out := domain.InvolvingSnapshot{
@@ -154,39 +134,29 @@ func (s *Service) LoadInvolving(ctx context.Context, repo domain.Repository, vie
 	}
 	meta := dashboardMeta(key, repo, cacheKindDashboardInvolv, nil, out.FetchedAt)
 	if err := s.Cache.Write(ctx, key, out, meta); err != nil {
-		return out, err
+		return out, false, err
 	}
-	return out, nil
+	return out, false, nil
 }
 
-func (s *Service) LoadRecent(ctx context.Context, repo domain.Repository, force bool) (domain.RecentSnapshot, error) {
+func (s *Service) LoadRecent(ctx context.Context, repo domain.Repository, force bool) (domain.RecentSnapshot, bool, error) {
 	if err := s.ensureReady(); err != nil {
-		return domain.RecentSnapshot{}, err
+		return domain.RecentSnapshot{}, false, err
 	}
 	repo = normalizeRepository(repo)
 	key := dashboardCacheKey(repo, "recent")
 
 	var cached domain.RecentSnapshot
-	found := false
 	if !force {
-		_, _, found, _ = s.Cache.StaleWhileRevalidate(ctx, key, &cached, func(string) {
-			s.spawn(func() {
-				_, _ = s.LoadRecent(context.Background(), repo, true)
-			})
-		})
+		_, _, found, _ := s.Cache.StaleWhileRevalidate(ctx, key, &cached, nil)
 		if found {
-			return cached, nil
+			return cached, true, nil
 		}
-	} else {
-		found = false
 	}
 
 	items, err := s.Client.FetchRecentActivity(ctx, repo)
 	if err != nil {
-		if found {
-			return cached, fmt.Errorf("refresh recent %s: %w", repo.FullName, err)
-		}
-		return domain.RecentSnapshot{}, err
+		return domain.RecentSnapshot{}, false, err
 	}
 
 	out := domain.RecentSnapshot{
@@ -196,12 +166,12 @@ func (s *Service) LoadRecent(ctx context.Context, repo domain.Repository, force 
 	}
 	meta := dashboardMeta(key, repo, cacheKindDashboardRecent, nil, out.FetchedAt)
 	if err := s.Cache.Write(ctx, key, out, meta); err != nil {
-		return out, err
+		return out, false, err
 	}
-	return out, nil
+	return out, false, nil
 }
 
-func (s *Service) LoadPreview(ctx context.Context, repo string, number int) (domain.PRPreviewSnapshot, error) {
+func (s *Service) LoadPreview(ctx context.Context, repo string, number int, force bool) (domain.PRPreviewSnapshot, error) {
 	if err := s.ensureReady(); err != nil {
 		return domain.PRPreviewSnapshot{}, err
 	}
@@ -209,32 +179,22 @@ func (s *Service) LoadPreview(ctx context.Context, repo string, number int) (dom
 	if err != nil {
 		return domain.PRPreviewSnapshot{}, err
 	}
-	return s.loadPreview(ctx, parsedRepo, number, false)
+	return s.loadPreview(ctx, parsedRepo, number, force)
 }
 
 func (s *Service) loadPreview(ctx context.Context, parsedRepo domain.Repository, number int, force bool) (domain.PRPreviewSnapshot, error) {
 	key := previewCacheKey(parsedRepo, number)
 
-	var cached domain.PRPreviewSnapshot
-	found := false
 	if !force {
-		_, _, found, _ = s.Cache.StaleWhileRevalidate(ctx, key, &cached, func(string) {
-			s.spawn(func() {
-				_, _ = s.loadPreview(context.Background(), parsedRepo, number, true)
-			})
-		})
+		var cached domain.PRPreviewSnapshot
+		_, _, found, _ := s.Cache.StaleWhileRevalidate(ctx, key, &cached, nil)
 		if found {
 			return cached, nil
 		}
-	} else {
-		_, _, found, _ = s.Cache.StaleWhileRevalidate(ctx, key, &cached, nil)
 	}
 
 	preview, err := s.Client.FetchPreview(ctx, parsedRepo, number)
 	if err != nil {
-		if found {
-			return cached, fmt.Errorf("refresh preview %s#%d: %w", parsedRepo.FullName, number, err)
-		}
 		return domain.PRPreviewSnapshot{}, err
 	}
 
@@ -305,13 +265,6 @@ func (s *Service) now() time.Time {
 	return time.Now()
 }
 
-func (s *Service) spawn(fn func()) {
-	if s.BackgroundFn != nil {
-		s.BackgroundFn(fn)
-		return
-	}
-	go fn()
-}
 
 func dashboardCacheKey(repo domain.Repository, kind string) string {
 	return fmt.Sprintf("dashboard:v1:host=%s:repo=%s:kind=%s", repo.Host, repoIdentity(repo), kind)

@@ -250,6 +250,46 @@ func TestPreviewPanelTimestampsSeparateLines(t *testing.T) {
 	}
 }
 
+// TestPreviewPanelSamePRSelectOverlaysFreshCI verifies that when SelectPRMsg arrives
+// for the same PR (samePR=true) and a cached preview is already loaded, the fresh
+// CI status from the dashboard summary is overlaid onto the preview so View() shows
+// the latest CI state instead of the stale cached one.
+func TestPreviewPanelSamePRSelectOverlaysFreshCI(t *testing.T) {
+	t.Parallel()
+
+	m := NewPreviewPanelModel()
+	m.SetRect(80, 30)
+
+	stalePreview := domain.PRPreviewSnapshot{
+		Repo:     "org/repo",
+		Number:   42,
+		Title:    "Fix bug",
+		Author:   "alice",
+		CIStatus: domain.CIStatusPending,
+		State:    domain.PRStateOpen,
+	}
+	m.preview = &stalePreview
+
+	// Send SelectPRMsg for the same PR with fresh CI
+	fresh := domain.PullRequestSummary{
+		Repo:     "org/repo",
+		Number:   42,
+		Title:    "Fix bug",
+		Author:   "alice",
+		CIStatus: domain.CIStatusSuccess,
+		State:    domain.PRStateOpen,
+	}
+	_, _ = m.Update(SelectPRMsg{Repo: fresh.Repo, Number: fresh.Number, Summary: fresh})
+
+	view := previewStripANSI(m.View())
+	if !strings.Contains(view, "success") {
+		t.Errorf("expected 'success' CI status in view after same-PR select, got:\n%s", view)
+	}
+	if strings.Contains(view, "pending") {
+		t.Errorf("expected stale 'pending' CI to be replaced, but still visible in view:\n%s", view)
+	}
+}
+
 func makeChecks(n int) []domain.PreviewCheckRow {
 	checks := make([]domain.PreviewCheckRow, 0, n)
 	for i := 0; i < n; i++ {

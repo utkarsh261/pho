@@ -85,12 +85,12 @@ func TestLoadDashboardCmd(t *testing.T) {
 	repo := repo("org/a")
 	snap := domain.DashboardSnapshot{Repo: repo, FetchedAt: time.Unix(100, 0)}
 
-	t.Run("success", func(t *testing.T) {
-		svc := &dashboardService{loadRepoFn: func(ctx context.Context, gotRepo domain.Repository, force bool) (domain.DashboardSnapshot, error) {
+	t.Run("success fresh", func(t *testing.T) {
+		svc := &dashboardService{loadRepoFn: func(ctx context.Context, gotRepo domain.Repository, force bool) (domain.DashboardSnapshot, bool, error) {
 			if gotRepo.FullName != repo.FullName || !force {
 				t.Fatalf("load args = %#v, force=%v", gotRepo, force)
 			}
-			return snap, nil
+			return snap, false, nil
 		}}
 
 		msg := run(t, cmds.LoadDashboardCmd(svc, repo, true))
@@ -98,12 +98,27 @@ func TestLoadDashboardCmd(t *testing.T) {
 		if got.Repo != repo.FullName || got.Err != nil || got.Snapshot.Repo.FullName != repo.FullName {
 			t.Fatalf("message = %#v, want dashboard snapshot", got)
 		}
+		if got.FromCache {
+			t.Fatal("expected FromCache=false for fresh load")
+		}
+	})
+
+	t.Run("from cache propagated", func(t *testing.T) {
+		svc := &dashboardService{loadRepoFn: func(ctx context.Context, gotRepo domain.Repository, force bool) (domain.DashboardSnapshot, bool, error) {
+			return snap, true, nil
+		}}
+
+		msg := run(t, cmds.LoadDashboardCmd(svc, repo, false))
+		got := msg.(cmds.DashboardLoaded)
+		if !got.FromCache {
+			t.Fatal("expected FromCache=true when service returns fromCache=true")
+		}
 	})
 
 	t.Run("failure", func(t *testing.T) {
 		wantErr := errors.New("network")
-		svc := &dashboardService{loadRepoFn: func(ctx context.Context, gotRepo domain.Repository, force bool) (domain.DashboardSnapshot, error) {
-			return domain.DashboardSnapshot{}, wantErr
+		svc := &dashboardService{loadRepoFn: func(ctx context.Context, gotRepo domain.Repository, force bool) (domain.DashboardSnapshot, bool, error) {
+			return domain.DashboardSnapshot{}, false, wantErr
 		}}
 
 		msg := run(t, cmds.LoadDashboardCmd(svc, repo, false))
@@ -119,11 +134,11 @@ func TestLoadInvolvingCmd(t *testing.T) {
 	snap := domain.InvolvingSnapshot{Repo: repo, FetchedAt: time.Unix(100, 0)}
 
 	t.Run("success", func(t *testing.T) {
-		svc := &dashboardService{loadInvolvingFn: func(ctx context.Context, gotRepo domain.Repository, viewer string, force bool) (domain.InvolvingSnapshot, error) {
+		svc := &dashboardService{loadInvolvingFn: func(ctx context.Context, gotRepo domain.Repository, viewer string, force bool) (domain.InvolvingSnapshot, bool, error) {
 			if gotRepo.FullName != repo.FullName || viewer != "octocat" || !force {
 				t.Fatalf("load args = %#v viewer=%q force=%v", gotRepo, viewer, force)
 			}
-			return snap, nil
+			return snap, false, nil
 		}}
 
 		msg := run(t, cmds.LoadInvolvingCmd(svc, repo, "octocat", true))
@@ -135,8 +150,8 @@ func TestLoadInvolvingCmd(t *testing.T) {
 
 	t.Run("failure", func(t *testing.T) {
 		wantErr := errors.New("boom")
-		svc := &dashboardService{loadInvolvingFn: func(ctx context.Context, gotRepo domain.Repository, viewer string, force bool) (domain.InvolvingSnapshot, error) {
-			return domain.InvolvingSnapshot{}, wantErr
+		svc := &dashboardService{loadInvolvingFn: func(ctx context.Context, gotRepo domain.Repository, viewer string, force bool) (domain.InvolvingSnapshot, bool, error) {
+			return domain.InvolvingSnapshot{}, false, wantErr
 		}}
 
 		msg := run(t, cmds.LoadInvolvingCmd(svc, repo, "octocat", false))
@@ -152,11 +167,11 @@ func TestLoadRecentCmd(t *testing.T) {
 	snap := domain.RecentSnapshot{Repo: repo, FetchedAt: time.Unix(100, 0)}
 
 	t.Run("success", func(t *testing.T) {
-		svc := &dashboardService{loadRecentFn: func(ctx context.Context, gotRepo domain.Repository, force bool) (domain.RecentSnapshot, error) {
+		svc := &dashboardService{loadRecentFn: func(ctx context.Context, gotRepo domain.Repository, force bool) (domain.RecentSnapshot, bool, error) {
 			if gotRepo.FullName != repo.FullName || force {
 				t.Fatalf("load args = %#v force=%v", gotRepo, force)
 			}
-			return snap, nil
+			return snap, false, nil
 		}}
 
 		msg := run(t, cmds.LoadRecentCmd(svc, repo, false))
@@ -168,8 +183,8 @@ func TestLoadRecentCmd(t *testing.T) {
 
 	t.Run("failure", func(t *testing.T) {
 		wantErr := errors.New("boom")
-		svc := &dashboardService{loadRecentFn: func(ctx context.Context, gotRepo domain.Repository, force bool) (domain.RecentSnapshot, error) {
-			return domain.RecentSnapshot{}, wantErr
+		svc := &dashboardService{loadRecentFn: func(ctx context.Context, gotRepo domain.Repository, force bool) (domain.RecentSnapshot, bool, error) {
+			return domain.RecentSnapshot{}, false, wantErr
 		}}
 
 		msg := run(t, cmds.LoadRecentCmd(svc, repo, true))
@@ -182,14 +197,14 @@ func TestLoadRecentCmd(t *testing.T) {
 
 func TestLoadPreviewCmd(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		svc := &dashboardService{loadPreviewFn: func(ctx context.Context, repo string, number int) (domain.PRPreviewSnapshot, error) {
+		svc := &dashboardService{loadPreviewFn: func(ctx context.Context, repo string, number int, force bool) (domain.PRPreviewSnapshot, error) {
 			if repo != "org/a" || number != 99 {
 				t.Fatalf("load args = %q #%d", repo, number)
 			}
 			return domain.PRPreviewSnapshot{Repo: repo, Number: number}, nil
 		}}
 
-		msg := run(t, cmds.LoadPreviewCmd(svc, "org/a", 99, ""))
+		msg := run(t, cmds.LoadPreviewCmd(svc, "org/a", 99, "", false))
 		got := msg.(cmds.PreviewLoaded)
 		if got.Repo != "org/a" || got.Number != 99 || got.Err != nil {
 			t.Fatalf("message = %#v, want preview snapshot", got)
@@ -197,7 +212,7 @@ func TestLoadPreviewCmd(t *testing.T) {
 	})
 
 	t.Run("with host", func(t *testing.T) {
-		svc := &dashboardService{loadPreviewFn: func(ctx context.Context, repo string, number int) (domain.PRPreviewSnapshot, error) {
+		svc := &dashboardService{loadPreviewFn: func(ctx context.Context, repo string, number int, force bool) (domain.PRPreviewSnapshot, error) {
 			// Should receive "host/org/a" format
 			if repo != "github.com/org/a" || number != 42 {
 				t.Fatalf("load args = %q #%d, want github.com/org/a #42", repo, number)
@@ -205,7 +220,7 @@ func TestLoadPreviewCmd(t *testing.T) {
 			return domain.PRPreviewSnapshot{Repo: repo, Number: number}, nil
 		}}
 
-		msg := run(t, cmds.LoadPreviewCmd(svc, "org/a", 42, "github.com"))
+		msg := run(t, cmds.LoadPreviewCmd(svc, "org/a", 42, "github.com", false))
 		got := msg.(cmds.PreviewLoaded)
 		// Message should contain clean repo "org/a", not "github.com/org/a"
 		if got.Repo != "org/a" || got.Number != 42 || got.Err != nil {
@@ -213,13 +228,26 @@ func TestLoadPreviewCmd(t *testing.T) {
 		}
 	})
 
+	t.Run("force bypasses cache", func(t *testing.T) {
+		var gotForce bool
+		svc := &dashboardService{loadPreviewFn: func(ctx context.Context, repo string, number int, force bool) (domain.PRPreviewSnapshot, error) {
+			gotForce = force
+			return domain.PRPreviewSnapshot{Repo: repo, Number: number}, nil
+		}}
+
+		run(t, cmds.LoadPreviewCmd(svc, "org/a", 1, "", true))
+		if !gotForce {
+			t.Fatal("expected force=true to be forwarded to service")
+		}
+	})
+
 	t.Run("failure", func(t *testing.T) {
 		wantErr := errors.New("not found")
-		svc := &dashboardService{loadPreviewFn: func(ctx context.Context, repo string, number int) (domain.PRPreviewSnapshot, error) {
+		svc := &dashboardService{loadPreviewFn: func(ctx context.Context, repo string, number int, force bool) (domain.PRPreviewSnapshot, error) {
 			return domain.PRPreviewSnapshot{}, wantErr
 		}}
 
-		msg := run(t, cmds.LoadPreviewCmd(svc, "org/a", 99, ""))
+		msg := run(t, cmds.LoadPreviewCmd(svc, "org/a", 99, "", false))
 		got := msg.(cmds.PreviewLoaded)
 		if !errors.Is(got.Err, wantErr) || got.Repo != "org/a" || got.Number != 99 {
 			t.Fatalf("message = %#v, want error and repo identity", got)
@@ -410,27 +438,27 @@ func (s *discoveryService) Discover(ctx context.Context, root string) ([]domain.
 }
 
 type dashboardService struct {
-	loadRepoFn      func(context.Context, domain.Repository, bool) (domain.DashboardSnapshot, error)
-	loadInvolvingFn func(context.Context, domain.Repository, string, bool) (domain.InvolvingSnapshot, error)
-	loadRecentFn    func(context.Context, domain.Repository, bool) (domain.RecentSnapshot, error)
-	loadPreviewFn   func(context.Context, string, int) (domain.PRPreviewSnapshot, error)
+	loadRepoFn      func(context.Context, domain.Repository, bool) (domain.DashboardSnapshot, bool, error)
+	loadInvolvingFn func(context.Context, domain.Repository, string, bool) (domain.InvolvingSnapshot, bool, error)
+	loadRecentFn    func(context.Context, domain.Repository, bool) (domain.RecentSnapshot, bool, error)
+	loadPreviewFn   func(context.Context, string, int, bool) (domain.PRPreviewSnapshot, error)
 	loadAllPRsPage  func(context.Context, domain.Repository, string) ([]domain.PullRequestSummary, bool, string, error)
 }
 
-func (s *dashboardService) LoadRepo(ctx context.Context, repo domain.Repository, force bool) (domain.DashboardSnapshot, error) {
+func (s *dashboardService) LoadRepo(ctx context.Context, repo domain.Repository, force bool) (domain.DashboardSnapshot, bool, error) {
 	return s.loadRepoFn(ctx, repo, force)
 }
 
-func (s *dashboardService) LoadInvolving(ctx context.Context, repo domain.Repository, viewer string, force bool) (domain.InvolvingSnapshot, error) {
+func (s *dashboardService) LoadInvolving(ctx context.Context, repo domain.Repository, viewer string, force bool) (domain.InvolvingSnapshot, bool, error) {
 	return s.loadInvolvingFn(ctx, repo, viewer, force)
 }
 
-func (s *dashboardService) LoadRecent(ctx context.Context, repo domain.Repository, force bool) (domain.RecentSnapshot, error) {
+func (s *dashboardService) LoadRecent(ctx context.Context, repo domain.Repository, force bool) (domain.RecentSnapshot, bool, error) {
 	return s.loadRecentFn(ctx, repo, force)
 }
 
-func (s *dashboardService) LoadPreview(ctx context.Context, repo string, number int) (domain.PRPreviewSnapshot, error) {
-	return s.loadPreviewFn(ctx, repo, number)
+func (s *dashboardService) LoadPreview(ctx context.Context, repo string, number int, force bool) (domain.PRPreviewSnapshot, error) {
+	return s.loadPreviewFn(ctx, repo, number, force)
 }
 
 func (s *dashboardService) LoadAllPRsPage(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error) {

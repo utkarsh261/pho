@@ -58,6 +58,7 @@ type loadRecentCall struct {
 type loadPreviewCall struct {
 	repo   string
 	number int
+	force  bool
 }
 
 type stubDashboardService struct {
@@ -70,26 +71,26 @@ type stubDashboardService struct {
 	loadPreviewCalls   []loadPreviewCall
 }
 
-func (s *stubDashboardService) LoadRepo(ctx context.Context, repo domain.Repository, force bool) (domain.DashboardSnapshot, error) {
+func (s *stubDashboardService) LoadRepo(ctx context.Context, repo domain.Repository, force bool) (domain.DashboardSnapshot, bool, error) {
 	s.loadRepoCalls = append(s.loadRepoCalls, loadRepoCall{repo: repo, force: force})
 	if snap, ok := s.dashboardByRepo[repo.FullName]; ok {
-		return snap, nil
+		return snap, false, nil
 	}
-	return domain.DashboardSnapshot{Repo: repo, FetchedAt: fixedNow()}, nil
+	return domain.DashboardSnapshot{Repo: repo, FetchedAt: fixedNow()}, false, nil
 }
 
-func (s *stubDashboardService) LoadInvolving(ctx context.Context, repo domain.Repository, viewer string, force bool) (domain.InvolvingSnapshot, error) {
+func (s *stubDashboardService) LoadInvolving(ctx context.Context, repo domain.Repository, viewer string, force bool) (domain.InvolvingSnapshot, bool, error) {
 	s.loadInvolvingCalls = append(s.loadInvolvingCalls, loadInvolvingCall{repo: repo, viewer: viewer, force: force})
-	return domain.InvolvingSnapshot{Repo: repo, FetchedAt: fixedNow()}, nil
+	return domain.InvolvingSnapshot{Repo: repo, FetchedAt: fixedNow()}, false, nil
 }
 
-func (s *stubDashboardService) LoadRecent(ctx context.Context, repo domain.Repository, force bool) (domain.RecentSnapshot, error) {
+func (s *stubDashboardService) LoadRecent(ctx context.Context, repo domain.Repository, force bool) (domain.RecentSnapshot, bool, error) {
 	s.loadRecentCalls = append(s.loadRecentCalls, loadRecentCall{repo: repo, force: force})
-	return domain.RecentSnapshot{Repo: repo, FetchedAt: fixedNow()}, nil
+	return domain.RecentSnapshot{Repo: repo, FetchedAt: fixedNow()}, false, nil
 }
 
-func (s *stubDashboardService) LoadPreview(ctx context.Context, repo string, number int) (domain.PRPreviewSnapshot, error) {
-	s.loadPreviewCalls = append(s.loadPreviewCalls, loadPreviewCall{repo: repo, number: number})
+func (s *stubDashboardService) LoadPreview(ctx context.Context, repo string, number int, force bool) (domain.PRPreviewSnapshot, error) {
+	s.loadPreviewCalls = append(s.loadPreviewCalls, loadPreviewCall{repo: repo, number: number, force: force})
 	key := previewKey(repo, number)
 	if snap, ok := s.previewByPR[key]; ok {
 		return snap, nil
@@ -1333,6 +1334,79 @@ func TestDashboardRoundTripViaPRDetail(t *testing.T) {
 	}
 	if m.preview.Loading {
 		t.Fatal("step 9: preview still loading after PreviewLoadedMsg")
+	}
+}
+
+// TestFromCacheDashboardLoadedFiresForceRefresh verifies that when DashboardLoaded
+// arrives with FromCache=true, handleDashboardLoaded fires a follow-up force=true
+// refresh so the UI eventually shows fresh data.
+func TestFromCacheDashboardLoadedFiresForceRefresh(t *testing.T) {
+	t.Parallel()
+
+	repo := testutil.Repo("acme/alpha")
+	snap := dashboardSnapshot(repo, pr(repo.FullName, 1, "PR One"))
+	m := newTestModel([]domain.Repository{repo}, map[string]domain.DashboardSnapshot{
+		repo.FullName: snap,
+	})
+	svc := m.deps.Dashboard.(*stubDashboardService)
+
+	_, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	_, _ = m.Update(cmdsReposDiscovered([]domain.Repository{repo}))
+	_, _ = m.Update(cmdsDashboardLoaded(repo.FullName, snap, false, nil))
+
+	initialCalls := len(svc.loadRepoCalls)
+
+	// Deliver DashboardLoaded with FromCache=true (simulates stale SWR hit).
+	_, cmd := m.Update(cmdsDashboardLoaded(repo.FullName, snap, true, nil))
+
+	// Execute the returned command batch — this should invoke LoadRepo(force=true).
+	flattenCmd(cmd)
+
+	calls := svc.loadRepoCalls[initialCalls:]
+	var forceCount int
+	for _, c := range calls {
+		if c.force {
+			forceCount++
+		}
+	}
+	if forceCount == 0 {
+		t.Fatal("expected at least one LoadRepo(force=true) follow-up after FromCache=true dashboard load")
+	}
+}
+
+// TestRefreshSelectedRepoFiresPreviewCmd verifies that pressing R (refreshSelectedRepo)
+// also fires a LoadPreview(force=true) for the currently selected PR.
+func TestRefreshSelectedRepoFiresPreviewCmd(t *testing.T) {
+	t.Parallel()
+
+	repo := testutil.Repo("acme/alpha")
+	snap := dashboardSnapshot(repo, pr(repo.FullName, 5, "Some PR"))
+	m := newTestModel([]domain.Repository{repo}, map[string]domain.DashboardSnapshot{
+		repo.FullName: snap,
+	})
+	svc := m.deps.Dashboard.(*stubDashboardService)
+
+	_, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	_, _ = m.Update(cmdsReposDiscovered([]domain.Repository{repo}))
+	_, _ = m.Update(cmdsDashboardLoaded(repo.FullName, snap, false, nil))
+
+	initialPreviewCalls := len(svc.loadPreviewCalls)
+
+	cmd := m.refreshSelectedRepo(true)
+	flattenCmd(cmd)
+
+	newCalls := svc.loadPreviewCalls[initialPreviewCalls:]
+	if len(newCalls) == 0 {
+		t.Fatal("expected LoadPreview to be called during refreshSelectedRepo")
+	}
+	var hasForce bool
+	for _, c := range newCalls {
+		if c.force {
+			hasForce = true
+		}
+	}
+	if !hasForce {
+		t.Fatal("expected at least one LoadPreview(force=true) during refresh")
 	}
 }
 

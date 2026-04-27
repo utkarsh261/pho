@@ -623,7 +623,11 @@ func (m *Model) handleDashboardLoaded(msg cmds.DashboardLoaded) tea.Cmd {
 	if m.deps.Search != nil {
 		rebuild = cmds.RebuildPRIndexCmd(m.deps.Search, repo, msg.Snapshot)
 	}
-	return batch(m.syncCurrentSelection(), rebuild)
+	var followUp tea.Cmd
+	if msg.FromCache && m.deps.Dashboard != nil {
+		followUp = cmds.LoadDashboardCmd(m.deps.Dashboard, repo, true)
+	}
+	return batch(m.syncCurrentSelection(), rebuild, followUp)
 }
 
 func (m *Model) handleInvolvingLoaded(msg cmds.InvolvingLoaded) tea.Cmd {
@@ -657,7 +661,13 @@ func (m *Model) handleInvolvingLoaded(msg cmds.InvolvingLoaded) tea.Cmd {
 	m.logDebug("refresh completed", "repo", msg.Repo, "pr_count", len(msg.Snapshot.PRs), "err", msg.Err)
 	m.syncStatus()
 
-	return m.syncCurrentSelection()
+	var followUp tea.Cmd
+	if msg.FromCache && m.deps.Dashboard != nil {
+		if viewer := m.state.Session.ViewerByHost[repo.Host]; viewer != "" {
+			followUp = cmds.LoadInvolvingCmd(m.deps.Dashboard, repo, viewer, true)
+		}
+	}
+	return batch(m.syncCurrentSelection(), followUp)
 }
 
 func (m *Model) handleRecentLoaded(msg cmds.RecentLoaded) tea.Cmd {
@@ -687,6 +697,9 @@ func (m *Model) handleRecentLoaded(msg cmds.RecentLoaded) tea.Cmd {
 	m.logDebug("refresh completed", "repo", msg.Repo, "item_count", len(msg.Snapshot.Items), "err", msg.Err)
 	m.syncStatus()
 
+	if msg.FromCache && m.deps.Dashboard != nil {
+		return cmds.LoadRecentCmd(m.deps.Dashboard, repo, true)
+	}
 	return nil
 }
 
@@ -806,7 +819,7 @@ func (m *Model) handlePreviewFetchMsg(msg dashboard.PreviewFetchMsg) tea.Cmd {
 	key := jobKey(msg.Repo, "preview")
 	m.state.Jobs.InFlight[key] = true
 	m.syncStatus()
-	return cmds.LoadPreviewCmd(m.deps.Dashboard, repo.FullName, msg.Number, repo.Host)
+	return cmds.LoadPreviewCmd(m.deps.Dashboard, repo.FullName, msg.Number, repo.Host, false)
 }
 
 func (m *Model) handlePreviewLoadedMsg(repo string, number int, preview domain.PRPreviewSnapshot, err error) tea.Cmd {
@@ -941,7 +954,12 @@ func (m *Model) refreshSelectedRepo(force bool) tea.Cmd {
 	// Trigger status bar update to show loading spinner
 	m.syncStatus()
 
-	return batch(m.loadRepoCmds(repo, force)...)
+	loadCmds := m.loadRepoCmds(repo, force)
+	if current, ok := m.currentSelectedPR(); ok && m.deps.Dashboard != nil {
+		m.state.Jobs.InFlight[jobKey(repo.FullName, "preview")] = true
+		loadCmds = append(loadCmds, cmds.LoadPreviewCmd(m.deps.Dashboard, repo.FullName, current.Number, repo.Host, force))
+	}
+	return batch(loadCmds...)
 }
 
 func (m *Model) selectRepoByFullName(fullName string, force bool) tea.Cmd {

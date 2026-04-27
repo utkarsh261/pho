@@ -106,6 +106,11 @@ func (m *PreviewPanelModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !samePR {
 			m.preview = nil
 			m.Scroll = 0
+		} else if m.preview != nil {
+			m.preview.CIStatus = summary.CIStatus
+			m.preview.State = summary.State
+			m.preview.IsDraft = summary.IsDraft
+			m.preview.UpdatedAt = summary.UpdatedAt
 		}
 
 		m.Loading = true
