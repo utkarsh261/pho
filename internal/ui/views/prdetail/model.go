@@ -1259,7 +1259,7 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		}
 		return m, nil
 	case " ":
-		if m.leftPanel.Focus == FocusContent && m.activeTab == TabDiff {
+		if m.isInDiffSection() {
 			m.enterVisualMode()
 		}
 		return m, nil
@@ -1281,7 +1281,7 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 			m.moveCursorNextComment()
 			return m, nil
 		}
-		if m.leftPanel.Focus == FocusContent && m.activeTab == TabDiff {
+		if m.isInDiffSection() {
 			m.ensureDiffCursor()
 			m.moveCursorDown()
 			m.scrollToCursor(scrollPadding)
@@ -1293,7 +1293,7 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 			m.moveCursorPrevComment()
 			return m, nil
 		}
-		if m.leftPanel.Focus == FocusContent && m.activeTab == TabDiff {
+		if m.isInDiffSection() {
 			m.ensureDiffCursor()
 			m.moveCursorUp()
 			m.scrollToCursor(scrollPadding)
@@ -1304,14 +1304,14 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 			m.resetCommentCursor()
 		}
 	case "J":
-		if m.leftPanel.Focus == FocusContent && m.activeTab == TabDiff {
+		if m.isInDiffSection() {
 			m.ensureDiffCursor()
 			m.moveCursorBy(5)
 			m.scrollToCursor(scrollPadding)
 			return m, nil
 		}
 	case "K":
-		if m.leftPanel.Focus == FocusContent && m.activeTab == TabDiff {
+		if m.isInDiffSection() {
 			m.ensureDiffCursor()
 			m.moveCursorBy(-5)
 			m.scrollToCursor(scrollPadding)
@@ -1341,7 +1341,7 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		m.switchTab(TabComments)
 	case "g":
 		if m.LastKey == "g" {
-			if m.leftPanel.Focus == FocusContent && m.activeTab == TabDiff {
+			if m.isInDiffSection() {
 				fi, hi, li := firstDiffCursor(m.Diff)
 				m.diffCursor = diffCursorLine{FileIdx: fi, HunkIdx: hi, LineIdx: li}
 				m.ContentScroll = 0
@@ -1361,7 +1361,7 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		m.LastKey = "g"
 		return m, nil
 	case "G":
-		if m.leftPanel.Focus == FocusContent && m.activeTab == TabDiff {
+		if m.isInDiffSection() {
 			fi, hi, li := lastDiffCursor(m.Diff)
 			m.diffCursor = diffCursorLine{FileIdx: fi, HunkIdx: hi, LineIdx: li}
 			m.scrollToCursor(scrollPadding)
@@ -1376,7 +1376,7 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 			m.scrollToBottom()
 		}
 	case "ctrl+d":
-		if m.leftPanel.Focus == FocusContent && m.activeTab == TabDiff {
+		if m.isInDiffSection() {
 			m.ensureDiffCursor()
 			m.moveCursorBy(m.contentViewportHeight() / 2)
 			m.scrollToCursor(scrollPadding)
@@ -1388,7 +1388,7 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		}
 		m.scrollHalfPageDown()
 	case "ctrl+u":
-		if m.leftPanel.Focus == FocusContent && m.activeTab == TabDiff {
+		if m.isInDiffSection() {
 			m.ensureDiffCursor()
 			m.moveCursorBy(-(m.contentViewportHeight() / 2))
 			m.scrollToCursor(scrollPadding)
@@ -2150,6 +2150,11 @@ func (m *PRDetailModel) findDiffLineAnchorAnySide(path string, line int) (fileId
 
 // SearchActive reports whether the diff search is currently active.
 func (m *PRDetailModel) SearchActive() bool { return m.searchActive }
+
+// isInDiffSection reports whether the user is viewing the diff content area.
+func (m *PRDetailModel) isInDiffSection() bool {
+	return m.activeTab == TabDiff && m.leftPanel.Focus == FocusContent
+}
 
 // IsDiffTabActive reports whether the Diff tab is currently active.
 func (m *PRDetailModel) IsDiffTabActive() bool { return m.activeTab == TabDiff }

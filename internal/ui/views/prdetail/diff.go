@@ -229,7 +229,7 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 					// Apply visual selection highlight, cursor highlight, or draft indicator.
 					isSelected := m.visual.Active && m.visual.FileIdx == i && m.visual.HunkIdx == hi &&
 						li >= m.visual.StartLine && li <= m.visual.EndLine
-				isCursor := !isSelected && m.activeTab == TabDiff && m.leftPanel.Focus == FocusContent &&
+				isCursor := !isSelected && m.isInDiffSection() &&
 					hasValidCursor &&
 					cursorFileIdx == i && cursorHunkIdx == hi && cursorLineIdx == li
 					isDrafted := !isSelected && !isCursor && m.draftCovered[hunkLineKey{i, hi, li}]
