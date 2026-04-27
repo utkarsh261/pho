@@ -832,6 +832,7 @@ func (m *PRDetailModel) moveCommentCursorBy(delta int) {
 	m.scrollToCommentCursor()
 }
 
+// no abs for int in standard lib? wth?
 func abs(a int) int {
 	if a < 0 {
 		return -a
@@ -1153,8 +1154,7 @@ func (m *PRDetailModel) jumpToCommentCode() {
 	if fi, hi, li, ok := m.findDiffLineAnchorAnySide(entry.path, entry.line); ok {
 		m.switchTab(TabDiff)
 		m.diffCursor = diffCursorLine{FileIdx: fi, HunkIdx: hi, LineIdx: li}
-		m.ContentScroll = m.diffLineToDisplayRow(fi, hi, li)
-		m.clampContentScroll()
+		m.scrollToCursor(scrollPadding)
 	}
 }
 
