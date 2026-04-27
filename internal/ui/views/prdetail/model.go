@@ -1032,46 +1032,21 @@ func (m *PRDetailModel) moveCursorUp() {
 	fi, hi, li := m.diffCursor.FileIdx, m.diffCursor.HunkIdx, m.diffCursor.LineIdx
 	li--
 	for fi >= 0 {
-		if fi >= len(m.Diff.Files) {
-			fi = len(m.Diff.Files) - 1
-			hi = len(m.Diff.Files[fi].Hunks) - 1
-			li = len(m.Diff.Files[fi].Hunks[hi].Lines) - 1
-			continue
-		}
 		f := &m.Diff.Files[fi]
 		if f.IsBinary {
 			fi--
 			if fi >= 0 {
-				hi = len(m.Diff.Files[fi].Hunks) - 1
+				f = &m.Diff.Files[fi]
+				hi = len(f.Hunks) - 1
 				if hi >= 0 {
-					li = len(m.Diff.Files[fi].Hunks[hi].Lines) - 1
-				} else {
-					li = -1
+					li = len(f.Hunks[hi].Lines) - 1
 				}
 			}
 			continue
 		}
-		if hi < 0 {
-			fi--
-			if fi >= 0 {
-				f2 := &m.Diff.Files[fi]
-				if f2.IsBinary {
-					hi = -1
-					li = -1
-					continue
-				}
-				hi = len(f2.Hunks) - 1
-				if hi >= 0 {
-					li = len(f2.Hunks[hi].Lines) - 1
-				} else {
-					li = -1
-				}
-			}
-			continue
-		}
-		if li >= 0 {
+		if hi >= 0 && hi < len(f.Hunks) {
 			h := f.Hunks[hi]
-			if li < len(h.Lines) {
+			if li >= 0 && li < len(h.Lines) {
 				row := m.diffLineToDisplayRow(fi, hi, li)
 				if row < maxDiffDisplayRows {
 					m.diffCursor = diffCursorLine{FileIdx: fi, HunkIdx: hi, LineIdx: li}
@@ -1079,27 +1054,26 @@ func (m *PRDetailModel) moveCursorUp() {
 				}
 				return
 			}
-			li = -1
-			continue
+			if li < 0 {
+				hi--
+				if hi >= 0 {
+					li = len(f.Hunks[hi].Lines) - 1
+				}
+				continue
+			}
 		}
-		hi--
-		if hi >= 0 {
-			li = len(f.Hunks[hi].Lines) - 1
-			continue
-		}
+		// Enter previous file (hunk exhausted or invalid hunk index).
 		fi--
 		if fi >= 0 {
-			f2 := &m.Diff.Files[fi]
-			if f2.IsBinary {
+			f = &m.Diff.Files[fi]
+			if f.IsBinary {
 				hi = -1
 				li = -1
 				continue
 			}
-			hi = len(f2.Hunks) - 1
+			hi = len(f.Hunks) - 1
 			if hi >= 0 {
-				li = len(f2.Hunks[hi].Lines) - 1
-			} else {
-				li = -1
+				li = len(f.Hunks[hi].Lines) - 1
 			}
 		}
 	}

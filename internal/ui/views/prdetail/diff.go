@@ -146,6 +146,16 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 	fileRow := 0
 	globalLineIndex := 0
 
+	// Pre-compute cursor validity once; avoid O(n²) from calling
+	// validDiffCursor (which calls diffLineToDisplayRow) inside the line loop.
+	hasValidCursor := m.validDiffCursor()
+	cursorFileIdx, cursorHunkIdx, cursorLineIdx := -1, -1, -1
+	if hasValidCursor {
+		cursorFileIdx = m.diffCursor.FileIdx
+		cursorHunkIdx = m.diffCursor.HunkIdx
+		cursorLineIdx = m.diffCursor.LineIdx
+	}
+
 	for i := range m.Diff.Files {
 		// Stop iterating once we've passed the truncation boundary.
 		if fileRow >= maxDiffDisplayRows {
@@ -219,9 +229,9 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 					// Apply visual selection highlight, cursor highlight, or draft indicator.
 					isSelected := m.visual.Active && m.visual.FileIdx == i && m.visual.HunkIdx == hi &&
 						li >= m.visual.StartLine && li <= m.visual.EndLine
-					isCursor := !isSelected && m.activeTab == TabDiff && m.leftPanel.Focus == FocusContent &&
-						m.validDiffCursor() &&
-						m.diffCursor.FileIdx == i && m.diffCursor.HunkIdx == hi && m.diffCursor.LineIdx == li
+				isCursor := !isSelected && m.activeTab == TabDiff && m.leftPanel.Focus == FocusContent &&
+					hasValidCursor &&
+					cursorFileIdx == i && cursorHunkIdx == hi && cursorLineIdx == li
 					isDrafted := !isSelected && !isCursor && m.draftCovered[hunkLineKey{i, hi, li}]
 
 					if isSelected {

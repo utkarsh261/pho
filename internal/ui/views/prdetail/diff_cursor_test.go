@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	diffmodel "github.com/utkarsh261/pho/internal/diff/model"
 	"github.com/utkarsh261/pho/internal/domain"
 	"github.com/utkarsh261/pho/internal/ui/theme"
 )
@@ -434,5 +435,277 @@ func TestCtrlUOnDescriptionScrolls(t *testing.T) {
 	m = pressKey(m, "ctrl+u")
 	if m.ContentScroll >= 10 {
 		t.Errorf("expected ctrl+u to scroll up on Description tab, ContentScroll=%d", m.ContentScroll)
+	}
+}
+
+// ── moveCursorUp exhaustive branch coverage ───────────────────────────────────
+
+// Helper to build a minimal diff model for branch testing.
+func makeDiffCursorModelCustom(files []diffmodel.DiffFile, width, height int) *PRDetailModel {
+	m := makePRDetail(width, height, nil, nil)
+	m.Diff = &diffmodel.DiffModel{Files: files}
+	m.DiffLoading = false
+	m.DetailLoading = false
+	m.SetTheme(theme.Default())
+	m.leftPanel.Files = m.Diff.Files
+	m.leftPanel.Loading = false
+	m.leftPanel.Focus = FocusContent
+	m.activeTab = TabDiff
+	m.ContentScroll = 0
+	return m
+}
+
+func ptrInt(v int) *int { return &v }
+
+func TestMoveCursorUpNilDiff(t *testing.T) {
+	t.Parallel()
+	m := makeDiffCursorModel(100, 40)
+	m.Diff = nil
+	m.diffCursor = diffCursorLine{FileIdx: 1, HunkIdx: 0, LineIdx: 0}
+	before := m.diffCursor
+	m.moveCursorUp()
+	if m.diffCursor != before {
+		t.Error("expected moveCursorUp with nil Diff to be no-op")
+	}
+}
+
+func TestMoveCursorUpAtFirstLine(t *testing.T) {
+	t.Parallel()
+	m := makeDiffCursorModel(100, 40)
+	m.ensureDiffCursor()
+	before := m.diffCursor
+	m.moveCursorUp()
+	if m.diffCursor != before {
+		t.Errorf("expected moveCursorUp at first line to be no-op, got %v", m.diffCursor)
+	}
+}
+
+func TestMoveCursorUpSameHunk(t *testing.T) {
+	t.Parallel()
+	m := makeDiffCursorModel(100, 40)
+	m.diffCursor = diffCursorLine{FileIdx: 0, HunkIdx: 0, LineIdx: 2}
+	m.moveCursorUp()
+	if m.diffCursor.FileIdx != 0 || m.diffCursor.HunkIdx != 0 || m.diffCursor.LineIdx != 1 {
+		t.Errorf("expected (0,0,1), got (%d,%d,%d)", m.diffCursor.FileIdx, m.diffCursor.HunkIdx, m.diffCursor.LineIdx)
+	}
+}
+
+func TestMoveCursorUpCrossHunkBoundary(t *testing.T) {
+	t.Parallel()
+	m := makeDiffCursorModel(100, 40)
+	m.diffCursor = diffCursorLine{FileIdx: 0, HunkIdx: 1, LineIdx: 0}
+	m.moveCursorUp()
+	if m.diffCursor.FileIdx != 0 || m.diffCursor.HunkIdx != 0 || m.diffCursor.LineIdx != 2 {
+		t.Errorf("expected (0,0,2), got (%d,%d,%d)", m.diffCursor.FileIdx, m.diffCursor.HunkIdx, m.diffCursor.LineIdx)
+	}
+}
+
+func TestMoveCursorUpCrossFileBoundary(t *testing.T) {
+	t.Parallel()
+	m := makeDiffCursorModel(100, 40)
+	m.diffCursor = diffCursorLine{FileIdx: 1, HunkIdx: 0, LineIdx: 0}
+	m.moveCursorUp()
+	if m.diffCursor.FileIdx != 0 || m.diffCursor.HunkIdx != 1 || m.diffCursor.LineIdx != 1 {
+		t.Errorf("expected (0,1,1), got (%d,%d,%d)", m.diffCursor.FileIdx, m.diffCursor.HunkIdx, m.diffCursor.LineIdx)
+	}
+}
+
+func TestMoveCursorUpSkipsBinaryBackward(t *testing.T) {
+	t.Parallel()
+	m := makeDiffCursorModel(100, 40)
+	m.diffCursor = diffCursorLine{FileIdx: 1, HunkIdx: 0, LineIdx: 0}
+	m.moveCursorUp()
+	// b.go → a.go (file 0), skipping binary.bin at file 2 (which is forward, not backward).
+	// Actually from b.go (file 1), going up should land in a.go (file 0).
+	if m.diffCursor.FileIdx != 0 {
+		t.Errorf("expected file 0, got %d", m.diffCursor.FileIdx)
+	}
+}
+
+func TestMoveCursorUpSkipsMultipleBinaries(t *testing.T) {
+	t.Parallel()
+	files := []diffmodel.DiffFile{
+		{OldPath: "a.go", NewPath: "a.go", Status: "modified",
+			Hunks: []diffmodel.DiffHunk{{
+				Header: "@@ -1,1 +1,1 @@",
+				Lines: []diffmodel.DiffLine{{Kind: "context", Raw: " line1", NewLine: ptrInt(1)}},
+			}}},
+		{OldPath: "bin1.bin", NewPath: "bin1.bin", Status: "modified", IsBinary: true},
+		{OldPath: "bin2.bin", NewPath: "bin2.bin", Status: "modified", IsBinary: true},
+		{OldPath: "b.go", NewPath: "b.go", Status: "modified",
+			Hunks: []diffmodel.DiffHunk{{
+				Header: "@@ -1,1 +1,1 @@",
+				Lines: []diffmodel.DiffLine{{Kind: "context", Raw: " line2", NewLine: ptrInt(1)}},
+			}}},
+	}
+	m := makeDiffCursorModelCustom(files, 100, 40)
+	m.diffCursor = diffCursorLine{FileIdx: 3, HunkIdx: 0, LineIdx: 0}
+	m.moveCursorUp()
+	if m.diffCursor.FileIdx != 0 {
+		t.Errorf("expected file 0 after skipping two binaries, got %d", m.diffCursor.FileIdx)
+	}
+}
+
+func TestMoveCursorUpPrevFileNoHunks(t *testing.T) {
+	t.Parallel()
+	files := []diffmodel.DiffFile{
+		{OldPath: "empty.go", NewPath: "empty.go", Status: "modified"},
+		{OldPath: "b.go", NewPath: "b.go", Status: "modified",
+			Hunks: []diffmodel.DiffHunk{{
+				Header: "@@ -1,1 +1,1 @@",
+				Lines: []diffmodel.DiffLine{{Kind: "context", Raw: " line1", NewLine: ptrInt(1)}},
+			}}},
+	}
+	m := makeDiffCursorModelCustom(files, 100, 40)
+	m.diffCursor = diffCursorLine{FileIdx: 1, HunkIdx: 0, LineIdx: 0}
+	m.moveCursorUp()
+	// empty.go has no hunks, so going up from b.go should be a no-op.
+	if m.diffCursor.FileIdx != 1 || m.diffCursor.HunkIdx != 0 || m.diffCursor.LineIdx != 0 {
+		t.Errorf("expected (1,0,0) no-op, got (%d,%d,%d)", m.diffCursor.FileIdx, m.diffCursor.HunkIdx, m.diffCursor.LineIdx)
+	}
+}
+
+func TestMoveCursorUpPrevFileAfterHunkExhaustionIsBinary(t *testing.T) {
+	t.Parallel()
+	files := []diffmodel.DiffFile{
+		{OldPath: "a.go", NewPath: "a.go", Status: "modified",
+			Hunks: []diffmodel.DiffHunk{{
+				Header: "@@ -1,1 +1,1 @@",
+				Lines: []diffmodel.DiffLine{{Kind: "context", Raw: " line1", NewLine: ptrInt(1)}},
+			}}},
+		{OldPath: "bin.bin", NewPath: "bin.bin", Status: "modified", IsBinary: true},
+		{OldPath: "b.go", NewPath: "b.go", Status: "modified",
+			Hunks: []diffmodel.DiffHunk{{
+				Header: "@@ -1,1 +1,1 @@",
+				Lines: []diffmodel.DiffLine{{Kind: "context", Raw: " line2", NewLine: ptrInt(1)}},
+			}}},
+	}
+	m := makeDiffCursorModelCustom(files, 100, 40)
+	m.diffCursor = diffCursorLine{FileIdx: 2, HunkIdx: 0, LineIdx: 0}
+	m.moveCursorUp()
+	// From b.go, going up crosses into bin.bin (binary) then into a.go.
+	if m.diffCursor.FileIdx != 0 {
+		t.Errorf("expected file 0, got %d", m.diffCursor.FileIdx)
+	}
+}
+
+func TestMoveCursorUpLeadingBinary(t *testing.T) {
+	t.Parallel()
+	files := []diffmodel.DiffFile{
+		{OldPath: "bin.bin", NewPath: "bin.bin", Status: "modified", IsBinary: true},
+		{OldPath: "a.go", NewPath: "a.go", Status: "modified",
+			Hunks: []diffmodel.DiffHunk{{
+				Header: "@@ -1,1 +1,1 @@",
+				Lines: []diffmodel.DiffLine{{Kind: "context", Raw: " line1", NewLine: ptrInt(1)}},
+			}}},
+	}
+	m := makeDiffCursorModelCustom(files, 100, 40)
+	m.diffCursor = diffCursorLine{FileIdx: 1, HunkIdx: 0, LineIdx: 0}
+	before := m.diffCursor
+	m.moveCursorUp()
+	// a.go is the first non-binary; going up should be no-op.
+	if m.diffCursor != before {
+		t.Errorf("expected no-op, got %v", m.diffCursor)
+	}
+}
+
+func TestMoveCursorUpFromFirstLineToPrevFileMultiHunk(t *testing.T) {
+	t.Parallel()
+	files := []diffmodel.DiffFile{
+		{OldPath: "a.go", NewPath: "a.go", Status: "modified",
+			Hunks: []diffmodel.DiffHunk{
+				{Header: "@@ -1,1 +1,1 @@", Lines: []diffmodel.DiffLine{
+					{Kind: "context", Raw: " line1", NewLine: ptrInt(1)},
+				}},
+				{Header: "@@ -5,1 +5,1 @@", Lines: []diffmodel.DiffLine{
+					{Kind: "context", Raw: " line2", NewLine: ptrInt(2)},
+					{Kind: "context", Raw: " line3", NewLine: ptrInt(3)},
+				}},
+			}},
+		{OldPath: "b.go", NewPath: "b.go", Status: "modified",
+			Hunks: []diffmodel.DiffHunk{{
+				Header: "@@ -1,1 +1,1 @@",
+				Lines: []diffmodel.DiffLine{{Kind: "context", Raw: " line4", NewLine: ptrInt(1)}},
+			}}},
+	}
+	m := makeDiffCursorModelCustom(files, 100, 40)
+	m.diffCursor = diffCursorLine{FileIdx: 1, HunkIdx: 0, LineIdx: 0}
+	m.moveCursorUp()
+	if m.diffCursor.FileIdx != 0 || m.diffCursor.HunkIdx != 1 || m.diffCursor.LineIdx != 1 {
+		t.Errorf("expected (0,1,1), got (%d,%d,%d)", m.diffCursor.FileIdx, m.diffCursor.HunkIdx, m.diffCursor.LineIdx)
+	}
+}
+
+func TestMoveCursorUpCrossHunkMultiLines(t *testing.T) {
+	t.Parallel()
+	files := []diffmodel.DiffFile{
+		{OldPath: "a.go", NewPath: "a.go", Status: "modified",
+			Hunks: []diffmodel.DiffHunk{
+				{Header: "@@ -1,2 +1,2 @@", Lines: []diffmodel.DiffLine{
+					{Kind: "context", Raw: " line1", NewLine: ptrInt(1)},
+					{Kind: "context", Raw: " line2", NewLine: ptrInt(2)},
+				}},
+				{Header: "@@ -5,3 +5,3 @@", Lines: []diffmodel.DiffLine{
+					{Kind: "context", Raw: " line3", NewLine: ptrInt(3)},
+					{Kind: "context", Raw: " line4", NewLine: ptrInt(4)},
+					{Kind: "context", Raw: " line5", NewLine: ptrInt(5)},
+				}},
+			}},
+	}
+	m := makeDiffCursorModelCustom(files, 100, 40)
+	m.diffCursor = diffCursorLine{FileIdx: 0, HunkIdx: 1, LineIdx: 2}
+	m.moveCursorUp()
+	if m.diffCursor.FileIdx != 0 || m.diffCursor.HunkIdx != 1 || m.diffCursor.LineIdx != 1 {
+		t.Errorf("expected (0,1,1), got (%d,%d,%d)", m.diffCursor.FileIdx, m.diffCursor.HunkIdx, m.diffCursor.LineIdx)
+	}
+	m.moveCursorUp()
+	if m.diffCursor.FileIdx != 0 || m.diffCursor.HunkIdx != 1 || m.diffCursor.LineIdx != 0 {
+		t.Errorf("expected (0,1,0), got (%d,%d,%d)", m.diffCursor.FileIdx, m.diffCursor.HunkIdx, m.diffCursor.LineIdx)
+	}
+	m.moveCursorUp()
+	if m.diffCursor.FileIdx != 0 || m.diffCursor.HunkIdx != 0 || m.diffCursor.LineIdx != 1 {
+		t.Errorf("expected (0,0,1), got (%d,%d,%d)", m.diffCursor.FileIdx, m.diffCursor.HunkIdx, m.diffCursor.LineIdx)
+	}
+}
+
+func TestMoveCursorUpFromFirstHunkLineCrossesToPrevHunk(t *testing.T) {
+	t.Parallel()
+	files := []diffmodel.DiffFile{
+		{OldPath: "a.go", NewPath: "a.go", Status: "modified",
+			Hunks: []diffmodel.DiffHunk{
+				{Header: "@@ -1,1 +1,1 @@", Lines: []diffmodel.DiffLine{
+					{Kind: "context", Raw: " line1", NewLine: ptrInt(1)},
+				}},
+				{Header: "@@ -5,1 +5,1 @@", Lines: []diffmodel.DiffLine{
+					{Kind: "context", Raw: " line2", NewLine: ptrInt(2)},
+				}},
+			}},
+	}
+	m := makeDiffCursorModelCustom(files, 100, 40)
+	m.diffCursor = diffCursorLine{FileIdx: 0, HunkIdx: 1, LineIdx: 0}
+	m.moveCursorUp()
+	if m.diffCursor.FileIdx != 0 || m.diffCursor.HunkIdx != 0 || m.diffCursor.LineIdx != 0 {
+		t.Errorf("expected (0,0,0), got (%d,%d,%d)", m.diffCursor.FileIdx, m.diffCursor.HunkIdx, m.diffCursor.LineIdx)
+	}
+}
+
+func TestMoveCursorUpPrevFileAllBinaries(t *testing.T) {
+	t.Parallel()
+	files := []diffmodel.DiffFile{
+		{OldPath: "bin1.bin", NewPath: "bin1.bin", Status: "modified", IsBinary: true},
+		{OldPath: "bin2.bin", NewPath: "bin2.bin", Status: "modified", IsBinary: true},
+		{OldPath: "a.go", NewPath: "a.go", Status: "modified",
+			Hunks: []diffmodel.DiffHunk{{
+				Header: "@@ -1,1 +1,1 @@",
+				Lines: []diffmodel.DiffLine{{Kind: "context", Raw: " line1", NewLine: ptrInt(1)}},
+			}}},
+	}
+	m := makeDiffCursorModelCustom(files, 100, 40)
+	m.diffCursor = diffCursorLine{FileIdx: 2, HunkIdx: 0, LineIdx: 0}
+	before := m.diffCursor
+	m.moveCursorUp()
+	// All previous files are binary, so no-op.
+	if m.diffCursor != before {
+		t.Errorf("expected no-op, got %v", m.diffCursor)
 	}
 }
