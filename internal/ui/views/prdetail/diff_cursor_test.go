@@ -22,6 +22,7 @@ func makeDiffCursorModel(width, height int) *PRDetailModel {
 func makeDiffCursorModelWithLines(width, height int, l1, l2, l3, l4, l5 int) *PRDetailModel {
 	m := makePRDetail(width, height, nil, nil)
 	m.Diff = makeDiffForMapper()
+	m.buildNavigableIndex()
 	m.DiffLoading = false
 	m.DetailLoading = false
 	m.SetTheme(theme.Default())
@@ -76,7 +77,7 @@ func TestDiffCursorJAtLastLineIsNoop(t *testing.T) {
 	t.Parallel()
 	m := makeDiffCursorModel(100, 40)
 	// Set cursor to last line: file 1 (b.go), hunk 0, line 0.
-	m.diffCursor = diffCursorLine{FileIdx: 1, HunkIdx: 0, LineIdx: 0}
+	m.setDiffCursor(diffCursorLine{FileIdx: 1, HunkIdx: 0, LineIdx: 0})
 	before := m.diffCursor
 	m = pressKey(m, "j")
 	if m.diffCursor != before {
@@ -121,7 +122,7 @@ func TestDiffCursorSkipsBinaryFiles(t *testing.T) {
 	t.Parallel()
 	m := makeDiffCursorModel(100, 40)
 	// Set cursor to last line of b.go (file 1, hunk 0, line 0).
-	m.diffCursor = diffCursorLine{FileIdx: 1, HunkIdx: 0, LineIdx: 0}
+	m.setDiffCursor(diffCursorLine{FileIdx: 1, HunkIdx: 0, LineIdx: 0})
 	m = pressKey(m, "j")
 	// binary.bin is next but should be skipped. Since it's the last file, j is no-op.
 	if m.diffCursor.FileIdx != 1 {
@@ -133,7 +134,7 @@ func TestDiffCursorKSkipsBinaryFilesBackward(t *testing.T) {
 	t.Parallel()
 	m := makeDiffCursorModel(100, 40)
 	// Set cursor to b.go line 0.
-	m.diffCursor = diffCursorLine{FileIdx: 1, HunkIdx: 0, LineIdx: 0}
+	m.setDiffCursor(diffCursorLine{FileIdx: 1, HunkIdx: 0, LineIdx: 0})
 	m = pressKey(m, "k")
 	// Should go to a.go (file 0), last line of last hunk (hunk 1, line 1).
 	if m.diffCursor.FileIdx != 0 {
@@ -444,6 +445,7 @@ func TestCtrlUOnDescriptionScrolls(t *testing.T) {
 func makeDiffCursorModelCustom(files []diffmodel.DiffFile, width, height int) *PRDetailModel {
 	m := makePRDetail(width, height, nil, nil)
 	m.Diff = &diffmodel.DiffModel{Files: files}
+	m.buildNavigableIndex()
 	m.DiffLoading = false
 	m.DetailLoading = false
 	m.SetTheme(theme.Default())
@@ -461,7 +463,8 @@ func TestMoveCursorUpNilDiff(t *testing.T) {
 	t.Parallel()
 	m := makeDiffCursorModel(100, 40)
 	m.Diff = nil
-	m.diffCursor = diffCursorLine{FileIdx: 1, HunkIdx: 0, LineIdx: 0}
+	m.invalidateNavigableIndex()
+	m.setDiffCursor(diffCursorLine{FileIdx: 1, HunkIdx: 0, LineIdx: 0})
 	before := m.diffCursor
 	m.moveCursorUp()
 	if m.diffCursor != before {
@@ -483,7 +486,7 @@ func TestMoveCursorUpAtFirstLine(t *testing.T) {
 func TestMoveCursorUpSameHunk(t *testing.T) {
 	t.Parallel()
 	m := makeDiffCursorModel(100, 40)
-	m.diffCursor = diffCursorLine{FileIdx: 0, HunkIdx: 0, LineIdx: 2}
+	m.setDiffCursor(diffCursorLine{FileIdx: 0, HunkIdx: 0, LineIdx: 2})
 	m.moveCursorUp()
 	if m.diffCursor.FileIdx != 0 || m.diffCursor.HunkIdx != 0 || m.diffCursor.LineIdx != 1 {
 		t.Errorf("expected (0,0,1), got (%d,%d,%d)", m.diffCursor.FileIdx, m.diffCursor.HunkIdx, m.diffCursor.LineIdx)
@@ -493,7 +496,7 @@ func TestMoveCursorUpSameHunk(t *testing.T) {
 func TestMoveCursorUpCrossHunkBoundary(t *testing.T) {
 	t.Parallel()
 	m := makeDiffCursorModel(100, 40)
-	m.diffCursor = diffCursorLine{FileIdx: 0, HunkIdx: 1, LineIdx: 0}
+	m.setDiffCursor(diffCursorLine{FileIdx: 0, HunkIdx: 1, LineIdx: 0})
 	m.moveCursorUp()
 	if m.diffCursor.FileIdx != 0 || m.diffCursor.HunkIdx != 0 || m.diffCursor.LineIdx != 2 {
 		t.Errorf("expected (0,0,2), got (%d,%d,%d)", m.diffCursor.FileIdx, m.diffCursor.HunkIdx, m.diffCursor.LineIdx)
@@ -503,7 +506,7 @@ func TestMoveCursorUpCrossHunkBoundary(t *testing.T) {
 func TestMoveCursorUpCrossFileBoundary(t *testing.T) {
 	t.Parallel()
 	m := makeDiffCursorModel(100, 40)
-	m.diffCursor = diffCursorLine{FileIdx: 1, HunkIdx: 0, LineIdx: 0}
+	m.setDiffCursor(diffCursorLine{FileIdx: 1, HunkIdx: 0, LineIdx: 0})
 	m.moveCursorUp()
 	if m.diffCursor.FileIdx != 0 || m.diffCursor.HunkIdx != 1 || m.diffCursor.LineIdx != 1 {
 		t.Errorf("expected (0,1,1), got (%d,%d,%d)", m.diffCursor.FileIdx, m.diffCursor.HunkIdx, m.diffCursor.LineIdx)
@@ -513,7 +516,7 @@ func TestMoveCursorUpCrossFileBoundary(t *testing.T) {
 func TestMoveCursorUpSkipsBinaryBackward(t *testing.T) {
 	t.Parallel()
 	m := makeDiffCursorModel(100, 40)
-	m.diffCursor = diffCursorLine{FileIdx: 1, HunkIdx: 0, LineIdx: 0}
+	m.setDiffCursor(diffCursorLine{FileIdx: 1, HunkIdx: 0, LineIdx: 0})
 	m.moveCursorUp()
 	// b.go → a.go (file 0), skipping binary.bin at file 2 (which is forward, not backward).
 	// Actually from b.go (file 1), going up should land in a.go (file 0).
@@ -539,7 +542,7 @@ func TestMoveCursorUpSkipsMultipleBinaries(t *testing.T) {
 			}}},
 	}
 	m := makeDiffCursorModelCustom(files, 100, 40)
-	m.diffCursor = diffCursorLine{FileIdx: 3, HunkIdx: 0, LineIdx: 0}
+	m.setDiffCursor(diffCursorLine{FileIdx: 3, HunkIdx: 0, LineIdx: 0})
 	m.moveCursorUp()
 	if m.diffCursor.FileIdx != 0 {
 		t.Errorf("expected file 0 after skipping two binaries, got %d", m.diffCursor.FileIdx)
@@ -557,7 +560,7 @@ func TestMoveCursorUpPrevFileNoHunks(t *testing.T) {
 			}}},
 	}
 	m := makeDiffCursorModelCustom(files, 100, 40)
-	m.diffCursor = diffCursorLine{FileIdx: 1, HunkIdx: 0, LineIdx: 0}
+	m.setDiffCursor(diffCursorLine{FileIdx: 1, HunkIdx: 0, LineIdx: 0})
 	m.moveCursorUp()
 	// empty.go has no hunks, so going up from b.go should be a no-op.
 	if m.diffCursor.FileIdx != 1 || m.diffCursor.HunkIdx != 0 || m.diffCursor.LineIdx != 0 {
@@ -581,7 +584,7 @@ func TestMoveCursorUpPrevFileAfterHunkExhaustionIsBinary(t *testing.T) {
 			}}},
 	}
 	m := makeDiffCursorModelCustom(files, 100, 40)
-	m.diffCursor = diffCursorLine{FileIdx: 2, HunkIdx: 0, LineIdx: 0}
+	m.setDiffCursor(diffCursorLine{FileIdx: 2, HunkIdx: 0, LineIdx: 0})
 	m.moveCursorUp()
 	// From b.go, going up crosses into bin.bin (binary) then into a.go.
 	if m.diffCursor.FileIdx != 0 {
@@ -600,7 +603,7 @@ func TestMoveCursorUpLeadingBinary(t *testing.T) {
 			}}},
 	}
 	m := makeDiffCursorModelCustom(files, 100, 40)
-	m.diffCursor = diffCursorLine{FileIdx: 1, HunkIdx: 0, LineIdx: 0}
+	m.setDiffCursor(diffCursorLine{FileIdx: 1, HunkIdx: 0, LineIdx: 0})
 	before := m.diffCursor
 	m.moveCursorUp()
 	// a.go is the first non-binary; going up should be no-op.
@@ -629,7 +632,7 @@ func TestMoveCursorUpFromFirstLineToPrevFileMultiHunk(t *testing.T) {
 			}}},
 	}
 	m := makeDiffCursorModelCustom(files, 100, 40)
-	m.diffCursor = diffCursorLine{FileIdx: 1, HunkIdx: 0, LineIdx: 0}
+	m.setDiffCursor(diffCursorLine{FileIdx: 1, HunkIdx: 0, LineIdx: 0})
 	m.moveCursorUp()
 	if m.diffCursor.FileIdx != 0 || m.diffCursor.HunkIdx != 1 || m.diffCursor.LineIdx != 1 {
 		t.Errorf("expected (0,1,1), got (%d,%d,%d)", m.diffCursor.FileIdx, m.diffCursor.HunkIdx, m.diffCursor.LineIdx)
@@ -653,7 +656,7 @@ func TestMoveCursorUpCrossHunkMultiLines(t *testing.T) {
 			}},
 	}
 	m := makeDiffCursorModelCustom(files, 100, 40)
-	m.diffCursor = diffCursorLine{FileIdx: 0, HunkIdx: 1, LineIdx: 2}
+	m.setDiffCursor(diffCursorLine{FileIdx: 0, HunkIdx: 1, LineIdx: 2})
 	m.moveCursorUp()
 	if m.diffCursor.FileIdx != 0 || m.diffCursor.HunkIdx != 1 || m.diffCursor.LineIdx != 1 {
 		t.Errorf("expected (0,1,1), got (%d,%d,%d)", m.diffCursor.FileIdx, m.diffCursor.HunkIdx, m.diffCursor.LineIdx)
@@ -682,7 +685,7 @@ func TestMoveCursorUpFromFirstHunkLineCrossesToPrevHunk(t *testing.T) {
 			}},
 	}
 	m := makeDiffCursorModelCustom(files, 100, 40)
-	m.diffCursor = diffCursorLine{FileIdx: 0, HunkIdx: 1, LineIdx: 0}
+	m.setDiffCursor(diffCursorLine{FileIdx: 0, HunkIdx: 1, LineIdx: 0})
 	m.moveCursorUp()
 	if m.diffCursor.FileIdx != 0 || m.diffCursor.HunkIdx != 0 || m.diffCursor.LineIdx != 0 {
 		t.Errorf("expected (0,0,0), got (%d,%d,%d)", m.diffCursor.FileIdx, m.diffCursor.HunkIdx, m.diffCursor.LineIdx)
@@ -701,7 +704,7 @@ func TestMoveCursorUpPrevFileAllBinaries(t *testing.T) {
 			}}},
 	}
 	m := makeDiffCursorModelCustom(files, 100, 40)
-	m.diffCursor = diffCursorLine{FileIdx: 2, HunkIdx: 0, LineIdx: 0}
+	m.setDiffCursor(diffCursorLine{FileIdx: 2, HunkIdx: 0, LineIdx: 0})
 	before := m.diffCursor
 	m.moveCursorUp()
 	// All previous files are binary, so no-op.

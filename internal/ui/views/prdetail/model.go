@@ -153,6 +153,13 @@ type PRDetailModel struct {
 	// Diff cursor (line-by-line navigation in Diff tab)
 	diffCursor diffCursorLine
 
+	// Flat index of all navigable diff lines (excludes binary files).
+	// Rebuilt whenever Diff changes; invalidated alongside diffCursor.
+	navigableLines []diffCursorLine // ordered by display position
+	navigableRows  []int            // parallel display rows for each navigable line
+	navIdxMap      map[diffCursorLine]int
+	navIdx         int // current position in navigableLines; -1 = invalid
+
 	// Inline review drafts
 	visual            visualModeState
 	drafts            []domain.DraftInlineComment
@@ -300,6 +307,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 				cmds.LoadDiffCmd(m.PRService, m.Repo, m.Summary.Number, m.Summary.HeadRefOID, true))
 		}
 		m.Diff = &msg.Diff
+		m.buildNavigableIndex()
 		m.invalidateDiffCursor()
 		m.rebuildDiffIndices()
 		m.normalizeDiffRows()
@@ -910,41 +918,91 @@ func (m *PRDetailModel) shrinkVisualSelectionUp() {
 // ── Diff cursor helpers ─────────────────────────────────────────────────────────
 
 func (m *PRDetailModel) validDiffCursor() bool {
-	if m.Diff == nil || m.diffCursor.FileIdx < 0 {
+	if m.navIdx < 0 || m.navIdx >= len(m.navigableLines) {
 		return false
 	}
-	if m.diffCursor.FileIdx >= len(m.Diff.Files) {
+	// Defensive: ensure diffCursor matches navIdx.
+	if m.diffCursor != m.navigableLines[m.navIdx] {
 		return false
 	}
-	f := &m.Diff.Files[m.diffCursor.FileIdx]
-	if f.IsBinary {
-		return false
-	}
-	if m.diffCursor.HunkIdx < 0 || m.diffCursor.HunkIdx >= len(f.Hunks) {
-		return false
-	}
-	h := &f.Hunks[m.diffCursor.HunkIdx]
-	if m.diffCursor.LineIdx < 0 || m.diffCursor.LineIdx >= len(h.Lines) {
-		return false
-	}
-	row := m.diffLineToDisplayRow(m.diffCursor.FileIdx, m.diffCursor.HunkIdx, m.diffCursor.LineIdx)
-	return row < maxDiffDisplayRows
+	return m.navigableRows[m.navIdx] < maxDiffDisplayRows
 }
 
 func (m *PRDetailModel) invalidateDiffCursor() {
 	m.diffCursor = diffCursorLine{FileIdx: -1}
+	m.navIdx = -1
+}
+
+// buildNavigableIndex creates a flat ordered slice of every actual diff line,
+// skipping binary files. A parallel display-row slice and a reverse map from
+// (file,hunk,line) → flat index are also built so cursor movement is O(1).
+func (m *PRDetailModel) buildNavigableIndex() {
+	m.navigableLines = m.navigableLines[:0]
+	m.navigableRows = m.navigableRows[:0]
+	m.navIdxMap = make(map[diffCursorLine]int)
+	m.navIdx = -1
+	if m.Diff == nil {
+		return
+	}
+	for fi, f := range m.Diff.Files {
+		if f.IsBinary {
+			continue
+		}
+		for hi, h := range f.Hunks {
+			for li := range h.Lines {
+				cursor := diffCursorLine{FileIdx: fi, HunkIdx: hi, LineIdx: li}
+				m.navIdxMap[cursor] = len(m.navigableLines)
+				m.navigableLines = append(m.navigableLines, cursor)
+				m.navigableRows = append(m.navigableRows, m.diffLineToDisplayRow(fi, hi, li))
+			}
+		}
+	}
+}
+
+func (m *PRDetailModel) invalidateNavigableIndex() {
+	m.navigableLines = nil
+	m.navigableRows = nil
+	m.navIdxMap = nil
+	m.navIdx = -1
+}
+
+// setDiffCursor updates diffCursor and keeps navIdx in sync.
+func (m *PRDetailModel) setDiffCursor(cursor diffCursorLine) {
+	m.diffCursor = cursor
+	if m.navIdxMap != nil {
+		if idx, ok := m.navIdxMap[cursor]; ok {
+			m.navIdx = idx
+			return
+		}
+	}
+	m.navIdx = -1
 }
 
 func (m *PRDetailModel) ensureDiffCursor() {
 	if m.validDiffCursor() {
 		return
 	}
-	fi, hi, li, ok := m.firstDiffLineAtOrBelow(m.ContentScroll)
-	if !ok {
-		m.invalidateDiffCursor()
+	// Try to sync navIdx from the current diffCursor.
+	m.setDiffCursor(m.diffCursor)
+	if m.validDiffCursor() {
 		return
 	}
-	m.diffCursor = diffCursorLine{FileIdx: fi, HunkIdx: hi, LineIdx: li}
+	// Find first navigable line at or below the current scroll position.
+	targetRow := m.ContentScroll
+	for i, row := range m.navigableRows {
+		if row >= targetRow {
+			m.navIdx = i
+			m.diffCursor = m.navigableLines[i]
+			return
+		}
+	}
+	// Fallback to last navigable line.
+	if len(m.navigableLines) > 0 {
+		m.navIdx = len(m.navigableLines) - 1
+		m.diffCursor = m.navigableLines[m.navIdx]
+		return
+	}
+	m.invalidateDiffCursor()
 }
 
 // firstDiffCursor returns the (fileIdx, hunkIdx, lineIdx) of the first
@@ -988,121 +1046,44 @@ func lastDiffCursor(dm *model.DiffModel) (fileIdx, hunkIdx, lineIdx int) {
 	return 0, 0, 0
 }
 
-// moveCursorDown moves the diff cursor to the next actual diff line,
-// crossing hunk and file boundaries, skipping binary files.
+// moveCursorDown moves the diff cursor to the next navigable diff line.
 func (m *PRDetailModel) moveCursorDown() {
-	if m.Diff == nil {
+	if len(m.navigableLines) == 0 {
 		return
 	}
-	fi, hi, li := m.diffCursor.FileIdx, m.diffCursor.HunkIdx, m.diffCursor.LineIdx
-	li++
-	for fi < len(m.Diff.Files) {
-		f := &m.Diff.Files[fi]
-		if f.IsBinary {
-			fi++
-			hi = 0
-			li = 0
-			continue
-		}
-		if hi < len(f.Hunks) {
-			h := &f.Hunks[hi]
-			if li < len(h.Lines) {
-				row := m.diffLineToDisplayRow(fi, hi, li)
-				if row < maxDiffDisplayRows {
-					m.diffCursor = diffCursorLine{FileIdx: fi, HunkIdx: hi, LineIdx: li}
-					m.syncFilePanelToCursor()
-				}
-				return
-			}
-			hi++
-			li = 0
-			continue
-		}
-		fi++
-		hi = 0
-		li = 0
+	if m.navIdx >= 0 && m.navIdx < len(m.navigableLines)-1 {
+		m.navIdx++
+		m.diffCursor = m.navigableLines[m.navIdx]
+		m.syncFilePanelToCursor()
 	}
 }
 
-// moveCursorUp moves the diff cursor to the previous actual diff line,
-// crossing hunk and file boundaries, skipping binary files.
+// moveCursorUp moves the diff cursor to the previous navigable diff line.
 func (m *PRDetailModel) moveCursorUp() {
-	if m.Diff == nil {
+	if len(m.navigableLines) == 0 {
 		return
 	}
-	fi, hi, li := m.diffCursor.FileIdx, m.diffCursor.HunkIdx, m.diffCursor.LineIdx
-	li--
-	for fi >= 0 {
-		f := &m.Diff.Files[fi]
-		if f.IsBinary {
-			fi--
-			if fi >= 0 {
-				f = &m.Diff.Files[fi]
-				hi = len(f.Hunks) - 1
-				if hi >= 0 {
-					li = len(f.Hunks[hi].Lines) - 1
-				}
-			}
-			continue
-		}
-		if hi >= 0 && hi < len(f.Hunks) {
-			h := f.Hunks[hi]
-			if li >= 0 && li < len(h.Lines) {
-				row := m.diffLineToDisplayRow(fi, hi, li)
-				if row < maxDiffDisplayRows {
-					m.diffCursor = diffCursorLine{FileIdx: fi, HunkIdx: hi, LineIdx: li}
-					m.syncFilePanelToCursor()
-				}
-				return
-			}
-			if li < 0 {
-				hi--
-				if hi >= 0 {
-					li = len(f.Hunks[hi].Lines) - 1
-				}
-				continue
-			}
-		}
-		// Enter previous file (hunk exhausted or invalid hunk index).
-		fi--
-		if fi >= 0 {
-			f = &m.Diff.Files[fi]
-			if f.IsBinary {
-				hi = -1
-				li = -1
-				continue
-			}
-			hi = len(f.Hunks) - 1
-			if hi >= 0 {
-				li = len(f.Hunks[hi].Lines) - 1
-			}
-		}
+	if m.navIdx > 0 {
+		m.navIdx--
+		m.diffCursor = m.navigableLines[m.navIdx]
+		m.syncFilePanelToCursor()
 	}
 }
 
 // moveCursorBy moves the diff cursor by delta lines (negative = up).
 // Clamps at boundaries; does nothing if delta is 0.
 func (m *PRDetailModel) moveCursorBy(delta int) {
-	if delta == 0 {
+	if delta == 0 || len(m.navigableLines) == 0 || m.navIdx < 0 {
 		return
 	}
-	if delta > 0 {
-		for i := 0; i < delta; i++ {
-			before := m.diffCursor
-			m.moveCursorDown()
-			if m.diffCursor == before {
-				break
-			}
-		}
-	} else {
-		for i := 0; i < -delta; i++ {
-			before := m.diffCursor
-			m.moveCursorUp()
-			if m.diffCursor == before {
-				break
-			}
-		}
+	m.navIdx += delta
+	if m.navIdx < 0 {
+		m.navIdx = 0
+	} else if m.navIdx >= len(m.navigableLines) {
+		m.navIdx = len(m.navigableLines) - 1
 	}
+	m.diffCursor = m.navigableLines[m.navIdx]
+	m.syncFilePanelToCursor()
 }
 
 // scrollToCursor adjusts ContentScroll so the cursor stays within
@@ -1112,7 +1093,7 @@ func (m *PRDetailModel) scrollToCursor(padding int) {
 	if !m.validDiffCursor() {
 		return
 	}
-	row := m.diffLineToDisplayRow(m.diffCursor.FileIdx, m.diffCursor.HunkIdx, m.diffCursor.LineIdx)
+	row := m.navigableRows[m.navIdx]
 	vh := m.contentViewportHeight()
 	pad := min(padding, vh/2)
 	if row < m.ContentScroll+pad {
@@ -1153,7 +1134,7 @@ func (m *PRDetailModel) jumpToCommentCode() {
 	// Find the diff line matching (path, line).
 	if fi, hi, li, ok := m.findDiffLineAnchorAnySide(entry.path, entry.line); ok {
 		m.switchTab(TabDiff)
-		m.diffCursor = diffCursorLine{FileIdx: fi, HunkIdx: hi, LineIdx: li}
+		m.setDiffCursor(diffCursorLine{FileIdx: fi, HunkIdx: hi, LineIdx: li})
 		m.scrollToCursor(scrollPadding)
 	}
 }
@@ -1342,10 +1323,12 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 	case "g":
 		if m.LastKey == "g" {
 			if m.isInDiffSection() {
-				fi, hi, li := firstDiffCursor(m.Diff)
-				m.diffCursor = diffCursorLine{FileIdx: fi, HunkIdx: hi, LineIdx: li}
-				m.ContentScroll = 0
-				m.syncFilePanelToCursor()
+				if len(m.navigableLines) > 0 {
+					m.navIdx = 0
+					m.diffCursor = m.navigableLines[0]
+					m.ContentScroll = 0
+					m.syncFilePanelToCursor()
+				}
 			} else if m.leftPanel.Focus == FocusContent && m.activeTab == TabComments {
 				entries := m.commentEntries()
 				if len(entries) > 0 {
@@ -1362,10 +1345,12 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		return m, nil
 	case "G":
 		if m.isInDiffSection() {
-			fi, hi, li := lastDiffCursor(m.Diff)
-			m.diffCursor = diffCursorLine{FileIdx: fi, HunkIdx: hi, LineIdx: li}
-			m.scrollToCursor(scrollPadding)
-			m.syncFilePanelToCursor()
+			if len(m.navigableLines) > 0 {
+				m.navIdx = len(m.navigableLines) - 1
+				m.diffCursor = m.navigableLines[m.navIdx]
+				m.scrollToCursor(scrollPadding)
+				m.syncFilePanelToCursor()
+			}
 		} else if m.leftPanel.Focus == FocusContent && m.activeTab == TabComments {
 			entries := m.commentEntries()
 			if len(entries) > 0 {
@@ -1431,7 +1416,7 @@ func (m *PRDetailModel) jumpToFile(idx int) {
 	// Position the diff cursor at the first diff line of the target file
 	// (skipping binary files to find the next navigable line).
 	if fi, hi, li, ok := m.firstDiffLineAtOrBelow(fileOffset); ok {
-		m.diffCursor = diffCursorLine{FileIdx: fi, HunkIdx: hi, LineIdx: li}
+		m.setDiffCursor(diffCursorLine{FileIdx: fi, HunkIdx: hi, LineIdx: li})
 	}
 }
 
@@ -1764,70 +1749,24 @@ func (m *PRDetailModel) diffLineToDisplayRow(fileIdx, hunkIdx, lineIdx int) int 
 // continues to subsequent files. The target is clamped to maxDiffDisplayRows-1
 // so only rendered lines are returned.
 func (m *PRDetailModel) firstDiffLineAtOrBelow(targetRow int) (fileIdx, hunkIdx, lineIdx int, found bool) {
-	if m.Diff == nil || len(m.Diff.Files) == 0 {
+	if len(m.navigableLines) == 0 {
 		return 0, 0, 0, false
 	}
-	diffRows := m.diffSectionRowCount()
-	if targetRow < 0 || targetRow >= diffRows {
-		return 0, 0, 0, false
+	if targetRow < 0 {
+		targetRow = 0
 	}
-	// Clamp to rendered region: only lines below maxDiffDisplayRows are visible.
 	if targetRow >= maxDiffDisplayRows {
 		targetRow = maxDiffDisplayRows - 1
 	}
-	localTarget := targetRow
-	for fi := range m.Diff.Files {
-		f := &m.Diff.Files[fi]
-		dr := diffFileDisplayRows(f)
-		if localTarget < dr {
-			if f.IsBinary {
-				// Binary file has no diff lines — skip past it and keep searching.
-				localTarget = 0
-				continue
-			}
-			localTarget -= diffFileHeaderRows // skip blank, separator, header
-			if localTarget <= 0 {
-				return fi, 0, 0, true
-			}
-			for hi, hunk := range f.Hunks {
-				if localTarget == 0 {
-					return fi, hi, 0, true
-				}
-				localTarget--
-				if localTarget < len(hunk.Lines) {
-					return fi, hi, localTarget, true
-				}
-				localTarget -= len(hunk.Lines)
-			}
-			lastHunk := len(f.Hunks) - 1
-			if lastHunk >= 0 {
-				lastLines := len(f.Hunks[lastHunk].Lines)
-				if lastLines > 0 {
-					return fi, lastHunk, lastLines - 1, true
-				}
-			}
-			return fi, 0, 0, true
-		}
-		localTarget -= dr
-	}
-	// If targetRow landed past all real lines (e.g. in trailing blank padding
-	// of the last file), walk backwards from the end to find the last valid line.
-	for fi := len(m.Diff.Files) - 1; fi >= 0; fi-- {
-		f := &m.Diff.Files[fi]
-		if f.IsBinary {
-			continue
-		}
-		for hi := len(f.Hunks) - 1; hi >= 0; hi-- {
-			h := &f.Hunks[hi]
-			if len(h.Lines) > 0 {
-				row := m.diffLineToDisplayRow(fi, hi, len(h.Lines)-1)
-				if row < maxDiffDisplayRows {
-					return fi, hi, len(h.Lines) - 1, true
-				}
-			}
+	for i, row := range m.navigableRows {
+		if row >= targetRow {
+			c := m.navigableLines[i]
+			return c.FileIdx, c.HunkIdx, c.LineIdx, true
 		}
 	}
-	return 0, 0, 0, false
+	// Fallback to last navigable line.
+	c := m.navigableLines[len(m.navigableLines)-1]
+	return c.FileIdx, c.HunkIdx, c.LineIdx, true
 }
 
 // enterVisualMode activates visual mode anchored at the current diff cursor
@@ -1857,11 +1796,11 @@ func (m *PRDetailModel) enterVisualMode() {
 // selection start line.
 func (m *PRDetailModel) exitVisualMode() {
 	if m.validVisualState() {
-		m.diffCursor = diffCursorLine{
+		m.setDiffCursor(diffCursorLine{
 			FileIdx: m.visual.FileIdx,
 			HunkIdx: m.visual.HunkIdx,
 			LineIdx: m.visual.StartLine,
-		}
+		})
 	}
 	m.visual.Active = false
 }

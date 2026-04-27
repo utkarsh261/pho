@@ -193,7 +193,7 @@ func (m *PRDetailModel) scrollToSearchCursor() {
 
 	// Sync diff cursor to the search match line.
 	if fi, hi, li, found := m.firstDiffLineAtOrBelow(matchDisplayRow); found {
-		m.diffCursor = diffCursorLine{FileIdx: fi, HunkIdx: hi, LineIdx: li}
+		m.setDiffCursor(diffCursorLine{FileIdx: fi, HunkIdx: hi, LineIdx: li})
 	}
 }
 

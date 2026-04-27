@@ -55,6 +55,7 @@ func makeDiffForMapper() *diffmodel.DiffModel {
 func makeInlineReviewModel(width, height int) *PRDetailModel {
 	m := makePRDetail(width, height, nil, nil)
 	m.Diff = makeDiffForMapper()
+	m.buildNavigableIndex()
 	m.DiffLoading = false
 	m.DetailLoading = false
 	m.SetTheme(theme.Default())
