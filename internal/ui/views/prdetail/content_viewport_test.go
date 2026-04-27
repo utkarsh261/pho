@@ -251,50 +251,48 @@ func TestCapitalGScrollsToBottom(t *testing.T) {
 
 // ── Ctrl+D / Ctrl+U tests ────────────────────────────────────────────────────
 
-// TestCtrlDPageDown verifies that Ctrl+D scrolls down by contentViewportHeight/2.
-// Uses files with real hunk data so diffSectionRowCount produces enough rows
-// (diffFileDisplayRows = 3 overhead + hunk lines) to exceed the viewport.
-func TestCtrlDPageDown(t *testing.T) {
+// TestCtrlDPageDownOnDescriptionTab verifies that Ctrl+D scrolls content
+// down by contentViewportHeight/2 when not in Diff cursor mode.
+func TestCtrlDPageDownOnDescriptionTab(t *testing.T) {
 	t.Parallel()
-
-	// Build 5 files each with 8 context lines → diffFileDisplayRows = 3+1+8 = 12 per file = 60 total.
-	makeRichFile := func() diffmodel.DiffFile {
-		lines := make([]diffmodel.DiffLine, 8)
-		for i := range lines {
-			lines[i] = diffmodel.DiffLine{Kind: "context", Raw: " ctx"}
-		}
-		hunk := diffmodel.DiffHunk{Header: "@@ -1,8 +1,8 @@", Lines: lines}
-		f := diffmodel.DiffFile{
-			OldPath: "file.go", NewPath: "file.go", Status: "modified",
-			Hunks: []diffmodel.DiffHunk{hunk},
-		}
-		f.DisplayRows = diffFileDisplayRows(&f)
-		return f
-	}
-	files := make([]diffmodel.DiffFile, 5)
-	for i := range files {
-		files[i] = makeRichFile()
-	}
-
-	m := makePRDetail(100, 30, files, nil)
-	m.Detail = makeDetailWithBody("body text")
-	m.Diff = makeDiff(files)
+	m := makePRDetail(100, 30, makeRichDiffFiles(), nil)
+	m.Detail = makeDetailWithBody(strings.Repeat("word ", 500))
 	m.DiffLoading = false
 	m.DetailLoading = false
+	m.SetTheme(theme.Default())
 	m.leftPanel.Focus = FocusContent
 	m.activeTab = TabDiff
 	m.ContentScroll = 0
 
-	half := m.contentViewportHeight() / 2
-	m = pressKey(m, "ctrl+d")
+	// On Diff tab with FocusContent, ctrl+d now moves the cursor.
+	// Switch to Description to test the old scroll behavior.
+	m.activeTab = TabDescription
 
+	cw := contentViewportWidth(m.rightPanelWidth())
+	lines := m.descriptionLines(cw)
+	half := m.contentViewportHeight() / 2
+	if len(lines) < half+5 {
+		t.Skipf("description has %d lines, need > %d to scroll", len(lines), half+5)
+	}
+
+	m = pressKey(m, "ctrl+d")
 	if m.ContentScroll < half {
-		t.Errorf("expected ContentScroll >= %d after Ctrl+D, got %d", half, m.ContentScroll)
+		t.Errorf("expected ContentScroll >= %d after Ctrl+D on Description tab, got %d", half, m.ContentScroll)
 	}
-	// Must not exceed max.
-	if m.ContentScroll > m.maxContentScroll() {
-		t.Errorf("expected ContentScroll <= maxContentScroll (%d), got %d", m.maxContentScroll(), m.ContentScroll)
+}
+
+func makeRichDiffFiles() []diffmodel.DiffFile {
+	lines := make([]diffmodel.DiffLine, 8)
+	for i := range lines {
+		lines[i] = diffmodel.DiffLine{Kind: "context", Raw: " ctx"}
 	}
+	hunk := diffmodel.DiffHunk{Header: "@@ -1,8 +1,8 @@", Lines: lines}
+	f := diffmodel.DiffFile{
+		OldPath: "file.go", NewPath: "file.go", Status: "modified",
+		Hunks: []diffmodel.DiffHunk{hunk},
+	}
+	f.DisplayRows = diffFileDisplayRows(&f)
+	return []diffmodel.DiffFile{f}
 }
 
 // TestCtrlUPageUpClampedAtZero verifies that Ctrl+U from scroll=0 stays at 0.

@@ -146,6 +146,16 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 	fileRow := 0
 	globalLineIndex := 0
 
+	// Pre-compute cursor validity once; avoid O(n²) from calling
+	// validDiffCursor (which calls diffLineToDisplayRow) inside the line loop.
+	hasValidCursor := m.validDiffCursor()
+	cursorFileIdx, cursorHunkIdx, cursorLineIdx := -1, -1, -1
+	if hasValidCursor {
+		cursorFileIdx = m.diffCursor.FileIdx
+		cursorHunkIdx = m.diffCursor.HunkIdx
+		cursorLineIdx = m.diffCursor.LineIdx
+	}
+
 	for i := range m.Diff.Files {
 		// Stop iterating once we've passed the truncation boundary.
 		if fileRow >= maxDiffDisplayRows {
@@ -216,10 +226,13 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 						currentLineBg,
 					)
 
-					// Apply visual selection highlight or draft indicator.
+					// Apply visual selection highlight, cursor highlight, or draft indicator.
 					isSelected := m.visual.Active && m.visual.FileIdx == i && m.visual.HunkIdx == hi &&
 						li >= m.visual.StartLine && li <= m.visual.EndLine
-					isDrafted := !isSelected && m.draftCovered[hunkLineKey{i, hi, li}]
+				isCursor := !isSelected && m.isInDiffSection() &&
+					hasValidCursor &&
+					cursorFileIdx == i && cursorHunkIdx == hi && cursorLineIdx == li
+					isDrafted := !isSelected && !isCursor && m.draftCovered[hunkLineKey{i, hi, li}]
 
 					if isSelected {
 						if m.theme != nil {
@@ -227,6 +240,8 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 						} else {
 							s = lipgloss.NewStyle().Reverse(true).Width(cw).Render(s)
 						}
+					} else if isCursor {
+						s = lipgloss.NewStyle().Reverse(true).Width(cw).Render(s)
 					} else if isDrafted {
 						if m.theme != nil {
 							s = m.theme.ListOpened.Width(cw).Render(s)
