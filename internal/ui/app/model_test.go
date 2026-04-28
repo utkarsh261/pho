@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -58,6 +59,7 @@ type loadRecentCall struct {
 type loadPreviewCall struct {
 	repo   string
 	number int
+	force  bool
 }
 
 type stubDashboardService struct {
@@ -88,8 +90,8 @@ func (s *stubDashboardService) LoadRecent(ctx context.Context, repo domain.Repos
 	return domain.RecentSnapshot{Repo: repo, FetchedAt: fixedNow()}, nil
 }
 
-func (s *stubDashboardService) LoadPreview(ctx context.Context, repo string, number int) (domain.PRPreviewSnapshot, error) {
-	s.loadPreviewCalls = append(s.loadPreviewCalls, loadPreviewCall{repo: repo, number: number})
+func (s *stubDashboardService) LoadPreview(ctx context.Context, repo string, number int, force bool) (domain.PRPreviewSnapshot, error) {
+	s.loadPreviewCalls = append(s.loadPreviewCalls, loadPreviewCall{repo: repo, number: number, force: force})
 	key := previewKey(repo, number)
 	if snap, ok := s.previewByPR[key]; ok {
 		return snap, nil
@@ -1333,6 +1335,188 @@ func TestDashboardRoundTripViaPRDetail(t *testing.T) {
 	}
 	if m.preview.Loading {
 		t.Fatal("step 9: preview still loading after PreviewLoadedMsg")
+	}
+}
+
+// TestDashboardRefreshUpdatesPreviewWhenSamePRSelected verifies that after a
+// dashboard refresh with updated PR data, the preview panel shows the fresh
+// derived summary instead of the stale full-preview snapshot.
+func TestDashboardRefreshUpdatesPreviewWhenSamePRSelected(t *testing.T) {
+	t.Parallel()
+
+	repo := testutil.Repo("acme/alpha")
+	oldPR := pr(repo.FullName, 1, "Fix login")
+	oldPR.CIStatus = domain.CIStatusPending
+	oldPR.UpdatedAt = time.Date(2026, 4, 9, 10, 0, 0, 0, time.UTC)
+
+	newPR := pr(repo.FullName, 1, "Fix login")
+	newPR.CIStatus = domain.CIStatusSuccess
+	newPR.UpdatedAt = time.Date(2026, 4, 9, 12, 0, 0, 0, time.UTC)
+
+	m := newTestModel([]domain.Repository{repo}, map[string]domain.DashboardSnapshot{
+		repo.FullName: dashboardSnapshot(repo, oldPR),
+	})
+	m.deps.Dashboard = &stubDashboardService{
+		dashboardByRepo: map[string]domain.DashboardSnapshot{
+			repo.FullName: dashboardSnapshot(repo, newPR),
+		},
+		previewByPR: map[string]domain.PRPreviewSnapshot{},
+	}
+
+	_, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	_, _ = m.Update(cmdsReposDiscovered([]domain.Repository{repo}))
+	_, _ = m.Update(cmdsDashboardLoaded(repo.FullName, dashboardSnapshot(repo, oldPR), false, nil))
+
+	// Simulate preview loaded with stale CI status.
+	_, _ = m.Update(cmdsPreviewLoaded(repo.FullName, 1, domain.PRPreviewSnapshot{
+		Repo:     repo.FullName,
+		Number:   1,
+		Title:    "Fix login",
+		CIStatus: domain.CIStatusPending,
+	}, false, nil))
+
+	// Verify stale preview is visible.
+	before := m.View()
+	if !strings.Contains(before, "CI: pending") {
+		t.Fatalf("expected stale CI pending before refresh, got:\n%s", before)
+	}
+
+	// Trigger dashboard refresh with updated data.
+	_, _ = m.Update(cmdsDashboardLoaded(repo.FullName, dashboardSnapshot(repo, newPR), false, nil))
+
+	// After refresh, preview should show the updated CI status from the fresh
+	// dashboard summary, not the stale full-preview snapshot.
+	after := m.View()
+	if !strings.Contains(after, "CI: success") {
+		t.Fatalf("expected updated CI success after dashboard refresh, got:\n%s", after)
+	}
+	if strings.Contains(after, "CI: pending") {
+		t.Fatalf("expected stale CI pending to be gone after refresh, got:\n%s", after)
+	}
+}
+
+// TestPreviewFetchMsgRespectsForceFlag verifies that when PreviewFetchMsg
+// carries Force=true, the resulting LoadPreviewCmd passes force=true to the
+// dashboard service.
+func TestPreviewFetchMsgRespectsForceFlag(t *testing.T) {
+	t.Parallel()
+
+	repo := testutil.Repo("acme/alpha")
+	prs := []domain.PullRequestSummary{pr(repo.FullName, 1, "Test PR")}
+	stub := &stubDashboardService{
+		dashboardByRepo: map[string]domain.DashboardSnapshot{
+			repo.FullName: dashboardSnapshot(repo, prs...),
+		},
+		previewByPR: map[string]domain.PRPreviewSnapshot{},
+	}
+	m := newTestModel([]domain.Repository{repo}, nil)
+	m.deps.Dashboard = stub
+
+	_, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	_, _ = m.Update(cmdsReposDiscovered([]domain.Repository{repo}))
+	_, _ = m.Update(cmdsDashboardLoaded(repo.FullName, dashboardSnapshot(repo, prs...), false, nil))
+
+	// Send PreviewFetchMsg with Force=true.
+	_, cmd := m.Update(dashboard.PreviewFetchMsg{
+		Repo:       repo.FullName,
+		Number:     1,
+		Generation: 1,
+		Force:      true,
+	})
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd from PreviewFetchMsg")
+	}
+	// Execute the cmd so LoadPreviewCmd actually runs.
+	_ = flattenCmd(cmd)
+
+	// The stub records calls; verify force was passed.
+	if len(stub.loadPreviewCalls) != 1 {
+		t.Fatalf("expected 1 preview load call, got %d", len(stub.loadPreviewCalls))
+	}
+	if !stub.loadPreviewCalls[0].force {
+		t.Fatalf("expected preview load with force=true, got force=false")
+	}
+}
+
+// TestRefreshSelectedRepoTriggersPreviewForceRefresh verifies that when the
+// user hits 'R' to refresh, the subsequent preview fetch for the selected PR
+// uses force=true.
+func TestRefreshSelectedRepoTriggersPreviewForceRefresh(t *testing.T) {
+	t.Parallel()
+
+	repo := testutil.Repo("acme/alpha")
+	prs := []domain.PullRequestSummary{pr(repo.FullName, 1, "Test PR")}
+	stub := &stubDashboardService{
+		dashboardByRepo: map[string]domain.DashboardSnapshot{
+			repo.FullName: dashboardSnapshot(repo, prs...),
+		},
+		previewByPR: map[string]domain.PRPreviewSnapshot{},
+	}
+	m := newTestModel([]domain.Repository{repo}, nil)
+	m.deps.Dashboard = stub
+
+	_, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	_, _ = m.Update(cmdsReposDiscovered([]domain.Repository{repo}))
+	_, _ = m.Update(cmdsDashboardLoaded(repo.FullName, dashboardSnapshot(repo, prs...), false, nil))
+
+	// Clear the initial pending fetch so the refresh can start a new one.
+	_, _ = m.Update(dashboard.PreviewFetchMsg{Repo: repo.FullName, Number: 1, Generation: m.preview.DebounceGeneration})
+
+	// Reset preview calls from initial load.
+	stub.loadPreviewCalls = nil
+
+	// Simulate 'R' key refresh.
+	cmd := m.refreshSelectedRepo(true)
+	if cmd == nil {
+		t.Fatal("expected refresh command")
+	}
+
+	// Execute dashboard load command (simulating async completion).
+	msgs := flattenCmd(cmd)
+	var dashboardLoaded cmds.DashboardLoaded
+	for _, msg := range msgs {
+		if loaded, ok := msg.(cmds.DashboardLoaded); ok {
+			dashboardLoaded = loaded
+			break
+		}
+	}
+	if dashboardLoaded.Repo == "" {
+		t.Fatal("expected DashboardLoaded message in refresh command")
+	}
+
+	// After dashboard loaded, syncCurrentSelection fires SelectPRMsg.
+	_, syncCmd := m.Update(dashboardLoaded)
+	if syncCmd == nil {
+		t.Fatal("expected non-nil sync cmd after DashboardLoaded")
+	}
+
+	// Execute the sync cmd to get the debounce timer, then execute the timer
+	// to get the PreviewFetchMsg, then process that message.
+	msgs = flattenCmd(syncCmd)
+	var previewFetch dashboard.PreviewFetchMsg
+	for _, msg := range msgs {
+		if fetch, ok := msg.(dashboard.PreviewFetchMsg); ok {
+			previewFetch = fetch
+			break
+		}
+	}
+	if previewFetch.Repo == "" {
+		t.Fatal("expected PreviewFetchMsg from sync cmd")
+	}
+
+	// Process the PreviewFetchMsg to trigger the actual load.
+	_, fetchCmd := m.Update(previewFetch)
+	if fetchCmd == nil {
+		t.Fatal("expected non-nil cmd from PreviewFetchMsg")
+	}
+	_ = flattenCmd(fetchCmd)
+
+	// The preview fetch should carry Force=true.
+	if len(stub.loadPreviewCalls) != 1 {
+		t.Fatalf("expected 1 preview load call after refresh, got %d", len(stub.loadPreviewCalls))
+	}
+	if !stub.loadPreviewCalls[0].force {
+		t.Fatalf("expected preview load with force=true after refresh, got force=false")
 	}
 }
 

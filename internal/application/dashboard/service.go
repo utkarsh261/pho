@@ -201,7 +201,7 @@ func (s *Service) LoadRecent(ctx context.Context, repo domain.Repository, force 
 	return out, nil
 }
 
-func (s *Service) LoadPreview(ctx context.Context, repo string, number int) (domain.PRPreviewSnapshot, error) {
+func (s *Service) LoadPreview(ctx context.Context, repo string, number int, force bool) (domain.PRPreviewSnapshot, error) {
 	if err := s.ensureReady(); err != nil {
 		return domain.PRPreviewSnapshot{}, err
 	}
@@ -209,7 +209,7 @@ func (s *Service) LoadPreview(ctx context.Context, repo string, number int) (dom
 	if err != nil {
 		return domain.PRPreviewSnapshot{}, err
 	}
-	return s.loadPreview(ctx, parsedRepo, number, false)
+	return s.loadPreview(ctx, parsedRepo, number, force)
 }
 
 func (s *Service) loadPreview(ctx context.Context, parsedRepo domain.Repository, number int, force bool) (domain.PRPreviewSnapshot, error) {
