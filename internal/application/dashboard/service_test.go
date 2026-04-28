@@ -55,6 +55,10 @@ func (f *fakeGitHubClient) SubmitReviewWithComments(_ context.Context, _, _, _, 
 func (f *fakeGitHubClient) FetchAllPRs(_ context.Context, _ domain.Repository, _ string) ([]domain.PullRequestSummary, bool, string, error) {
 	return nil, false, "", nil
 }
+func (f *fakeGitHubClient) MergePullRequest(_ context.Context, _, _, _, _ string) error { return nil }
+func (f *fakeGitHubClient) CheckMergeable(_ context.Context, _ domain.Repository, _ int) (domain.MergeableState, error) {
+	return domain.MergeableState{}, nil
+}
 
 func newTestCoordinator(t *testing.T) *cache.Coordinator {
 	t.Helper()

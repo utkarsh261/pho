@@ -221,6 +221,13 @@ type PRPreviewSnapshot struct {
 	Comments       []PreviewComment
 }
 
+// MergeableState holds fresh mergeability data for a single PR.
+type MergeableState struct {
+	Mergeable      string
+	MergeStateStatus string
+	HeadRefOid     string
+}
+
 // Snapshot envelopes
 
 type DiscoverySnapshot struct {

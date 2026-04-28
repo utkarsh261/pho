@@ -67,6 +67,10 @@ func (f *fakeGitHubClient) SubmitReviewWithComments(_ context.Context, _, _, _, 
 func (f *fakeGitHubClient) FetchAllPRs(_ context.Context, _ domain.Repository, _ string) ([]domain.PullRequestSummary, bool, string, error) {
 	return nil, false, "", nil
 }
+func (f *fakeGitHubClient) MergePullRequest(_ context.Context, _, _, _, _ string) error { return nil }
+func (f *fakeGitHubClient) CheckMergeable(_ context.Context, _ domain.Repository, _ int) (domain.MergeableState, error) {
+	return domain.MergeableState{}, nil
+}
 
 // frozenNow is the fixed time used for both service.Now and coord.Now in tests.
 // Entries seeded at this time with a 2-minute TTL are fresh; entries seeded

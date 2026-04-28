@@ -11,4 +11,6 @@ type Store interface {
 	Get(ctx context.Context, key string, dest any) (domain.CacheMeta, bool, error)
 	Put(ctx context.Context, key string, value any, meta domain.CacheMeta) error
 	Delete(ctx context.Context, key string) error
+	// DeleteByRepo removes all entries belonging to a specific host+repo.
+	DeleteByRepo(ctx context.Context, host, repo string) error
 }

@@ -34,6 +34,10 @@ func (s *countingStore) Delete(ctx context.Context, key string) error {
 	return s.inner.Delete(ctx, key)
 }
 
+func (s *countingStore) DeleteByRepo(ctx context.Context, host, repo string) error {
+	return s.inner.DeleteByRepo(ctx, host, repo)
+}
+
 func newSQLiteStore(t *testing.T) *sqlitecache.Cache {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "cache.db")

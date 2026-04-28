@@ -58,6 +58,27 @@ type AddPullRequestReviewData struct {
 	} `json:"addPullRequestReview"`
 }
 
+// MergePullRequestData is the data object returned by the mergePullRequest mutation.
+type MergePullRequestData struct {
+	MergePullRequest struct {
+		PullRequest struct {
+			ID    string `json:"id"`
+			State string `json:"state"`
+		} `json:"pullRequest"`
+	} `json:"mergePullRequest"`
+}
+
+// CheckMergeableData is the data object returned by the checkMergeable query.
+type CheckMergeableData struct {
+	Repository struct {
+		PullRequest struct {
+			Mergeable      string `json:"mergeable"`
+			MergeStateStatus string `json:"mergeStateStatus"`
+			HeadRefOid     string `json:"headRefOid"`
+		} `json:"pullRequest"`
+	} `json:"repository"`
+}
+
 // ViewerNode identifies the authenticated viewer.
 type ViewerNode struct {
 	Login string `json:"login"`
@@ -110,7 +131,7 @@ type PullRequestNode struct {
 	ReviewThreads            CountNode                   `json:"reviewThreads"`
 	ReviewDecision           *string                     `json:"reviewDecision"`
 	Mergeable                string                      `json:"mergeable,omitempty"`
-	MergeState               string                      `json:"mergeState,omitempty"`
+	MergeState               string                      `json:"mergeStateStatus,omitempty"`
 	Labels                   LabelConnection             `json:"labels"`
 	Author                   *ActorNode                  `json:"author"`
 	Assignees                AssigneeConnection          `json:"assignees"`
