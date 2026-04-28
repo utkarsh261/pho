@@ -30,6 +30,7 @@ type SelectPRMsg struct {
 	Repo    string
 	Number  int
 	Summary domain.PullRequestSummary
+	Force   bool // true when triggered by an explicit refresh (R key)
 }
 
 type ChangeTabMsg struct {
@@ -40,6 +41,7 @@ type PreviewFetchMsg struct {
 	Repo       string
 	Number     int
 	Generation int
+	Force      bool
 }
 
 type PreviewLoadedMsg struct {

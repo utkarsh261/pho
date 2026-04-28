@@ -450,3 +450,140 @@ func TestPreviewPanelFullUIRender(t *testing.T) {
 	}
 }
 
+// TestPreviewPanelClearsStalePreviewOnUpdatedSummary verifies that when the
+// same PR is re-selected with updated summary data (e.g. after a dashboard
+// refresh), the stale full-preview snapshot is cleared so buildLines() falls
+// back to the fresh derived preview from m.summary.
+func TestPreviewPanelClearsStalePreviewOnUpdatedSummary(t *testing.T) {
+	t.Parallel()
+
+	m := NewPreviewPanelModel()
+	m.SetRect(80, 20)
+
+	stalePreview := domain.PRPreviewSnapshot{
+		Repo:     "acme/alpha",
+		Number:   1,
+		Title:    "Stale title",
+		CIStatus: domain.CIStatusPending,
+	}
+	m.preview = &stalePreview
+	m.summary = &domain.PullRequestSummary{
+		Repo:     "acme/alpha",
+		Number:   1,
+		Title:    "Stale title",
+		CIStatus: domain.CIStatusPending,
+	}
+	// Pre-seed selected state so the update is treated as a re-selection.
+	m.selectedRepo = "acme/alpha"
+	m.selectedNumber = 1
+
+	// Re-select same PR with updated CI status from a fresh dashboard load.
+	updatedSummary := domain.PullRequestSummary{
+		Repo:      "acme/alpha",
+		Number:    1,
+		Title:     "Updated title",
+		CIStatus:  domain.CIStatusSuccess,
+		UpdatedAt: time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC),
+	}
+	_, _ = m.Update(SelectPRMsg{
+		Repo:    "acme/alpha",
+		Number:  1,
+		Summary: updatedSummary,
+	})
+
+	if m.preview != nil {
+		t.Fatalf("expected stale preview to be cleared on updated same-PR selection, got %#v", m.preview)
+	}
+
+	view := m.View()
+	if !strings.Contains(view, "Updated title") {
+		t.Fatalf("expected updated title from fresh summary, got:\n%s", view)
+	}
+	if strings.Contains(view, "CI: pending") {
+		t.Fatalf("expected stale CI status to be gone, got:\n%s", view)
+	}
+}
+
+// TestPreviewPanelKeepsPreviewOnUnchangedSummary verifies that when the same
+// PR is re-selected with identical summary data, the full-preview snapshot is
+// preserved to avoid unnecessary flicker.
+func TestPreviewPanelKeepsPreviewOnUnchangedSummary(t *testing.T) {
+	t.Parallel()
+
+	m := NewPreviewPanelModel()
+	m.SetRect(80, 20)
+
+	preview := domain.PRPreviewSnapshot{
+		Repo:        "acme/alpha",
+		Number:      1,
+		Title:       "Full preview title",
+		CIStatus:    domain.CIStatusSuccess,
+		BodyExcerpt: "detailed body",
+	}
+	m.preview = &preview
+	m.summary = &domain.PullRequestSummary{
+		Repo:      "acme/alpha",
+		Number:    1,
+		Title:     "Full preview title",
+		CIStatus:  domain.CIStatusSuccess,
+		UpdatedAt: time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC),
+	}
+	// Pre-seed selected state so the first Update is treated as a re-selection.
+	m.selectedRepo = "acme/alpha"
+	m.selectedNumber = 1
+
+	// Re-select same PR with identical summary.
+	_, _ = m.Update(SelectPRMsg{
+		Repo:    "acme/alpha",
+		Number:  1,
+		Summary: *m.summary,
+	})
+
+	if m.preview == nil {
+		t.Fatal("expected preview to be preserved when summary is unchanged")
+	}
+
+	// The preview was preserved, so the BodyExcerpt from m.preview should be
+	// rendered. We avoid an exact substring match because the markdown renderer
+	// may inject ANSI codes between words.
+	view := m.View()
+	if !strings.Contains(view, "detailed") || !strings.Contains(view, "body") {
+		t.Fatalf("expected preserved preview body, got:\n%s", view)
+	}
+}
+
+// TestPreviewPanelReusesPendingFetchOnSamePR verifies that when a fetch is
+// already pending for the same PR, re-selecting it does not start a second
+// debounce timer.
+func TestPreviewPanelReusesPendingFetchOnSamePR(t *testing.T) {
+	t.Parallel()
+
+	m := NewPreviewPanelModel()
+	summary := domain.PullRequestSummary{
+		Repo:   "acme/alpha",
+		Number: 1,
+		Title:  "PR",
+	}
+
+	// First selection starts a debounce timer.
+	_, cmd1 := m.Update(SelectPRMsg{
+		Repo:    "acme/alpha",
+		Number:  1,
+		Summary: summary,
+	})
+	if cmd1 == nil {
+		t.Fatal("expected first SelectPRMsg to return a debounce command")
+	}
+
+	// Second selection for same PR while PendingFetch is true must not start
+	// another timer.
+	_, cmd2 := m.Update(SelectPRMsg{
+		Repo:    "acme/alpha",
+		Number:  1,
+		Summary: summary,
+	})
+	if cmd2 != nil {
+		t.Fatalf("expected second SelectPRMsg to return nil when PendingFetch is true, got a command")
+	}
+}
+

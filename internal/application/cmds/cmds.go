@@ -21,7 +21,7 @@ type DashboardService interface {
 	LoadRepo(ctx context.Context, repo domain.Repository, force bool) (domain.DashboardSnapshot, error)
 	LoadInvolving(ctx context.Context, repo domain.Repository, viewer string, force bool) (domain.InvolvingSnapshot, error)
 	LoadRecent(ctx context.Context, repo domain.Repository, force bool) (domain.RecentSnapshot, error)
-	LoadPreview(ctx context.Context, repo string, number int) (domain.PRPreviewSnapshot, error)
+	LoadPreview(ctx context.Context, repo string, number int, force bool) (domain.PRPreviewSnapshot, error)
 	LoadAllPRsPage(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
 }
 
@@ -179,13 +179,13 @@ func LoadRecentCmd(svc DashboardService, repo domain.Repository, force bool) tea
 	}
 }
 
-func LoadPreviewCmd(svc DashboardService, repo string, number int, host string) tea.Cmd {
+func LoadPreviewCmd(svc DashboardService, repo string, number int, host string, force bool) tea.Cmd {
 	return func() tea.Msg {
 		repoArg := repo
 		if host != "" {
 			repoArg = host + "/" + repo
 		}
-		snap, err := svc.LoadPreview(context.Background(), repoArg, number)
+		snap, err := svc.LoadPreview(context.Background(), repoArg, number, force)
 		return PreviewLoaded{Repo: repo, Number: number, Preview: snap, Err: err}
 	}
 }

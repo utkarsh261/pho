@@ -342,14 +342,74 @@ func TestLoadPreviewWarmCacheBypassesTransport(t *testing.T) {
 		Now:         time.Now,
 	}
 
-	got, err := svc.LoadPreview(ctx, repo, 42)
+	got, err := svc.LoadPreview(ctx, repo, 42, false)
 	if err != nil {
 		t.Fatalf("warm preview load: %v", err)
 	}
 	if calls != 0 {
-		t.Fatalf("expected no preview transport calls, got %d", calls)
+		t.Fatalf("expected no transport calls, got %d", calls)
 	}
 	if got.Title != cached.Title {
 		t.Fatalf("expected cached preview, got %#v", got)
+	}
+}
+
+func TestLoadPreviewForceRefreshUpdatesCache(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	coord := newTestCoordinator(t)
+	repo := "acme/api"
+	parsedRepo := domain.Repository{Host: defaultPreviewHost, Owner: "acme", Name: "api", FullName: repo}
+	key := previewCacheKey(parsedRepo, 42)
+	stale := domain.PRPreviewSnapshot{
+		Repo:   repo,
+		Number: 42,
+		Title:  "stale",
+	}
+	if err := coord.Write(ctx, key, stale, dashboardMeta(key, parsedRepo, cacheKindPreview, &stale.Number, time.Now().UTC())); err != nil {
+		t.Fatalf("seed preview cache: %v", err)
+	}
+
+	calls := 0
+	fresh := domain.PRPreviewSnapshot{
+		Repo:   repo,
+		Number: 42,
+		Title:  "fresh",
+	}
+	svc := &Service{
+		Cache: coord,
+		Client: &fakeGitHubClient{
+			FetchPreviewFn: func(ctx context.Context, repo domain.Repository, number int) (domain.PRPreviewSnapshot, error) {
+				calls++
+				return fresh, nil
+			},
+		},
+		DefaultHost: defaultPreviewHost,
+		Now:         time.Now,
+	}
+
+	got, err := svc.LoadPreview(ctx, repo, 42, true)
+	if err != nil {
+		t.Fatalf("force preview refresh: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("expected 1 transport call for force=true, got %d", calls)
+	}
+	if got.Title != fresh.Title {
+		t.Fatalf("expected fresh preview title %q, got %q", fresh.Title, got.Title)
+	}
+
+	// Verify cache was updated with fresh data.
+	var fromCache domain.PRPreviewSnapshot
+	_, _, found, err := coord.StaleWhileRevalidate(ctx, key, &fromCache, nil)
+	if err != nil {
+		t.Fatalf("read refreshed cache: %v", err)
+	}
+	if !found {
+		t.Fatalf("expected refreshed cache entry")
+	}
+	if fromCache.Title != fresh.Title {
+		t.Fatalf("expected cache to contain fresh title %q, got %q", fresh.Title, fromCache.Title)
 	}
 }

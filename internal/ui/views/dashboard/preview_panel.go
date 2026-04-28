@@ -98,14 +98,30 @@ func (m *PreviewPanelModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case SelectPRMsg:
 		samePR := m.selectedRepo == msg.Repo && m.selectedNumber == msg.Number
 
+		// Detect whether the summary data has changed for the same PR (e.g. after
+		// a dashboard refresh). If so, clear the stale full-preview snapshot so
+		// buildLines() falls back to the fresh derived preview from m.summary.
+		summaryChanged := false
+		if samePR && m.summary != nil {
+			if !msg.Summary.UpdatedAt.Equal(m.summary.UpdatedAt) ||
+				msg.Summary.CIStatus != m.summary.CIStatus ||
+				msg.Summary.ReviewDecision != m.summary.ReviewDecision ||
+				msg.Summary.HeadRefOID != m.summary.HeadRefOID ||
+				msg.Summary.Title != m.summary.Title {
+				summaryChanged = true
+			}
+		}
+
 		m.selectedRepo = msg.Repo
 		m.selectedNumber = msg.Number
 		summary := msg.Summary
 		m.summary = &summary
 
-		if !samePR {
+		if !samePR || summaryChanged {
 			m.preview = nil
-			m.Scroll = 0
+			if !samePR {
+				m.Scroll = 0
+			}
 		}
 
 		m.Loading = true
@@ -117,7 +133,7 @@ func (m *PreviewPanelModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.PendingFetch = true
 		gen := m.DebounceGeneration
 		return m, tea.Batch(spinCmd, tea.Tick(m.DebounceDelay, func(time.Time) tea.Msg {
-			return PreviewFetchMsg{Repo: m.selectedRepo, Number: m.selectedNumber, Generation: gen}
+			return PreviewFetchMsg{Repo: m.selectedRepo, Number: m.selectedNumber, Generation: gen, Force: summaryChanged || msg.Force}
 		}))
 	case PreviewFetchMsg:
 		m.PendingFetch = false

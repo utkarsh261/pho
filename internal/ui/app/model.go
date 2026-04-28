@@ -615,6 +615,7 @@ func (m *Model) handleDashboardLoaded(msg cmds.DashboardLoaded) tea.Cmd {
 	m.rebuildDashboardTabs()
 	m.syncPaletteStats()
 
+	wasRefreshing := m.state.Jobs.InFlight[jobKey(msg.Repo, "dashboard")]
 	delete(m.state.Jobs.InFlight, jobKey(msg.Repo, "dashboard"))
 	m.logDebug("refresh completed", "repo", msg.Repo, "pr_count", len(msg.Snapshot.PRs), "err", msg.Err)
 	m.syncStatus()
@@ -623,7 +624,7 @@ func (m *Model) handleDashboardLoaded(msg cmds.DashboardLoaded) tea.Cmd {
 	if m.deps.Search != nil {
 		rebuild = cmds.RebuildPRIndexCmd(m.deps.Search, repo, msg.Snapshot)
 	}
-	return batch(m.syncCurrentSelection(), rebuild)
+	return batch(m.syncCurrentSelectionForce(wasRefreshing), rebuild)
 }
 
 func (m *Model) handleInvolvingLoaded(msg cmds.InvolvingLoaded) tea.Cmd {
@@ -806,7 +807,7 @@ func (m *Model) handlePreviewFetchMsg(msg dashboard.PreviewFetchMsg) tea.Cmd {
 	key := jobKey(msg.Repo, "preview")
 	m.state.Jobs.InFlight[key] = true
 	m.syncStatus()
-	return cmds.LoadPreviewCmd(m.deps.Dashboard, repo.FullName, msg.Number, repo.Host)
+	return cmds.LoadPreviewCmd(m.deps.Dashboard, repo.FullName, msg.Number, repo.Host, msg.Force)
 }
 
 func (m *Model) handlePreviewLoadedMsg(repo string, number int, preview domain.PRPreviewSnapshot, err error) tea.Cmd {
@@ -1004,6 +1005,10 @@ func (m *Model) loadRepoCmds(repo domain.Repository, force bool) []tea.Cmd {
 }
 
 func (m *Model) syncCurrentSelection() tea.Cmd {
+	return m.syncCurrentSelectionForce(false)
+}
+
+func (m *Model) syncCurrentSelectionForce(force bool) tea.Cmd {
 	current, ok := m.currentSelectedPR()
 	if !ok {
 		m.logDebug("no PR selected for preview", "active_tab", string(m.prList.Active), "my_prs_count", len(m.currentPRsForTab(domain.TabMyPRs)), "needs_review_count", len(m.currentPRsForTab(domain.TabNeedsReview)))
@@ -1011,7 +1016,7 @@ func (m *Model) syncCurrentSelection() tea.Cmd {
 		m.syncStatus()
 		return nil
 	}
-	m.logDebug("sync preview", "pr", m.prSlug(current.Repo, current.Number), "tab", string(m.prList.Active))
+	m.logDebug("sync preview", "pr", m.prSlug(current.Repo, current.Number), "tab", string(m.prList.Active), "force", force)
 	m.state.Dashboard.SelectedIndex = m.prList.Cursor
 	m.state.Dashboard.PreviewLoading = true
 	derived := derivedPreview(current)
@@ -1022,6 +1027,7 @@ func (m *Model) syncCurrentSelection() tea.Cmd {
 		Repo:    current.Repo,
 		Number:  current.Number,
 		Summary: current,
+		Force:   force,
 	})
 	if panel, ok := next.(*dashboard.PreviewPanelModel); ok {
 		m.preview = panel

@@ -205,6 +205,7 @@ func pullRequestSummarySelection(profile githubpkg.GitHubHostProfile) string {
 		"assignees(first: 10) { nodes { login } }",
 		"reviewRequests(first: 10) { nodes { requestedReviewer { __typename ... on User { login } ... on Team { slug organization { login } } } } }",
 		"latestOpinionatedReviews(first: 20) { nodes { state submittedAt author { __typename login } commit { oid } } }",
+		"reviewDecision",
 		"repository { nameWithOwner }",
 	)
 	if profile.SupportsHeadRefOID {
