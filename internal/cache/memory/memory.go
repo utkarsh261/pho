@@ -128,6 +128,18 @@ func (c *Cache[V, M]) Keys() []string {
 	return keys
 }
 
+// DeleteIf removes all entries matching the predicate under a single lock.
+func (c *Cache[V, M]) DeleteIf(fn func(key string, meta Meta[M]) bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	for key, ent := range c.entries {
+		if fn(key, ent.meta) {
+			c.removeEntry(ent)
+		}
+	}
+}
+
 func (c *Cache[V, M]) evictIfNeeded() {
 	if c.maxBytes < 0 {
 		return

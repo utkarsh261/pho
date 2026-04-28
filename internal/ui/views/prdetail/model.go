@@ -2255,12 +2255,15 @@ func (m *PRDetailModel) handleMergeKey(msg tea.KeyMsg) tea.Cmd {
 			m.resetMergeFlow()
 		}
 		return func() tea.Msg { return nil }
-	case mergeStepChecking, mergeStepExecuting:
-		// Block most keys during async operations.
+	case mergeStepChecking:
+		// The check is just a query; user can cancel and retry.
 		if msg.String() == "esc" {
-			// First esc cancels the flow (won't stop in-flight HTTP though).
 			m.resetMergeFlow()
 		}
+		return func() tea.Msg { return nil }
+	case mergeStepExecuting:
+		// Merge mutation is in flight and cannot be cancelled.
+		// User already confirmed with 'y'; commit is in progress.
 		return func() tea.Msg { return nil }
 	case mergeStepNone:
 		if msg.String() == "m" {

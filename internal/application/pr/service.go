@@ -147,7 +147,7 @@ func (s *PRService) CheckMergeable(ctx context.Context, repo domain.Repository, 
 // MergePR merges a PR using the specified method and invalidates related caches.
 func (s *PRService) MergePR(ctx context.Context, repo domain.Repository, number int, prID string, headRefOID string, method string) error {
 	s.logDebug("merge pr", "repo", repo.FullName, "number", number, "method", method)
-	if err := s.Client.MergePullRequest(ctx, s.Host, prID, headRefOID, method); err != nil {
+	if err := s.Client.MergePullRequest(ctx, repo.Host, prID, headRefOID, method); err != nil {
 		s.logWarn("merge pr failed", "repo", repo.FullName, "number", number, "err", err)
 		return err
 	}
