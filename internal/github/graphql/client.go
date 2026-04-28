@@ -143,6 +143,9 @@ func (c *Client) MergePullRequest(ctx context.Context, host, pullRequestID, expe
 		"expectedHeadOid": expectedHeadOid,
 		"mergeMethod":     mergeMethod,
 	}
+	if expectedHeadOid == "" {
+		vars["expectedHeadOid"] = nil
+	}
 	_, err := queryGraphQL[model.MergePullRequestData](c, ctx, host, func(_ githubpkg.GitHubHostProfile) string {
 		return buildMergePullRequestMutation()
 	}, vars)

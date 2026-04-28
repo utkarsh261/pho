@@ -56,10 +56,11 @@ func (s *mergePRService) CheckMergeable(ctx context.Context, repo domain.Reposit
 func newMergeModel(mergeable, mergeState string) *PRDetailModel {
 	repo := testutil.Repo("acme/api")
 	summary := domain.PullRequestSummary{
-		ID:       "pr_123",
-		Repo:     repo.FullName,
-		Number:   42,
-		Title:    "Feature",
+		ID:         "pr_123",
+		Repo:       repo.FullName,
+		Number:     42,
+		Title:      "Feature",
+		Author:     "octocat",
 		HeadRefOID: "abc123",
 	}
 	m := NewModel(summary, repo, &mergePRService{})
@@ -172,6 +173,7 @@ func TestMergeFlowNetworkError(t *testing.T) {
 
 func TestMergeFlowMergeError(t *testing.T) {
 	m := newMergeModel("MERGEABLE", "CLEAN")
+	m.mergeStep = mergeStepExecuting
 	m.Update(cmds.MergePRMsg{Repo: "acme/api", Number: 42, Method: "SQUASH", Err: errors.New("merge rejected")})
 	if m.mergeStep != mergeStepNone {
 		t.Fatalf("expected reset after merge error, got %d", m.mergeStep)
@@ -226,21 +228,12 @@ func TestHeaderShowsBlocked(t *testing.T) {
 	}
 }
 
-func flattenCmd(t *testing.T, cmd tea.Cmd) tea.Msg {
-	if cmd == nil {
-		return nil
+func TestHeaderHidesUnknownMergeable(t *testing.T) {
+	m := newMergeModel("UNKNOWN", "")
+	header := m.renderHeader()
+	if strings.Contains(header, "unknown") {
+		t.Fatalf("expected header to hide unknown mergeability, got:\n%s", header)
 	}
-	msg := cmd()
-	if batch, ok := msg.(tea.BatchMsg); ok {
-		for _, c := range batch {
-			if c == nil {
-				continue
-			}
-			m := c()
-			if m != nil {
-				return m
-			}
-		}
-	}
-	return msg
 }
+
+

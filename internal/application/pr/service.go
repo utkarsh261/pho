@@ -151,7 +151,7 @@ func (s *PRService) MergePR(ctx context.Context, repo domain.Repository, number 
 		s.logWarn("merge pr failed", "repo", repo.FullName, "number", number, "err", err)
 		return err
 	}
-	// Invalidate preview and diff caches for this PR.
+	// Invalidate preview cache for this PR so the merged state is visible.
 	previewKey := previewCacheKey(repo.Host, repoFullName(repo), number)
 	if delErr := s.Cache.Delete(ctx, previewKey); delErr != nil {
 		s.logWarn("merge pr cache delete failed", "key", previewKey, "err", delErr)

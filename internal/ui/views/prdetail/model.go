@@ -175,12 +175,11 @@ type PRDetailModel struct {
 	commentEntriesDirty  bool
 
 	// Merge flow state
-	mergeStep    mergeStep
-	mergeMethod  string
-	mergeErr     string
-	mergeRepo    domain.Repository
-	mergePRID    string
-	mergeHeadOID string
+	mergeStep   mergeStep
+	mergeMethod string
+	mergeErr    string
+	mergeRepo   domain.Repository
+	mergePRID   string
 }
 
 // mergeStep tracks the PR merge workflow state.
@@ -485,6 +484,9 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		return m, tea.Batch(spinCmd, composeCmd, cmds.MergePRCmd(m.PRService, m.mergeRepo, m.Summary.Number, m.mergePRID, msg.State.HeadRefOid, m.mergeMethod))
 
 	case cmds.MergePRMsg:
+		if m.mergeStep != mergeStepExecuting {
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
 		m.mergeStep = mergeStepNone
 		if msg.Err != nil {
 			m.mergeErr = "Merge failed: " + msg.Err.Error()
@@ -581,7 +583,7 @@ func (m *PRDetailModel) renderHeader() string {
 	var authorStr string
 	var stateStr string
 	mergeSuffix := ""
-	if m.Detail != nil && m.Detail.Mergeable != "" && m.Detail.Mergeable != "MERGEABLE" {
+	if m.Detail != nil && m.Detail.Mergeable != "" && m.Detail.Mergeable != "MERGEABLE" && m.Detail.Mergeable != "UNKNOWN" {
 		mergeSuffix = " · " + humanizeMergeState(m.Detail.MergeState)
 	}
 	if m.theme != nil {
@@ -598,7 +600,7 @@ func (m *PRDetailModel) renderHeader() string {
 		}
 		// Override color for conflicting state.
 		if m.Detail != nil && m.Detail.Mergeable == "CONFLICTING" {
-			stateStr = m.theme.ReviewChanges.Render("OPEN" + mergeSuffix)
+			stateStr = m.theme.ReviewChanges.Render(state + mergeSuffix)
 		}
 	} else {
 		authorStr = author
@@ -2262,6 +2264,9 @@ func (m *PRDetailModel) handleMergeKey(msg tea.KeyMsg) tea.Cmd {
 		return func() tea.Msg { return nil }
 	case mergeStepNone:
 		if msg.String() == "m" {
+			if m.PRService == nil {
+				return func() tea.Msg { return nil }
+			}
 			if m.Detail == nil {
 				// Still loading; silently ignore.
 				return func() tea.Msg { return nil }
@@ -2274,7 +2279,6 @@ func (m *PRDetailModel) handleMergeKey(msg tea.KeyMsg) tea.Cmd {
 			m.mergeStep = mergeStepSelectMethod
 			m.mergeRepo = m.Repo
 			m.mergePRID = m.Summary.ID
-			m.mergeHeadOID = m.Summary.HeadRefOID
 			return func() tea.Msg { return nil }
 		}
 		// Any other key while mergeErr is showing clears the error.
