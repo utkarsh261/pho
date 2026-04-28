@@ -136,6 +136,42 @@ func (c *Client) SubmitReviewWithComments(ctx context.Context, host, pullRequest
 	return err
 }
 
+// MergePullRequest merges a PR using the specified method.
+func (c *Client) MergePullRequest(ctx context.Context, host, pullRequestID, expectedHeadOid, mergeMethod string) error {
+	vars := map[string]any{
+		"pullRequestId":   pullRequestID,
+		"expectedHeadOid": expectedHeadOid,
+		"mergeMethod":     mergeMethod,
+	}
+	if expectedHeadOid == "" {
+		vars["expectedHeadOid"] = nil
+	}
+	_, err := queryGraphQL[model.MergePullRequestData](c, ctx, host, func(_ githubpkg.GitHubHostProfile) string {
+		return buildMergePullRequestMutation()
+	}, vars)
+	return err
+}
+
+// CheckMergeable fetches fresh mergeability state for a PR.
+func (c *Client) CheckMergeable(ctx context.Context, repo domain.Repository, number int) (domain.MergeableState, error) {
+	resp, err := queryGraphQL[model.CheckMergeableData](c, ctx, repo.Host, func(_ githubpkg.GitHubHostProfile) string {
+		return buildCheckMergeableQuery()
+	}, map[string]any{
+		"owner":  repoOwner(repo),
+		"name":   repoName(repo),
+		"number": number,
+	})
+	if err != nil {
+		return domain.MergeableState{}, err
+	}
+	pr := resp.Data.Repository.PullRequest
+	return domain.MergeableState{
+		Mergeable:      pr.Mergeable,
+		MergeStateStatus: pr.MergeStateStatus,
+		HeadRefOid:     pr.HeadRefOid,
+	}, nil
+}
+
 // FetchViewer resolves the current viewer login for a host.
 func (c *Client) FetchViewer(ctx context.Context, host string) (string, error) {
 	c.log.Debug("fetch viewer", "host", host)

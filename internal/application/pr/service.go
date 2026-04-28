@@ -133,6 +133,32 @@ func (s *PRService) SubmitReviewWithComments(ctx context.Context, prID, body, ev
 	return nil
 }
 
+// CheckMergeable fetches fresh mergeability state for a PR.
+func (s *PRService) CheckMergeable(ctx context.Context, repo domain.Repository, number int) (domain.MergeableState, error) {
+	s.logDebug("check mergeable", "repo", repo.FullName, "number", number)
+	state, err := s.Client.CheckMergeable(ctx, repo, number)
+	if err != nil {
+		s.logWarn("check mergeable failed", "repo", repo.FullName, "number", number, "err", err)
+		return domain.MergeableState{}, err
+	}
+	return state, nil
+}
+
+// MergePR merges a PR using the specified method and invalidates related caches.
+func (s *PRService) MergePR(ctx context.Context, repo domain.Repository, number int, prID string, headRefOID string, method string) error {
+	s.logDebug("merge pr", "repo", repo.FullName, "number", number, "method", method)
+	if err := s.Client.MergePullRequest(ctx, repo.Host, prID, headRefOID, method); err != nil {
+		s.logWarn("merge pr failed", "repo", repo.FullName, "number", number, "err", err)
+		return err
+	}
+	// Invalidate preview cache for this PR so the merged state is visible.
+	previewKey := previewCacheKey(repo.Host, repoFullName(repo), number)
+	if delErr := s.Cache.Delete(ctx, previewKey); delErr != nil {
+		s.logWarn("merge pr cache delete failed", "key", previewKey, "err", delErr)
+	}
+	return nil
+}
+
 // SaveDraftComments persists draft inline comments for a PR.
 func (s *PRService) SaveDraftComments(ctx context.Context, repo domain.Repository, number int, headSHA string, drafts []domain.DraftInlineComment) error {
 	key := draftInlineCacheKey(repo.Host, repoFullName(repo), number, headSHA)

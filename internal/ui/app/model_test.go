@@ -111,6 +111,7 @@ func (s *stubDashboardService) LoadPreview(ctx context.Context, repo string, num
 func (s *stubDashboardService) LoadAllPRsPage(_ context.Context, _ domain.Repository, _ string) ([]domain.PullRequestSummary, bool, string, error) {
 	return nil, false, "", nil
 }
+func (s *stubDashboardService) InvalidateRepo(_ context.Context, _ domain.Repository) error { return nil }
 
 type stubSearchService struct {
 	buildPRCalls   int
@@ -177,6 +178,10 @@ func (s *stubPRService) LoadDraftComments(_ context.Context, _ domain.Repository
 }
 func (s *stubPRService) DeleteDraftComments(_ context.Context, _ domain.Repository, _ int, _ string) error {
 	return nil
+}
+func (s *stubPRService) MergePR(_ context.Context, _ domain.Repository, _ int, _, _, _ string) error { return nil }
+func (s *stubPRService) CheckMergeable(_ context.Context, _ domain.Repository, _ int) (domain.MergeableState, error) {
+	return domain.MergeableState{}, nil
 }
 
 func TestColdStartThenDashboardLoadedPopulates(t *testing.T) {

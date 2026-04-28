@@ -55,6 +55,15 @@ func (s *JSONStore) Delete(_ context.Context, key string) error {
 	return nil
 }
 
+// DeleteByRepo removes all entries whose metadata matches the given host and repo.
+func (s *JSONStore) DeleteByRepo(_ context.Context, host, repo string) error {
+	s.inner.DeleteIf(func(_ string, metaWrap Meta[domain.CacheMeta]) bool {
+		meta := metaWrap.Data
+		return meta.Host == host && meta.Repo == repo
+	})
+	return nil
+}
+
 func groupForKind(kind string) Group {
 	switch kind {
 	case "preview":

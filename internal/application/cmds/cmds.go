@@ -22,6 +22,7 @@ type DashboardService interface {
 	LoadInvolving(ctx context.Context, repo domain.Repository, viewer string, force bool) (domain.InvolvingSnapshot, error)
 	LoadPreview(ctx context.Context, repo string, number int, force bool) (domain.PRPreviewSnapshot, error)
 	LoadAllPRsPage(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
+	InvalidateRepo(ctx context.Context, repo domain.Repository) error
 }
 
 type SearchService interface {
@@ -39,6 +40,8 @@ type PRService interface {
 	SaveDraftComments(ctx context.Context, repo domain.Repository, number int, headSHA string, drafts []domain.DraftInlineComment) error
 	LoadDraftComments(ctx context.Context, repo domain.Repository, number int, headSHA string) ([]domain.DraftInlineComment, error)
 	DeleteDraftComments(ctx context.Context, repo domain.Repository, number int, headSHA string) error
+	MergePR(ctx context.Context, repo domain.Repository, number int, prID string, headRefOID string, method string) error
+	CheckMergeable(ctx context.Context, repo domain.Repository, number int) (domain.MergeableState, error)
 }
 
 type PRDetailLoaded struct {
@@ -122,6 +125,22 @@ type ReviewPosted struct{}
 
 // ReviewFailed is emitted when submitting a PR review with inline comments fails.
 type ReviewFailed struct{ Err error }
+
+// MergeableChecked is emitted when the pre-merge check completes.
+type MergeableChecked struct {
+	Repo     string
+	Number   int
+	State    domain.MergeableState
+	Err      error
+}
+
+// MergePRMsg is emitted when the merge mutation completes.
+type MergePRMsg struct {
+	Repo   string
+	Number int
+	Method string
+	Err    error
+}
 
 type RefreshStarted struct {
 	Key string
@@ -273,5 +292,26 @@ func LoadDiffCmd(svc PRService, repo domain.Repository, number int, headSHA stri
 			FromCache: fromCache,
 			Err:       err,
 		}
+	}
+}
+
+func CheckMergeableCmd(svc PRService, repo domain.Repository, number int) tea.Cmd {
+	return func() tea.Msg {
+		state, err := svc.CheckMergeable(context.Background(), repo, number)
+		return MergeableChecked{
+			Repo:   repoKey(repo),
+			Number: number,
+			State:  state,
+			Err:    err,
+		}
+	}
+}
+
+func MergePRCmd(svc PRService, repo domain.Repository, number int, prID string, headRefOID string, method string) tea.Cmd {
+	return func() tea.Msg {
+		if err := svc.MergePR(context.Background(), repo, number, prID, headRefOID, method); err != nil {
+			return MergePRMsg{Repo: repoKey(repo), Number: number, Method: method, Err: err}
+		}
+		return MergePRMsg{Repo: repoKey(repo), Number: number, Method: method}
 	}
 }

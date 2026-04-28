@@ -31,6 +31,29 @@ func buildSubmitReviewMutation(event string) string {
 func buildApprovePullRequestMutation() string { return buildSubmitReviewMutation("APPROVE") }
 func buildReviewCommentMutation() string      { return buildSubmitReviewMutation("COMMENT") }
 
+func buildMergePullRequestMutation() string {
+	return `mutation MergePullRequest($pullRequestId: ID!, $expectedHeadOid: GitObjectID, $mergeMethod: PullRequestMergeMethod) {
+  mergePullRequest(input: {pullRequestId: $pullRequestId, expectedHeadOid: $expectedHeadOid, mergeMethod: $mergeMethod}) {
+    pullRequest {
+      id
+      state
+    }
+  }
+}`
+}
+
+func buildCheckMergeableQuery() string {
+	return `query CheckMergeable($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      mergeable
+      mergeStateStatus
+      headRefOid
+    }
+  }
+}`
+}
+
 func buildSubmitReviewWithCommentsMutation() string {
 	return `mutation SubmitReviewWithComments($pullRequestId: ID!, $body: String, $event: PullRequestReviewEvent, $threads: [DraftPullRequestReviewThread]) {
   addPullRequestReview(input: {pullRequestId: $pullRequestId, body: $body, event: $event, threads: $threads}) {

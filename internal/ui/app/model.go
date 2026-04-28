@@ -252,6 +252,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		return m, nil
+	case cmds.MergeableChecked, cmds.MergePRMsg:
+		if m.prDetail != nil {
+			next, cmd := m.prDetail.Update(msg)
+			m.prDetail = next
+			m.syncStatus()
+			if mergeMsg, ok := msg.(cmds.MergePRMsg); ok && mergeMsg.Err == nil {
+				if repo, ok := m.findRepoByFullName(mergeMsg.Repo); ok && m.deps.Dashboard != nil {
+					_ = m.deps.Dashboard.InvalidateRepo(context.Background(), repo)
+				}
+			}
+			return m, cmd
+		}
+		return m, nil
 	default:
 		// Always route unknown messages through applyMessage so dashboard state
 		// (preview debounce, background loads) continues updating regardless of

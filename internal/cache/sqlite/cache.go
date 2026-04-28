@@ -248,6 +248,15 @@ func (c *Cache) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
+// DeleteByRepo removes all cache entries for a given host and repo.
+func (c *Cache) DeleteByRepo(ctx context.Context, host, repo string) error {
+	_, err := c.db.ExecContext(ctx, `DELETE FROM cache_entries WHERE host = ? AND repo = ?`, host, repo)
+	if err != nil {
+		return fmt.Errorf("sqlite cache delete by repo %s/%s: %w", host, repo, err)
+	}
+	return nil
+}
+
 // LoadViewedHistory returns the persisted viewed PR records for a repository,
 // ordered by most recently viewed first.
 func (c *Cache) LoadViewedHistory(ctx context.Context, repo domain.Repository) ([]domain.ViewedPRRecord, error) {

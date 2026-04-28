@@ -20,4 +20,8 @@ type GitHubClient interface {
 	// FetchAllPRs fetches a page of all PRs (any state) for the jump index.
 	// Returns summaries, hasNextPage, endCursor, error.
 	FetchAllPRs(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
+	// MergePullRequest merges a PR using the specified method.
+	MergePullRequest(ctx context.Context, host, pullRequestID, expectedHeadOid, mergeMethod string) error
+	// CheckMergeable fetches fresh mergeability state for a PR.
+	CheckMergeable(ctx context.Context, repo domain.Repository, number int) (domain.MergeableState, error)
 }

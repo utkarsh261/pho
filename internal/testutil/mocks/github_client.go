@@ -23,6 +23,8 @@ type MockGitHubClient struct {
 	ApprovePullRequestFn   func(ctx context.Context, host, pullRequestID, body string) error
 	SubmitReviewWithCommentsFn func(ctx context.Context, host, pullRequestID, body, event string, comments []domain.DraftInlineComment) error
 	FetchAllPRsFn          func(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
+	MergePullRequestFn     func(ctx context.Context, host, pullRequestID, expectedHeadOid, mergeMethod string) error
+	CheckMergeableFn       func(ctx context.Context, repo domain.Repository, number int) (domain.MergeableState, error)
 
 	// Call counters — incremented on each call.
 	FetchDashboardPRsCalls  int
@@ -30,6 +32,8 @@ type MockGitHubClient struct {
 	PostCommentCalls        int
 	ApprovePullRequestCalls int
 	SubmitReviewWithCommentsCalls int
+	MergePullRequestCalls   int
+	CheckMergeableCalls     int
 }
 
 func (m *MockGitHubClient) FetchViewer(ctx context.Context, host string) (string, error) {
@@ -98,4 +102,20 @@ func (m *MockGitHubClient) FetchAllPRs(ctx context.Context, repo domain.Reposito
 		return nil, false, "", nil
 	}
 	return m.FetchAllPRsFn(ctx, repo, cursor)
+}
+
+func (m *MockGitHubClient) MergePullRequest(ctx context.Context, host, pullRequestID, expectedHeadOid, mergeMethod string) error {
+	if m.MergePullRequestFn == nil {
+		panic("MockGitHubClient.MergePullRequest called but MergePullRequestFn is nil")
+	}
+	m.MergePullRequestCalls++
+	return m.MergePullRequestFn(ctx, host, pullRequestID, expectedHeadOid, mergeMethod)
+}
+
+func (m *MockGitHubClient) CheckMergeable(ctx context.Context, repo domain.Repository, number int) (domain.MergeableState, error) {
+	if m.CheckMergeableFn == nil {
+		panic("MockGitHubClient.CheckMergeable called but CheckMergeableFn is nil")
+	}
+	m.CheckMergeableCalls++
+	return m.CheckMergeableFn(ctx, repo, number)
 }

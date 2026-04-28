@@ -67,6 +67,10 @@ func (f *fakeGitHubClient) SubmitReviewWithComments(_ context.Context, _, _, _, 
 func (f *fakeGitHubClient) FetchAllPRs(_ context.Context, _ domain.Repository, _ string) ([]domain.PullRequestSummary, bool, string, error) {
 	return nil, false, "", nil
 }
+func (f *fakeGitHubClient) MergePullRequest(_ context.Context, _, _, _, _ string) error { return nil }
+func (f *fakeGitHubClient) CheckMergeable(_ context.Context, _ domain.Repository, _ int) (domain.MergeableState, error) {
+	return domain.MergeableState{}, nil
+}
 
 // frozenNow is the fixed time used for both service.Now and coord.Now in tests.
 // Entries seeded at this time with a 2-minute TTL are fresh; entries seeded
@@ -665,6 +669,50 @@ func TestLoadDetailSharedCacheKey(t *testing.T) {
 	}
 	if detail.Title != "Hovered PR" {
 		t.Errorf("expected title=%q, got %q", "Hovered PR", detail.Title)
+	}
+}
+
+func TestMergePRInvalidatesPreviewCache(t *testing.T) {
+	t.Parallel()
+
+	repo := testRepo()
+	coord := newTestCoordinator(t)
+
+	// Seed the preview cache.
+	seeded := domain.PRPreviewSnapshot{
+		Repo:   repo.FullName,
+		Number: 42,
+		Title:  "Before Merge",
+	}
+	key := previewCacheKey(repo.Host, repo.FullName, 42)
+	meta := previewMeta(key, repo, 42, frozenNow)
+	if err := coord.Write(context.Background(), key, seeded, meta); err != nil {
+		t.Fatalf("cache write: %v", err)
+	}
+
+	// Verify cache hit before merge.
+	var cached domain.PRPreviewSnapshot
+	_, found, _ := coord.L2.Get(context.Background(), key, &cached)
+	if !found {
+		t.Fatal("expected preview cache to exist before merge")
+	}
+
+	client := &fakeGitHubClient{}
+	svc := &PRService{
+		Cache:  coord,
+		Client: client,
+		Host:   repo.Host,
+		Now:    func() time.Time { return frozenNow },
+	}
+
+	if err := svc.MergePR(context.Background(), repo, 42, "pr_123", "abc123", "SQUASH"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify cache miss after merge.
+	_, found, _ = coord.L2.Get(context.Background(), key, &cached)
+	if found {
+		t.Fatal("expected preview cache to be deleted after merge")
 	}
 }
 

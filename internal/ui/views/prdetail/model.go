@@ -173,7 +173,25 @@ type PRDetailModel struct {
 	// Comment entries cache (invalidated when Detail or drafts change)
 	cachedCommentEntries []commentEntry
 	commentEntriesDirty  bool
+
+	// Merge flow state
+	mergeStep   mergeStep
+	mergeMethod string
+	mergeErr    string
+	mergeRepo   domain.Repository
+	mergePRID   string
 }
+
+// mergeStep tracks the PR merge workflow state.
+type mergeStep int
+
+const (
+	mergeStepNone mergeStep = iota
+	mergeStepSelectMethod
+	mergeStepConfirm
+	mergeStepChecking
+	mergeStepExecuting
+)
 
 // hunkLineKey identifies a specific line within a hunk for draft highlighting.
 type hunkLineKey struct{ fileIdx, hunkIdx, lineIdx int }
@@ -448,6 +466,43 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		m.compose.errMsg = msg.Err.Error()
 		return m, tea.Batch(spinCmd, composeCmd)
 
+	case cmds.MergeableChecked:
+		if m.mergeStep != mergeStepChecking {
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		if msg.Err != nil {
+			m.mergeStep = mergeStepNone
+			m.mergeErr = "Check failed: " + msg.Err.Error()
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		if msg.State.Mergeable != "MERGEABLE" {
+			m.mergeStep = mergeStepNone
+			m.mergeErr = "PR is no longer mergeable (" + humanizeMergeState(msg.State.MergeStateStatus) + ")"
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		m.mergeStep = mergeStepExecuting
+		return m, tea.Batch(spinCmd, composeCmd, cmds.MergePRCmd(m.PRService, m.mergeRepo, m.Summary.Number, m.mergePRID, msg.State.HeadRefOid, m.mergeMethod))
+
+	case cmds.MergePRMsg:
+		if m.mergeStep != mergeStepExecuting {
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		m.mergeStep = mergeStepNone
+		if msg.Err != nil {
+			m.mergeErr = "Merge failed: " + msg.Err.Error()
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		m.mergeErr = ""
+		if m.Detail != nil {
+			m.Detail.State = "MERGED"
+		}
+		// Refresh detail to show merged state.
+		var refreshCmd tea.Cmd
+		if m.PRService != nil {
+			refreshCmd = cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true)
+		}
+		return m, tea.Batch(spinCmd, composeCmd, refreshCmd)
+
 	case composeSuccessDismissMsg:
 		m.postedComment = true
 		m.compose.Close()
@@ -527,21 +582,29 @@ func (m *PRDetailModel) renderHeader() string {
 
 	var authorStr string
 	var stateStr string
+	mergeSuffix := ""
+	if m.Detail != nil && m.Detail.Mergeable != "" && m.Detail.Mergeable != "MERGEABLE" && m.Detail.Mergeable != "UNKNOWN" {
+		mergeSuffix = " · " + humanizeMergeState(m.Detail.MergeState)
+	}
 	if m.theme != nil {
 		authorStr = m.theme.PrimaryTxt.Render(author)
 		switch state {
 		case "OPEN":
-			stateStr = lipgloss.NewStyle().Foreground(m.theme.Secondary).Render("OPEN")
+			stateStr = lipgloss.NewStyle().Foreground(m.theme.Secondary).Render("OPEN" + mergeSuffix)
 		case "MERGED":
-			stateStr = m.theme.PrimaryTxt.Render("MERGED")
+			stateStr = m.theme.PrimaryTxt.Render("MERGED" + mergeSuffix)
 		case "CLOSED":
-			stateStr = m.theme.ReviewChanges.Render("CLOSED")
+			stateStr = m.theme.ReviewChanges.Render("CLOSED" + mergeSuffix)
 		default:
-			stateStr = m.theme.ReviewRequired.Render(state)
+			stateStr = m.theme.ReviewRequired.Render(state + mergeSuffix)
+		}
+		// Override color for conflicting state.
+		if m.Detail != nil && m.Detail.Mergeable == "CONFLICTING" {
+			stateStr = m.theme.ReviewChanges.Render(state + mergeSuffix)
 		}
 	} else {
 		authorStr = author
-		stateStr = state
+		stateStr = state + mergeSuffix
 	}
 
 	metaStr := authorStr + " " + stateStr
@@ -1184,6 +1247,11 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		}
 		m.LastKey = ""
 		return m, nil
+	}
+
+	// Merge flow state machine.
+	if cmd := m.handleMergeKey(msg); cmd != nil {
+		return m, cmd
 	}
 
 	switch msg.String() {
@@ -2139,11 +2207,118 @@ func (m *PRDetailModel) StatusHint() string {
 	if m.confirmDiscardAll {
 		return fmt.Sprintf("Discard all %d drafts? (y/n)", len(m.drafts))
 	}
-	hint := "Tab: Switch Panel | Space: Visual | 1/2/3: Switch tab | R: Refresh | v: Review | C: Comment | a: Approve | /: Search in Diff"
+	switch m.mergeStep {
+	case mergeStepSelectMethod:
+		return fmt.Sprintf("Merge #%d: [s]quash [r]ebase [m]erge [esc]cancel", m.Summary.Number)
+	case mergeStepConfirm:
+		return fmt.Sprintf("%s and merge #%d? (y/n)", strings.ToLower(m.mergeMethod), m.Summary.Number)
+	case mergeStepChecking:
+		return "Checking mergeability..."
+	case mergeStepExecuting:
+		return "Merging..."
+	}
+	if m.mergeErr != "" {
+		return m.mergeErr
+	}
+	hint := "Tab: Switch Panel | Space: Visual | 1/2/3: Switch tab | R: Refresh | v: Review | C: Comment | a: Approve | m: Merge | /: Search in Diff"
 	if len(m.drafts) > 0 {
 		hint += " | D: Discard all drafts"
 	}
 	return hint
+}
+
+// handleMergeKey routes keys when the merge flow is active.
+// Returns a non-nil tea.Cmd if a merge action was triggered.
+func (m *PRDetailModel) handleMergeKey(msg tea.KeyMsg) tea.Cmd {
+	switch m.mergeStep {
+	case mergeStepSelectMethod:
+		switch msg.String() {
+		case "s":
+			m.mergeMethod = "SQUASH"
+			m.mergeStep = mergeStepConfirm
+		case "r":
+			m.mergeMethod = "REBASE"
+			m.mergeStep = mergeStepConfirm
+		case "m":
+			m.mergeMethod = "MERGE"
+			m.mergeStep = mergeStepConfirm
+		case "esc", "n":
+			m.resetMergeFlow()
+		}
+		return func() tea.Msg { return nil }
+	case mergeStepConfirm:
+		switch msg.String() {
+		case "y":
+			m.mergeStep = mergeStepChecking
+			return cmds.CheckMergeableCmd(m.PRService, m.mergeRepo, m.Summary.Number)
+		case "n", "esc":
+			m.resetMergeFlow()
+		}
+		return func() tea.Msg { return nil }
+	case mergeStepChecking:
+		// The check is just a query; user can cancel and retry.
+		if msg.String() == "esc" {
+			m.resetMergeFlow()
+		}
+		return func() tea.Msg { return nil }
+	case mergeStepExecuting:
+		// Merge mutation is in flight and cannot be cancelled.
+		// User already confirmed with 'y'; commit is in progress.
+		return func() tea.Msg { return nil }
+	case mergeStepNone:
+		if msg.String() == "m" {
+			if m.PRService == nil {
+				return func() tea.Msg { return nil }
+			}
+			if m.Detail == nil {
+				// Still loading; silently ignore.
+				return func() tea.Msg { return nil }
+			}
+			if m.Detail.Mergeable != "MERGEABLE" {
+				m.mergeErr = "PR is not mergeable (" + humanizeMergeState(m.Detail.MergeState) + ")"
+				return func() tea.Msg { return nil }
+			}
+			m.mergeErr = ""
+			m.mergeStep = mergeStepSelectMethod
+			m.mergeRepo = m.Repo
+			m.mergePRID = m.Summary.ID
+			return func() tea.Msg { return nil }
+		}
+		// Any other key while mergeErr is showing clears the error.
+		if m.mergeErr != "" {
+			m.mergeErr = ""
+		}
+	}
+	return nil
+}
+
+func (m *PRDetailModel) resetMergeFlow() {
+	m.mergeStep = mergeStepNone
+	m.mergeMethod = ""
+	m.mergeErr = ""
+}
+
+func humanizeMergeState(state string) string {
+	switch strings.ToUpper(state) {
+	case "CONFLICTING":
+		return "conflicting"
+	case "BLOCKED":
+		return "blocked"
+	case "BEHIND":
+		return "behind"
+	case "HAS_HOOKS":
+		return "has hooks"
+	case "UNSTABLE":
+		return "unstable"
+	case "DIRTY":
+		return "dirty"
+	case "CLEAN":
+		return "clean"
+	case "":
+		return "unknown"
+	default:
+		return strings.ToLower(state)
+	}
 }
 
 func (m *PRDetailModel) emitBackToDashboard() tea.Cmd {

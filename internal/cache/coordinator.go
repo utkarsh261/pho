@@ -105,6 +105,18 @@ func (c *Coordinator) Delete(ctx context.Context, key string) error {
 	return errors.Join(errs...)
 }
 
+// DeleteByRepo removes all entries for a host+repo from both tiers.
+func (c *Coordinator) DeleteByRepo(ctx context.Context, host, repo string) error {
+	var errs []error
+	if err := c.L1.DeleteByRepo(ctx, host, repo); err != nil {
+		errs = append(errs, fmt.Errorf("l1 delete by repo %s/%s: %w", host, repo, err))
+	}
+	if err := c.L2.DeleteByRepo(ctx, host, repo); err != nil {
+		errs = append(errs, fmt.Errorf("l2 delete by repo %s/%s: %w", host, repo, err))
+	}
+	return errors.Join(errs...)
+}
+
 func (c *Coordinator) freshness(meta domain.CacheMeta) domain.Freshness {
 	now := c.Now()
 	if meta.ExpiresAt.IsZero() || now.After(meta.ExpiresAt) {

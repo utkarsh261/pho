@@ -443,3 +443,7 @@ func (s *prServiceStub) LoadDraftComments(_ context.Context, _ domain.Repository
 func (s *prServiceStub) DeleteDraftComments(_ context.Context, _ domain.Repository, _ int, _ string) error {
 	return nil
 }
+func (s *prServiceStub) MergePR(_ context.Context, _ domain.Repository, _ int, _, _, _ string) error { return nil }
+func (s *prServiceStub) CheckMergeable(_ context.Context, _ domain.Repository, _ int) (domain.MergeableState, error) {
+	return domain.MergeableState{}, nil
+}

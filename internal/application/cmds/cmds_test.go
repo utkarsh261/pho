@@ -414,6 +414,7 @@ func (s *dashboardService) LoadAllPRsPage(ctx context.Context, repo domain.Repos
 	}
 	return nil, false, "", nil
 }
+func (s *dashboardService) InvalidateRepo(_ context.Context, _ domain.Repository) error { return nil }
 
 type searchService struct {
 	buildPRIndexFn   func(domain.Repository, domain.DashboardSnapshot) error
@@ -465,6 +466,10 @@ func (s *prService) LoadDraftComments(_ context.Context, _ domain.Repository, _ 
 }
 func (s *prService) DeleteDraftComments(_ context.Context, _ domain.Repository, _ int, _ string) error {
 	return nil
+}
+func (s *prService) MergePR(_ context.Context, _ domain.Repository, _ int, _, _, _ string) error { return nil }
+func (s *prService) CheckMergeable(_ context.Context, _ domain.Repository, _ int) (domain.MergeableState, error) {
+	return domain.MergeableState{}, nil
 }
 
 func splitRepo(full string) (string, string, bool) {

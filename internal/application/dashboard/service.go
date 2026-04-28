@@ -212,6 +212,15 @@ func (s *Service) LoadAllPRsPage(ctx context.Context, repo domain.Repository, cu
 	return s.Client.FetchAllPRs(ctx, normalizeRepository(repo), cursor)
 }
 
+// InvalidateRepo clears all cached dashboard and preview data for a repository.
+func (s *Service) InvalidateRepo(ctx context.Context, repo domain.Repository) error {
+	if err := s.ensureReady(); err != nil {
+		return err
+	}
+	repo = normalizeRepository(repo)
+	return s.Cache.DeleteByRepo(ctx, repo.Host, repoIdentity(repo))
+}
+
 func (s *Service) resolvePreviewRepo(raw string) (domain.Repository, error) {
 	value := strings.TrimSpace(raw)
 	if value == "" {
