@@ -185,25 +185,6 @@ func (c *Client) FetchInvolvingPRs(ctx context.Context, repo domain.Repository, 
 	return summaries, total, truncated, nil
 }
 
-// FetchRecentActivity loads recent activity rows for the repository.
-func (c *Client) FetchRecentActivity(ctx context.Context, repo domain.Repository) ([]domain.ActivityItem, error) {
-	c.log.Debug("fetch recent", "repo", repo.FullName, "host", repo.Host)
-	resp, err := queryGraphQL[model.RecentData](c, ctx, repo.Host, func(profile githubpkg.GitHubHostProfile) string {
-		return buildRecentActivityQuery()
-	}, map[string]any{
-		"owner": repoOwner(repo),
-		"name":  repoName(repo),
-	})
-	if err != nil {
-		return nil, err
-	}
-	items, err := normalizeRecentResponse(repo, resp.Data)
-	if err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 // FetchAllPRs loads one page of all PRs (any state) for the jump index.
 func (c *Client) FetchAllPRs(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error) {
 	c.log.Debug("fetch all prs", "repo", repo.FullName, "host", repo.Host, "cursor", cursor)

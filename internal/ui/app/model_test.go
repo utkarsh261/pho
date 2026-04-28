@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -51,11 +52,6 @@ type loadInvolvingCall struct {
 	force  bool
 }
 
-type loadRecentCall struct {
-	repo  domain.Repository
-	force bool
-}
-
 type loadPreviewCall struct {
 	repo   string
 	number int
@@ -68,8 +64,26 @@ type stubDashboardService struct {
 
 	loadRepoCalls      []loadRepoCall
 	loadInvolvingCalls []loadInvolvingCall
-	loadRecentCalls    []loadRecentCall
 	loadPreviewCalls   []loadPreviewCall
+}
+
+type stubViewedHistoryStore struct {
+	data      map[string][]domain.ViewedPRRecord
+	loadCalls []domain.Repository
+	saveCalls []domain.Repository
+}
+
+func (s *stubViewedHistoryStore) LoadViewedHistory(ctx context.Context, repo domain.Repository) ([]domain.ViewedPRRecord, error) {
+	s.loadCalls = append(s.loadCalls, repo)
+	key := repo.Host + "/" + repo.FullName
+	return append([]domain.ViewedPRRecord(nil), s.data[key]...), nil
+}
+
+func (s *stubViewedHistoryStore) SaveViewedHistory(ctx context.Context, repo domain.Repository, records []domain.ViewedPRRecord) error {
+	s.saveCalls = append(s.saveCalls, repo)
+	key := repo.Host + "/" + repo.FullName
+	s.data[key] = append([]domain.ViewedPRRecord(nil), records...)
+	return nil
 }
 
 func (s *stubDashboardService) LoadRepo(ctx context.Context, repo domain.Repository, force bool) (domain.DashboardSnapshot, error) {
@@ -83,11 +97,6 @@ func (s *stubDashboardService) LoadRepo(ctx context.Context, repo domain.Reposit
 func (s *stubDashboardService) LoadInvolving(ctx context.Context, repo domain.Repository, viewer string, force bool) (domain.InvolvingSnapshot, error) {
 	s.loadInvolvingCalls = append(s.loadInvolvingCalls, loadInvolvingCall{repo: repo, viewer: viewer, force: force})
 	return domain.InvolvingSnapshot{Repo: repo, FetchedAt: fixedNow()}, nil
-}
-
-func (s *stubDashboardService) LoadRecent(ctx context.Context, repo domain.Repository, force bool) (domain.RecentSnapshot, error) {
-	s.loadRecentCalls = append(s.loadRecentCalls, loadRecentCall{repo: repo, force: force})
-	return domain.RecentSnapshot{Repo: repo, FetchedAt: fixedNow()}, nil
 }
 
 func (s *stubDashboardService) LoadPreview(ctx context.Context, repo string, number int, force bool) (domain.PRPreviewSnapshot, error) {
@@ -1517,6 +1526,188 @@ func TestRefreshSelectedRepoTriggersPreviewForceRefresh(t *testing.T) {
 	}
 	if !stub.loadPreviewCalls[0].force {
 		t.Fatalf("expected preview load with force=true after refresh, got force=false")
+	}
+}
+
+// TestOpenPRDetailRecordsView verifies that opening a PR detail records the
+// PR in RecentlyViewed history.
+func TestOpenPRDetailRecordsView(t *testing.T) {
+	repo := testutil.Repo("myorg/myrepo")
+	m := newTestModel([]domain.Repository{repo}, map[string]domain.DashboardSnapshot{
+		repo.FullName: testutil.DashboardSnap(repo, pr(repo.FullName, 1, "feat/one")),
+	})
+	m.state.Repos.SelectedRepo = &repo
+	m.state.Session.ViewerByHost["github.com"] = "octocat"
+
+	prs := []domain.PullRequestSummary{pr(repo.FullName, 1, "feat/one")}
+	m.state.Dashboard.PRsByTab[domain.TabMyPRs] = prs
+	m.prList.SetTabSnapshot(domain.TabMyPRs, prs, 1, false)
+	m.prList.SetActiveTab(domain.TabMyPRs)
+
+	m.openPRDetail()
+
+	if len(m.state.Dashboard.RecentlyViewed) != 1 {
+		t.Fatalf("expected 1 viewed record, got %d", len(m.state.Dashboard.RecentlyViewed))
+	}
+	if m.state.Dashboard.RecentlyViewed[0].Number != 1 {
+		t.Fatalf("expected viewed PR #1, got #%d", m.state.Dashboard.RecentlyViewed[0].Number)
+	}
+}
+
+// TestRecentTabPopulatedFromViewedHistory verifies that rebuildDashboardTabs
+// populates the Recent tab from RecentlyViewed history.
+func TestRecentTabPopulatedFromViewedHistory(t *testing.T) {
+	repo := testutil.Repo("myorg/myrepo")
+	m := newTestModel([]domain.Repository{repo}, map[string]domain.DashboardSnapshot{
+		repo.FullName: testutil.DashboardSnap(repo, pr(repo.FullName, 1, "feat/one")),
+	})
+	m.state.Repos.SelectedRepo = &repo
+	m.state.Session.ViewerByHost["github.com"] = "octocat"
+
+	// Seed viewed history with two PRs.
+	m.state.Dashboard.RecentlyViewed = []domain.ViewedPRRecord{
+		{Repo: repo.FullName, Number: 2, Summary: pr(repo.FullName, 2, "feat/two"), LastViewedAt: fixedNow()},
+		{Repo: repo.FullName, Number: 1, Summary: pr(repo.FullName, 1, "feat/one"), LastViewedAt: fixedNow().Add(-time.Hour)},
+	}
+
+	m.currentDashboard = m.deps.Dashboard.(*stubDashboardService).dashboardByRepo[repo.FullName]
+	m.rebuildDashboardTabs()
+
+	recent := m.state.Dashboard.PRsByTab[domain.TabRecent]
+	if len(recent) != 2 {
+		t.Fatalf("expected 2 recent PRs, got %d", len(recent))
+	}
+	if recent[0].Number != 2 {
+		t.Fatalf("expected most recently viewed PR #2 first, got #%d", recent[0].Number)
+	}
+	if recent[1].Number != 1 {
+		t.Fatalf("expected PR #1 second, got #%d", recent[1].Number)
+	}
+}
+
+// TestRecentTabDedupesAndTrimsTo50 verifies that viewing the same PR again
+// moves it to the front and that history is trimmed to 50 per repo.
+func TestRecentTabDedupesAndTrimsTo50(t *testing.T) {
+	repo := testutil.Repo("myorg/myrepo")
+	m := newTestModel([]domain.Repository{repo}, nil)
+	m.state.Repos.SelectedRepo = &repo
+
+	// View PR #1 twice.
+	summary1 := pr(repo.FullName, 1, "feat/one")
+	m.recordPRViewed(summary1, repo, fixedNow().Add(-time.Hour))
+	m.recordPRViewed(summary1, repo, fixedNow())
+
+	if len(m.state.Dashboard.RecentlyViewed) != 1 {
+		t.Fatalf("expected 1 unique viewed record after dedupe, got %d", len(m.state.Dashboard.RecentlyViewed))
+	}
+	if !m.state.Dashboard.RecentlyViewed[0].LastViewedAt.Equal(fixedNow()) {
+		t.Fatalf("expected LastViewedAt updated to latest time")
+	}
+
+	// Add 51 distinct PRs to test trimming.
+	for i := 2; i <= 52; i++ {
+		m.recordPRViewed(pr(repo.FullName, i, fmt.Sprintf("feat/%d", i)), repo, fixedNow())
+	}
+	repoCount := 0
+	for _, r := range m.state.Dashboard.RecentlyViewed {
+		if r.Repo == repo.FullName {
+			repoCount++
+		}
+	}
+	if repoCount != 50 {
+		t.Fatalf("expected 50 recent entries for repo, got %d", repoCount)
+	}
+}
+
+// TestRecentTabShowsClosedPRs verifies that closed/merged PRs remain in the
+// Recent tab even after they drop off the open-PR dashboard query.
+func TestRecentTabShowsClosedPRs(t *testing.T) {
+	repo := testutil.Repo("myorg/myrepo")
+	m := newTestModel([]domain.Repository{repo}, map[string]domain.DashboardSnapshot{
+		repo.FullName: testutil.DashboardSnap(repo),
+	})
+	m.state.Repos.SelectedRepo = &repo
+	m.state.Session.ViewerByHost["github.com"] = "octocat"
+
+	closedPR := pr(repo.FullName, 5, "feat/old")
+	closedPR.State = domain.PRStateClosed
+	m.state.Dashboard.RecentlyViewed = []domain.ViewedPRRecord{
+		{Repo: repo.FullName, Number: 5, Summary: closedPR, LastViewedAt: fixedNow()},
+	}
+
+	m.currentDashboard = m.deps.Dashboard.(*stubDashboardService).dashboardByRepo[repo.FullName]
+	m.rebuildDashboardTabs()
+
+	recent := m.state.Dashboard.PRsByTab[domain.TabRecent]
+	if len(recent) != 1 {
+		t.Fatalf("expected 1 recent PR (closed), got %d", len(recent))
+	}
+	if recent[0].State != domain.PRStateClosed {
+		t.Fatalf("expected closed PR in recent tab, got state=%s", recent[0].State)
+	}
+}
+
+// TestSelectRepoLoadsViewedHistory verifies that selecting a repo loads the
+// persisted viewed history from the ViewedHistory store.
+func TestSelectRepoLoadsViewedHistory(t *testing.T) {
+	repo := testutil.Repo("myorg/myrepo")
+	viewedStore := &stubViewedHistoryStore{
+		data: map[string][]domain.ViewedPRRecord{
+			repo.Host + "/" + repo.FullName: {
+				{Repo: repo.FullName, Number: 3, Summary: pr(repo.FullName, 3, "feat/three"), LastViewedAt: fixedNow()},
+			},
+		},
+	}
+	m := newTestModel([]domain.Repository{repo}, map[string]domain.DashboardSnapshot{
+		repo.FullName: testutil.DashboardSnap(repo, pr(repo.FullName, 1, "feat/one")),
+	})
+	m.deps.ViewedHistory = viewedStore
+
+	// Discover repos first so repoPanel.Repos is populated.
+	_, _ = m.Update(cmdsReposDiscovered([]domain.Repository{repo}))
+
+	// Select the repo — this should trigger a load of viewed history.
+	_, _ = m.Update(dashboard.SelectRepoMsg{Index: 0, Repo: repo})
+
+	if len(viewedStore.loadCalls) != 1 {
+		t.Fatalf("expected 1 load call, got %d", len(viewedStore.loadCalls))
+	}
+	if len(m.state.Dashboard.RecentlyViewed) != 1 {
+		t.Fatalf("expected 1 loaded viewed record, got %d", len(m.state.Dashboard.RecentlyViewed))
+	}
+	if m.state.Dashboard.RecentlyViewed[0].Number != 3 {
+		t.Fatalf("expected loaded PR #3, got #%d", m.state.Dashboard.RecentlyViewed[0].Number)
+	}
+}
+
+// TestOpenPRDetailSavesViewedHistory verifies that opening a PR detail persists
+// the viewed record to the ViewedHistory store.
+func TestOpenPRDetailSavesViewedHistory(t *testing.T) {
+	repo := testutil.Repo("myorg/myrepo")
+	viewedStore := &stubViewedHistoryStore{data: map[string][]domain.ViewedPRRecord{}}
+	m := newTestModel([]domain.Repository{repo}, map[string]domain.DashboardSnapshot{
+		repo.FullName: testutil.DashboardSnap(repo, pr(repo.FullName, 1, "feat/one")),
+	})
+	m.deps.ViewedHistory = viewedStore
+	m.state.Repos.SelectedRepo = &repo
+	m.state.Session.ViewerByHost["github.com"] = "octocat"
+
+	prs := []domain.PullRequestSummary{pr(repo.FullName, 1, "feat/one")}
+	m.state.Dashboard.PRsByTab[domain.TabMyPRs] = prs
+	m.prList.SetTabSnapshot(domain.TabMyPRs, prs, 1, false)
+	m.prList.SetActiveTab(domain.TabMyPRs)
+
+	m.openPRDetail()
+
+	if len(viewedStore.saveCalls) != 1 {
+		t.Fatalf("expected 1 save call, got %d", len(viewedStore.saveCalls))
+	}
+	key := repo.Host + "/" + repo.FullName
+	if len(viewedStore.data[key]) != 1 {
+		t.Fatalf("expected 1 saved record, got %d", len(viewedStore.data[key]))
+	}
+	if viewedStore.data[key][0].Number != 1 {
+		t.Fatalf("expected saved PR #1, got #%d", viewedStore.data[key][0].Number)
 	}
 }
 

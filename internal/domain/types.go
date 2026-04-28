@@ -3,7 +3,10 @@
 // layers. No GitHub transport details belong here.
 package domain
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // Enums
 
@@ -218,17 +221,6 @@ type PRPreviewSnapshot struct {
 	Comments       []PreviewComment
 }
 
-type ActivityItem struct {
-	ID          string
-	Repo        string
-	PRNumber    int
-	Kind        ActivityKind
-	Author      string
-	BodySnippet string
-	CommitOID   string
-	OccurredAt  time.Time
-}
-
 // Snapshot envelopes
 
 type DiscoverySnapshot struct {
@@ -253,10 +245,11 @@ type InvolvingSnapshot struct {
 	FetchedAt  time.Time
 }
 
-type RecentSnapshot struct {
-	Repo      Repository
-	Items     []ActivityItem
-	FetchedAt time.Time
+type ViewedPRRecord struct {
+	Repo         string
+	Number       int
+	Summary      PullRequestSummary
+	LastViewedAt time.Time
 }
 
 type PreviewSnapshot struct {
@@ -305,7 +298,7 @@ type RepoState struct {
 type DashboardState struct {
 	ActiveTab      DashboardTab
 	PRsByTab       map[DashboardTab][]PullRequestSummary
-	RecentItems    []ActivityItem
+	RecentlyViewed []ViewedPRRecord
 	SelectedIndex  int
 	Preview        *PRPreviewSnapshot
 	PreviewLoading bool
@@ -373,6 +366,13 @@ type ErrorState struct {
 
 type ConfigState struct {
 	Loaded bool
+}
+
+// ViewedHistoryStore persists the per-repo RecentlyViewed PR list across
+// application restarts. Implementations live in internal/cache/sqlite.
+type ViewedHistoryStore interface {
+	LoadViewedHistory(ctx context.Context, repo Repository) ([]ViewedPRRecord, error)
+	SaveViewedHistory(ctx context.Context, repo Repository, records []ViewedPRRecord) error
 }
 
 type AppState struct {

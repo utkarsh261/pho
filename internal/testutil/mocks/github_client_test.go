@@ -65,24 +65,6 @@ func TestMockGitHubClient_UnsetFnPanics(t *testing.T) {
 		_, _, _, _ = m.FetchInvolvingPRs(context.Background(), testutil.Repo("alice/myrepo"), "alice")
 	})
 
-	t.Run("FetchRecentActivity panics", func(t *testing.T) {
-		defer func() {
-			r := recover()
-			if r == nil {
-				t.Fatal("expected panic but did not get one")
-			}
-			msg, ok := r.(string)
-			if !ok {
-				t.Fatalf("expected string panic, got %T: %v", r, r)
-			}
-			want := "MockGitHubClient.FetchRecentActivity called but FetchRecentActivityFn is nil"
-			if msg != want {
-				t.Errorf("expected panic message %q, got %q", want, msg)
-			}
-		}()
-		_, _ = m.FetchRecentActivity(context.Background(), testutil.Repo("alice/myrepo"))
-	})
-
 	t.Run("FetchPreview panics", func(t *testing.T) {
 		defer func() {
 			r := recover()

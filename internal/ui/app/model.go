@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -34,11 +35,12 @@ type SearchService interface {
 
 // Dependencies wires the root model to application services.
 type Dependencies struct {
-	Viewer    cmds.ViewerService
-	Discovery cmds.DiscoveryService
-	Dashboard cmds.DashboardService
-	Search    SearchService
-	PR        cmds.PRService
+	Viewer         cmds.ViewerService
+	Discovery      cmds.DiscoveryService
+	Dashboard      cmds.DashboardService
+	Search         SearchService
+	PR             cmds.PRService
+	ViewedHistory  domain.ViewedHistoryStore
 
 	Root string
 	Host string
@@ -79,7 +81,6 @@ type Model struct {
 
 	currentDashboard domain.DashboardSnapshot
 	currentInvolving domain.InvolvingSnapshot
-	currentRecent    domain.RecentSnapshot
 
 	hydratedRepos     map[string]struct{}
 	hydrationInFlight map[string]bool
@@ -311,7 +312,7 @@ func (m *Model) State() domain.AppState {
 			copied.Dashboard.PRsByTab[tab] = append([]domain.PullRequestSummary(nil), prs...)
 		}
 	}
-	copied.Dashboard.RecentItems = append([]domain.ActivityItem(nil), m.state.Dashboard.RecentItems...)
+	copied.Dashboard.RecentlyViewed = append([]domain.ViewedPRRecord(nil), m.state.Dashboard.RecentlyViewed...)
 	if m.state.Dashboard.Preview != nil {
 		preview := *m.state.Dashboard.Preview
 		copied.Dashboard.Preview = &preview
@@ -465,8 +466,6 @@ func (m *Model) applyMessage(msg tea.Msg) tea.Cmd {
 		return m.handleDashboardLoaded(msg)
 	case cmds.InvolvingLoaded:
 		return m.handleInvolvingLoaded(msg)
-	case cmds.RecentLoaded:
-		return m.handleRecentLoaded(msg)
 	case cmds.PreviewLoaded:
 		return m.handlePreviewLoaded(msg)
 	case cmds.SearchIndexRebuilt:
@@ -659,36 +658,6 @@ func (m *Model) handleInvolvingLoaded(msg cmds.InvolvingLoaded) tea.Cmd {
 	m.syncStatus()
 
 	return m.syncCurrentSelection()
-}
-
-func (m *Model) handleRecentLoaded(msg cmds.RecentLoaded) tea.Cmd {
-	repo, ok := m.selectedRepo()
-	if !ok || !sameRepo(repo.FullName, msg.Repo) {
-		return nil
-	}
-	if msg.Err != nil {
-		m.logError("recent load failed", "repo", msg.Repo, "err", msg.Err)
-		m.recordError(domain.ErrorKindNetwork, msg.Err, msg.Repo)
-	}
-	if isZeroRecentSnapshot(msg.Snapshot) {
-		return nil
-	}
-
-	if msg.Err == nil {
-		m.clearErrors()
-	}
-	m.currentRecent = msg.Snapshot
-	m.hydratedRepos[msg.Repo] = struct{}{}
-	m.state.Dashboard.RecentItems = append([]domain.ActivityItem(nil), msg.Snapshot.Items...)
-	m.state.Dashboard.LastRefreshAt[domain.TabRecent] = msg.Snapshot.FetchedAt
-	m.state.Dashboard.FreshnessByTab[domain.TabRecent] = freshnessFor(msg.Err)
-	m.syncPaletteStats()
-
-	delete(m.state.Jobs.InFlight, jobKey(msg.Repo, "recent"))
-	m.logDebug("refresh completed", "repo", msg.Repo, "item_count", len(msg.Snapshot.Items), "err", msg.Err)
-	m.syncStatus()
-
-	return nil
 }
 
 func (m *Model) handlePreviewLoaded(msg cmds.PreviewLoaded) tea.Cmd {
@@ -979,6 +948,7 @@ func (m *Model) selectRepoAt(index int, repo domain.Repository, force bool) tea.
 	m.state.Dashboard.SelectedIndex = 0
 	m.resetDashboardsForRepo()
 	m.resetPreviewState()
+	m.loadViewedHistory(repo)
 	m.palette.SetActiveRepo(repo.FullName)
 	m.syncPaletteStats()
 	m.syncStatus()
@@ -997,7 +967,7 @@ func (m *Model) loadRepoCmds(repo domain.Repository, force bool) []tea.Cmd {
 	if m.deps.Dashboard == nil {
 		return nil
 	}
-	out := []tea.Cmd{cmds.LoadDashboardCmd(m.deps.Dashboard, repo, force), cmds.LoadRecentCmd(m.deps.Dashboard, repo, force)}
+	out := []tea.Cmd{cmds.LoadDashboardCmd(m.deps.Dashboard, repo, force)}
 	if viewer := m.state.Session.ViewerByHost[repo.Host]; viewer != "" {
 		out = append(out, cmds.LoadInvolvingCmd(m.deps.Dashboard, repo, viewer, force))
 	}
@@ -1217,9 +1187,40 @@ func (m *Model) rebuildDashboardTabs() {
 	m.state.Dashboard.LastRefreshAt[domain.TabNeedsReview] = m.currentDashboard.FetchedAt
 	m.prList.SetTabSnapshot(domain.TabMyPRs, m.state.Dashboard.PRsByTab[domain.TabMyPRs], m.currentDashboard.TotalCount, m.currentDashboard.Truncated)
 	m.prList.SetTabSnapshot(domain.TabNeedsReview, m.state.Dashboard.PRsByTab[domain.TabNeedsReview], m.currentDashboard.TotalCount, m.currentDashboard.Truncated)
+
+	// Build Recent tab from per-repo viewed history.
+	recent, lastViewed := m.recentTabPRs()
+	m.state.Dashboard.PRsByTab[domain.TabRecent] = recent
+	m.prList.SetTabSnapshot(domain.TabRecent, recent, len(recent), false)
+	if !lastViewed.IsZero() {
+		m.state.Dashboard.LastRefreshAt[domain.TabRecent] = lastViewed
+		m.state.Dashboard.FreshnessByTab[domain.TabRecent] = domain.FreshnessFresh
+	} else {
+		m.state.Dashboard.LastRefreshAt[domain.TabRecent] = time.Time{}
+		m.state.Dashboard.FreshnessByTab[domain.TabRecent] = domain.FreshnessFresh
+	}
+
 	m.prList.Active = m.state.Dashboard.ActiveTab
 	m.prList.Cursor = clampIndex(m.prList.Cursor, len(m.currentPRsForTab(m.prList.Active)))
 	m.state.Dashboard.SelectedIndex = m.prList.Cursor
+}
+
+func (m *Model) recentTabPRs() ([]domain.PullRequestSummary, time.Time) {
+	repo, ok := m.selectedRepo()
+	if !ok {
+		return nil, time.Time{}
+	}
+	out := make([]domain.PullRequestSummary, 0, len(m.state.Dashboard.RecentlyViewed))
+	var latestView time.Time
+	for _, r := range m.state.Dashboard.RecentlyViewed {
+		if sameRepo(r.Repo, repo.FullName) {
+			out = append(out, r.Summary)
+			if r.LastViewedAt.After(latestView) {
+				latestView = r.LastViewedAt
+			}
+		}
+	}
+	return out, latestView
 }
 
 func (m *Model) currentSelectedPR() (domain.PullRequestSummary, bool) {
@@ -1238,6 +1239,75 @@ func (m *Model) now() time.Time {
 		return m.deps.Now()
 	}
 	return time.Now()
+}
+
+func (m *Model) loadViewedHistory(repo domain.Repository) {
+	if m.deps.ViewedHistory == nil {
+		return
+	}
+	records, err := m.deps.ViewedHistory.LoadViewedHistory(context.Background(), repo)
+	if err != nil {
+		m.logDebug("failed to load viewed history", "repo", repo.FullName, "err", err)
+		return
+	}
+	m.state.Dashboard.RecentlyViewed = records
+	m.logDebug("loaded viewed history", "repo", repo.FullName, "count", len(records))
+}
+
+func (m *Model) saveViewedHistory(repo domain.Repository) {
+	if m.deps.ViewedHistory == nil {
+		return
+	}
+	// Filter to repo-scoped records before saving.
+	var repoRecords []domain.ViewedPRRecord
+	for _, r := range m.state.Dashboard.RecentlyViewed {
+		if sameRepo(r.Repo, repo.FullName) {
+			repoRecords = append(repoRecords, r)
+		}
+	}
+	if err := m.deps.ViewedHistory.SaveViewedHistory(context.Background(), repo, repoRecords); err != nil {
+		m.logDebug("failed to save viewed history", "repo", repo.FullName, "err", err)
+	}
+}
+
+func (m *Model) recordPRViewed(summary domain.PullRequestSummary, repo domain.Repository, now time.Time) {
+	viewed := m.state.Dashboard.RecentlyViewed
+	// Remove existing entry for this PR (dedupe by repo+number).
+	filtered := make([]domain.ViewedPRRecord, 0, len(viewed))
+	for _, r := range viewed {
+		if !(sameRepo(r.Repo, summary.Repo) && r.Number == summary.Number) {
+			filtered = append(filtered, r)
+		}
+	}
+	// Prepend new record.
+	filtered = append([]domain.ViewedPRRecord{{
+		Repo:         summary.Repo,
+		Number:       summary.Number,
+		Summary:      summary,
+		LastViewedAt: now,
+	}}, filtered...)
+	// Trim to 50 entries for the PR's repo.
+	const maxViewed = 50
+	repoFiltered := make([]domain.ViewedPRRecord, 0, len(filtered))
+	for _, r := range filtered {
+		if sameRepo(r.Repo, summary.Repo) {
+			repoFiltered = append(repoFiltered, r)
+		}
+	}
+	if len(repoFiltered) > maxViewed {
+		repoFiltered = repoFiltered[:maxViewed]
+	}
+	// Rebuild full list: keep entries for other repos, add trimmed repo entries.
+	other := make([]domain.ViewedPRRecord, 0, len(filtered))
+	for _, r := range filtered {
+		if !sameRepo(r.Repo, summary.Repo) {
+			other = append(other, r)
+		}
+	}
+	m.state.Dashboard.RecentlyViewed = append(repoFiltered, other...)
+
+	// Persist to the PR's repo store.
+	m.saveViewedHistory(repo)
 }
 
 func (m *Model) recordError(kind domain.ErrorKind, err error, repo string) {
@@ -1374,10 +1444,6 @@ func isZeroInvolvingSnapshot(s domain.InvolvingSnapshot) bool {
 	return strings.TrimSpace(s.Repo.FullName) == "" && len(s.PRs) == 0 && s.TotalCount == 0 && !s.Truncated
 }
 
-func isZeroRecentSnapshot(s domain.RecentSnapshot) bool {
-	return strings.TrimSpace(s.Repo.FullName) == "" && len(s.Items) == 0
-}
-
 func isZeroPreviewSnapshot(s domain.PRPreviewSnapshot) bool {
 	return strings.TrimSpace(s.Repo) == "" && s.Number == 0 && strings.TrimSpace(s.Title) == "" && strings.TrimSpace(s.BodyExcerpt) == ""
 }
@@ -1470,11 +1536,13 @@ func (m *Model) openPRDetailForJump(summary domain.PullRequestSummary) tea.Cmd {
 	}
 
 	if m.prDetail != nil && m.prDetail.Summary.Repo == summary.Repo && m.prDetail.Summary.Number == summary.Number {
+		m.recordPRViewed(summary, repo, m.now())
 		m.pushView(domain.PrimaryViewPRDetail)
 		m.syncStatus()
 		return nil
 	}
 
+	m.recordPRViewed(summary, repo, m.now())
 	m.prDetail = prdetail.NewModel(summary, repo, m.deps.PR)
 	m.prDetail.SetTheme(m.theme)
 	m.prDetail.Width = m.layout.Current.Width
@@ -1504,6 +1572,7 @@ func (m *Model) openPRDetail() tea.Cmd {
 	}
 
 	m.logDebug("opening pr detail", "pr", m.prSlug(current.Repo, current.Number), "repo", repo.FullName)
+	m.recordPRViewed(current, repo, m.now())
 
 	// Same PR reuse: if prDetail exists and matches repo+number, reuse it without
 	// re-init — Init() would re-fire network requests and overwrite scroll state.
@@ -1547,6 +1616,7 @@ func (m *Model) handleBackToDashboard() tea.Cmd {
 	m.popView()
 	m.focus = domain.FocusPRListPanel
 	m.previousFocus = domain.FocusPreviewPanel
+	m.rebuildDashboardTabs()
 	m.syncStatus()
 	return nil
 }

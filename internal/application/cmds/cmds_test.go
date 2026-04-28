@@ -147,39 +147,6 @@ func TestLoadInvolvingCmd(t *testing.T) {
 	})
 }
 
-func TestLoadRecentCmd(t *testing.T) {
-	repo := repo("org/a")
-	snap := domain.RecentSnapshot{Repo: repo, FetchedAt: time.Unix(100, 0)}
-
-	t.Run("success", func(t *testing.T) {
-		svc := &dashboardService{loadRecentFn: func(ctx context.Context, gotRepo domain.Repository, force bool) (domain.RecentSnapshot, error) {
-			if gotRepo.FullName != repo.FullName || force {
-				t.Fatalf("load args = %#v force=%v", gotRepo, force)
-			}
-			return snap, nil
-		}}
-
-		msg := run(t, cmds.LoadRecentCmd(svc, repo, false))
-		got := msg.(cmds.RecentLoaded)
-		if got.Repo != repo.FullName || got.Err != nil || got.Snapshot.Repo.FullName != repo.FullName {
-			t.Fatalf("message = %#v, want recent snapshot", got)
-		}
-	})
-
-	t.Run("failure", func(t *testing.T) {
-		wantErr := errors.New("boom")
-		svc := &dashboardService{loadRecentFn: func(ctx context.Context, gotRepo domain.Repository, force bool) (domain.RecentSnapshot, error) {
-			return domain.RecentSnapshot{}, wantErr
-		}}
-
-		msg := run(t, cmds.LoadRecentCmd(svc, repo, true))
-		got := msg.(cmds.RecentLoaded)
-		if !errors.Is(got.Err, wantErr) || got.Repo != repo.FullName {
-			t.Fatalf("message = %#v, want error and repo identity", got)
-		}
-	})
-}
-
 func TestLoadPreviewCmd(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		svc := &dashboardService{loadPreviewFn: func(ctx context.Context, repo string, number int, force bool) (domain.PRPreviewSnapshot, error) {
@@ -425,7 +392,6 @@ func (s *discoveryService) Discover(ctx context.Context, root string) ([]domain.
 type dashboardService struct {
 	loadRepoFn      func(context.Context, domain.Repository, bool) (domain.DashboardSnapshot, error)
 	loadInvolvingFn func(context.Context, domain.Repository, string, bool) (domain.InvolvingSnapshot, error)
-	loadRecentFn    func(context.Context, domain.Repository, bool) (domain.RecentSnapshot, error)
 	loadPreviewFn   func(context.Context, string, int, bool) (domain.PRPreviewSnapshot, error)
 	loadAllPRsPage  func(context.Context, domain.Repository, string) ([]domain.PullRequestSummary, bool, string, error)
 }
@@ -436,10 +402,6 @@ func (s *dashboardService) LoadRepo(ctx context.Context, repo domain.Repository,
 
 func (s *dashboardService) LoadInvolving(ctx context.Context, repo domain.Repository, viewer string, force bool) (domain.InvolvingSnapshot, error) {
 	return s.loadInvolvingFn(ctx, repo, viewer, force)
-}
-
-func (s *dashboardService) LoadRecent(ctx context.Context, repo domain.Repository, force bool) (domain.RecentSnapshot, error) {
-	return s.loadRecentFn(ctx, repo, force)
 }
 
 func (s *dashboardService) LoadPreview(ctx context.Context, repo string, number int, force bool) (domain.PRPreviewSnapshot, error) {

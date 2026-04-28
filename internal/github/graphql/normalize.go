@@ -43,28 +43,6 @@ func normalizeInvolvingResponse(repo domain.Repository, resp model.InvolvingData
 	return out, total, truncated, nil
 }
 
-func normalizeRecentResponse(repo domain.Repository, resp model.RecentData) ([]domain.ActivityItem, error) {
-	root := resp.Repository
-	if root.NameWithOwner != "" && repo.FullName == "" {
-		repo.FullName = root.NameWithOwner
-	}
-	node := recentPullRequestNode(root)
-	if node == nil {
-		return nil, nil
-	}
-	items := make([]domain.ActivityItem, 0, len(node.TimelineItems.Nodes))
-	for _, item := range node.TimelineItems.Nodes {
-		normalized, ok, err := normalizeTimelineItem(repo, node.Number, item)
-		if err != nil {
-			return nil, err
-		}
-		if ok {
-			items = append(items, normalized)
-		}
-	}
-	return items, nil
-}
-
 func normalizePreviewResponse(repo domain.Repository, number int, resp model.PreviewData) (domain.PRPreviewSnapshot, error) {
 	root := resp.Repository
 	if root.NameWithOwner != "" && repo.FullName == "" {
@@ -366,76 +344,63 @@ func previewLatestActivity(repo domain.Repository, prNumber int, nodes []model.T
 	if len(nodes) == 0 {
 		return nil
 	}
-	item, ok, err := normalizeTimelineItem(repo, prNumber, nodes[0])
-	if err != nil || !ok {
-		return nil
-	}
-	return &domain.ActivitySnippet{
-		Kind:      item.Kind,
-		Author:    item.Author,
-		Body:      item.BodySnippet,
-		OccuredAt: item.OccurredAt,
-	}
-}
+	n := nodes[0]
+	var kind domain.ActivityKind
+	var author, body string
+	var ts time.Time
 
-func normalizeTimelineItem(repo domain.Repository, prNumber int, node model.TimelineItemNode) (domain.ActivityItem, bool, error) {
-	item := domain.ActivityItem{
-		ID:       node.ID,
-		Repo:     repoFullName(repo),
-		PRNumber: prNumber,
-	}
-
-	switch node.Typename {
+	switch n.Typename {
 	case "PullRequestCommit":
-		if node.Commit == nil {
-			return domain.ActivityItem{}, false, nil
+		if n.Commit == nil {
+			return nil
 		}
-		ts, err := parseGraphQLTime(node.Commit.CommittedDate)
+		parsed, err := parseGraphQLTime(n.Commit.CommittedDate)
 		if err != nil {
-			return domain.ActivityItem{}, false, err
+			return nil
 		}
-		item.Kind = domain.ActivityKindCommit
-		item.CommitOID = node.Commit.OID
-		item.Author = timelineCommitAuthor(node.Commit.Author)
-		item.BodySnippet = strings.TrimSpace(node.Commit.MessageHeadline)
-		item.OccurredAt = ts
+		kind = domain.ActivityKindCommit
+		author = timelineCommitAuthor(n.Commit.Author)
+		body = strings.TrimSpace(n.Commit.MessageHeadline)
+		ts = parsed
 	case "IssueComment":
-		ts, err := parseGraphQLTime(node.CreatedAt)
+		parsed, err := parseGraphQLTime(n.CreatedAt)
 		if err != nil {
-			return domain.ActivityItem{}, false, err
+			return nil
 		}
-		item.Kind = domain.ActivityKindComment
-		item.Author = actorLogin(node.Author)
-		item.BodySnippet = strings.TrimSpace(node.Body)
-		item.OccurredAt = ts
+		kind = domain.ActivityKindComment
+		author = actorLogin(n.Author)
+		body = strings.TrimSpace(n.Body)
+		ts = parsed
 	case "PullRequestReview":
-		item.Kind = domain.ActivityKindReview
-		item.Author = actorLogin(node.Author)
-		item.BodySnippet = strings.TrimSpace(node.Body)
-		if node.SubmittedAt != nil {
-			ts, err := parseGraphQLTime(*node.SubmittedAt)
+		kind = domain.ActivityKindReview
+		author = actorLogin(n.Author)
+		body = strings.TrimSpace(n.Body)
+		if n.SubmittedAt != nil {
+			parsed, err := parseGraphQLTime(*n.SubmittedAt)
 			if err != nil {
-				return domain.ActivityItem{}, false, err
+				return nil
 			}
-			item.OccurredAt = ts
+			ts = parsed
 		}
 	case "MergedEvent":
-		ts, err := parseGraphQLTime(node.CreatedAt)
+		parsed, err := parseGraphQLTime(n.CreatedAt)
 		if err != nil {
-			return domain.ActivityItem{}, false, err
+			return nil
 		}
-		item.Kind = domain.ActivityKindMerged
-		item.Author = actorLogin(node.Actor)
-		item.BodySnippet = strings.TrimSpace(node.MergeRefName)
-		if node.Commit != nil {
-			item.CommitOID = node.Commit.OID
-		}
-		item.OccurredAt = ts
+		kind = domain.ActivityKindMerged
+		author = actorLogin(n.Actor)
+		body = strings.TrimSpace(n.MergeRefName)
+		ts = parsed
 	default:
-		return domain.ActivityItem{}, false, nil
+		return nil
 	}
 
-	return item, true, nil
+	return &domain.ActivitySnippet{
+		Kind:      kind,
+		Author:    author,
+		Body:      body,
+		OccuredAt: ts,
+	}
 }
 
 func parseGraphQLTime(raw string) (time.Time, error) {
@@ -520,14 +485,4 @@ func numberOr(actual, fallback int) int {
 		return actual
 	}
 	return fallback
-}
-
-func recentPullRequestNode(repo model.RepositoryNode) *model.PullRequestNode {
-	if repo.PullRequest != nil {
-		return repo.PullRequest
-	}
-	if len(repo.PullRequests.Nodes) > 0 {
-		return &repo.PullRequests.Nodes[0]
-	}
-	return nil
 }

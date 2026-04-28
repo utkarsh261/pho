@@ -30,16 +30,6 @@ type InvolvingData struct {
 	Search SearchConnection `json:"search"`
 }
 
-// RecentResponse is the raw GraphQL payload for the recent activity query.
-type RecentResponse struct {
-	Data RecentData `json:"data"`
-}
-
-// RecentData is the inner data object for recent activity queries.
-type RecentData struct {
-	Repository RepositoryNode `json:"repository"`
-}
-
 // PreviewResponse is the raw GraphQL payload for the preview query.
 type PreviewResponse struct {
 	Data PreviewData `json:"data"`

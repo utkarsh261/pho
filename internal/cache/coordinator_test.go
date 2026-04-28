@@ -138,11 +138,11 @@ func TestCoordinatorReturnsStaleAndSchedulesRefresh(t *testing.T) {
 	l2 := &countingStore{inner: newSQLiteStore(t)}
 	c := NewCoordinator(l1, l2, nil)
 
-	key := "dashboard:v1:host=github.com:repo=acme/api:kind=recent"
-	snap := testutil.RecentSnap(testutil.Repo("acme/api"))
+	key := "dashboard:v1:host=github.com:repo=acme/api:kind=dashboard_prs"
+	snap := testutil.DashboardSnap(testutil.Repo("acme/api"))
 	meta := domain.CacheMeta{
 		Key:       key,
-		Kind:      "dashboard_recent",
+		Kind:      "dashboard_prs",
 		Version:   1,
 		Host:      "github.com",
 		Repo:      "acme/api",
@@ -154,7 +154,7 @@ func TestCoordinatorReturnsStaleAndSchedulesRefresh(t *testing.T) {
 	}
 
 	var scheduled string
-	var got domain.RecentSnapshot
+	var got domain.DashboardSnapshot
 	_, freshness, found, err := c.StaleWhileRevalidate(ctx, key, &got, func(k string) {
 		scheduled = k
 	})

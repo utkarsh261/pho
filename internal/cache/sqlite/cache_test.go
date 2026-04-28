@@ -74,11 +74,11 @@ func TestExpiredEntryStillReadableWithExpiredMeta(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCache(t, 1)
 
-	key := "dashboard:v1:host=github.com:repo=acme/api:kind=recent"
-	snap := testutil.RecentSnap(testutil.Repo("acme/api"))
+	key := "dashboard:v1:host=github.com:repo=acme/api:kind=dashboard_prs"
+	snap := testutil.DashboardSnap(testutil.Repo("acme/api"))
 	meta := domain.CacheMeta{
 		Key:       key,
-		Kind:      "dashboard_recent",
+		Kind:      "dashboard_prs",
 		Version:   1,
 		Host:      "github.com",
 		Repo:      "acme/api",
@@ -89,7 +89,7 @@ func TestExpiredEntryStillReadableWithExpiredMeta(t *testing.T) {
 		t.Fatalf("put: %v", err)
 	}
 
-	var got domain.RecentSnapshot
+	var got domain.DashboardSnapshot
 	gotMeta, found, err := c.Get(ctx, key, &got)
 	if err != nil {
 		t.Fatalf("get: %v", err)
@@ -192,5 +192,155 @@ func TestCorruptPayloadDeletesOnRead(t *testing.T) {
 	}
 	if count != 0 {
 		t.Fatalf("expected corrupt row to be deleted, found %d rows", count)
+	}
+}
+
+func TestViewedHistoryRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	c := newTestCache(t, 1)
+	repo := domain.Repository{Host: "github.com", FullName: "acme/api"}
+
+	records := []domain.ViewedPRRecord{
+		{Repo: repo.FullName, Number: 2, Summary: domain.PullRequestSummary{Repo: repo.FullName, Number: 2, Title: "Two"}, LastViewedAt: time.Now().UTC().Add(-time.Hour)},
+		{Repo: repo.FullName, Number: 1, Summary: domain.PullRequestSummary{Repo: repo.FullName, Number: 1, Title: "One"}, LastViewedAt: time.Now().UTC()},
+	}
+
+	if err := c.SaveViewedHistory(ctx, repo, records); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	got, err := c.LoadViewedHistory(ctx, repo)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected 2 records, got %d", len(got))
+	}
+	// Should be ordered by last_viewed_at DESC.
+	if got[0].Number != 1 {
+		t.Fatalf("expected most recent PR #1 first, got #%d", got[0].Number)
+	}
+	if got[1].Number != 2 {
+		t.Fatalf("expected PR #2 second, got #%d", got[1].Number)
+	}
+	if got[0].Summary.Title != "One" {
+		t.Fatalf("expected summary title 'One', got %q", got[0].Summary.Title)
+	}
+}
+
+func TestViewedHistorySaveReplacesRepoRows(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	c := newTestCache(t, 1)
+	repo := domain.Repository{Host: "github.com", FullName: "acme/api"}
+
+	if err := c.SaveViewedHistory(ctx, repo, []domain.ViewedPRRecord{
+		{Repo: repo.FullName, Number: 1, Summary: domain.PullRequestSummary{Repo: repo.FullName, Number: 1, Title: "Old"}, LastViewedAt: time.Now().UTC()},
+	}); err != nil {
+		t.Fatalf("save first: %v", err)
+	}
+	if err := c.SaveViewedHistory(ctx, repo, []domain.ViewedPRRecord{
+		{Repo: repo.FullName, Number: 2, Summary: domain.PullRequestSummary{Repo: repo.FullName, Number: 2, Title: "New"}, LastViewedAt: time.Now().UTC()},
+	}); err != nil {
+		t.Fatalf("save second: %v", err)
+	}
+
+	got, err := c.LoadViewedHistory(ctx, repo)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 record after replace, got %d", len(got))
+	}
+	if got[0].Number != 2 {
+		t.Fatalf("expected PR #2, got #%d", got[0].Number)
+	}
+}
+
+func TestViewedHistoryLoadEmptyRepo(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	c := newTestCache(t, 1)
+	repo := domain.Repository{Host: "github.com", FullName: "acme/empty"}
+
+	got, err := c.LoadViewedHistory(ctx, repo)
+	if err != nil {
+		t.Fatalf("load empty: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("expected empty result, got %d", len(got))
+	}
+}
+
+func TestViewedHistorySkipsCorruptRows(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	c := newTestCache(t, 1)
+	repo := domain.Repository{Host: "github.com", FullName: "acme/api"}
+
+	// Seed one valid and one corrupt row directly.
+	if _, err := c.db.ExecContext(ctx, `
+		INSERT INTO viewed_history(host, repo, pr_number, summary_json, last_viewed_at)
+		VALUES (?, ?, ?, ?, ?)
+	`, repo.Host, repo.FullName, 1, `{"number":1,"title":"Valid"}`, toUnixMillis(time.Now().UTC())); err != nil {
+		t.Fatalf("insert valid: %v", err)
+	}
+	if _, err := c.db.ExecContext(ctx, `
+		INSERT INTO viewed_history(host, repo, pr_number, summary_json, last_viewed_at)
+		VALUES (?, ?, ?, ?, ?)
+	`, repo.Host, repo.FullName, 2, `{bad json`, toUnixMillis(time.Now().UTC())); err != nil {
+		t.Fatalf("insert corrupt: %v", err)
+	}
+
+	got, err := c.LoadViewedHistory(ctx, repo)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 valid record, got %d", len(got))
+	}
+	if got[0].Number != 1 {
+		t.Fatalf("expected PR #1, got #%d", got[0].Number)
+	}
+}
+
+func TestViewedHistoryIsolatedByRepo(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	c := newTestCache(t, 1)
+	repoA := domain.Repository{Host: "github.com", FullName: "acme/a"}
+	repoB := domain.Repository{Host: "github.com", FullName: "acme/b"}
+
+	if err := c.SaveViewedHistory(ctx, repoA, []domain.ViewedPRRecord{
+		{Repo: repoA.FullName, Number: 1, Summary: domain.PullRequestSummary{Repo: repoA.FullName, Number: 1}, LastViewedAt: time.Now().UTC()},
+	}); err != nil {
+		t.Fatalf("save a: %v", err)
+	}
+	if err := c.SaveViewedHistory(ctx, repoB, []domain.ViewedPRRecord{
+		{Repo: repoB.FullName, Number: 2, Summary: domain.PullRequestSummary{Repo: repoB.FullName, Number: 2}, LastViewedAt: time.Now().UTC()},
+	}); err != nil {
+		t.Fatalf("save b: %v", err)
+	}
+
+	gotA, err := c.LoadViewedHistory(ctx, repoA)
+	if err != nil {
+		t.Fatalf("load a: %v", err)
+	}
+	if len(gotA) != 1 || gotA[0].Number != 1 {
+		t.Fatalf("expected repoA to have PR #1, got %+v", gotA)
+	}
+
+	gotB, err := c.LoadViewedHistory(ctx, repoB)
+	if err != nil {
+		t.Fatalf("load b: %v", err)
+	}
+	if len(gotB) != 1 || gotB[0].Number != 2 {
+		t.Fatalf("expected repoB to have PR #2, got %+v", gotB)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -97,6 +98,15 @@ func (c *Cache) bootstrap(ctx context.Context) error {
 			key TEXT PRIMARY KEY,
 			value TEXT NOT NULL
 		);`,
+		`CREATE TABLE IF NOT EXISTS viewed_history (
+			host TEXT NOT NULL,
+			repo TEXT NOT NULL,
+			pr_number INTEGER NOT NULL,
+			summary_json TEXT NOT NULL,
+			last_viewed_at INTEGER NOT NULL,
+			PRIMARY KEY (host, repo, pr_number)
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_viewed_history_repo ON viewed_history(host, repo);`,
 	}
 	for _, q := range schema {
 		if _, err := c.db.ExecContext(ctx, q); err != nil {
@@ -236,6 +246,100 @@ func (c *Cache) Delete(ctx context.Context, key string) error {
 		return fmt.Errorf("sqlite cache delete %q: %w", key, err)
 	}
 	return nil
+}
+
+// LoadViewedHistory returns the persisted viewed PR records for a repository,
+// ordered by most recently viewed first.
+func (c *Cache) LoadViewedHistory(ctx context.Context, repo domain.Repository) ([]domain.ViewedPRRecord, error) {
+	rows, err := c.db.QueryContext(ctx, `
+		SELECT pr_number, summary_json, last_viewed_at
+		FROM viewed_history
+		WHERE host = ? AND repo = ?
+		ORDER BY last_viewed_at DESC
+	`, repo.Host, repo.FullName)
+	if err != nil {
+		return nil, fmt.Errorf("sqlite load viewed history %q: %w", repo.FullName, err)
+	}
+	defer rows.Close()
+
+	var out []domain.ViewedPRRecord
+	for rows.Next() {
+		var (
+			prNumber     int
+			summaryJSON  string
+			lastViewedAt int64
+		)
+		if err := rows.Scan(&prNumber, &summaryJSON, &lastViewedAt); err != nil {
+			return nil, fmt.Errorf("sqlite scan viewed history %q: %w", repo.FullName, err)
+		}
+		var summary domain.PullRequestSummary
+		if err := json.Unmarshal([]byte(summaryJSON), &summary); err != nil {
+			// Skip corrupt rows rather than failing the entire load.
+			continue
+		}
+		out = append(out, domain.ViewedPRRecord{
+			Repo:         repo.FullName,
+			Number:       prNumber,
+			Summary:      summary,
+			LastViewedAt: fromUnixMillis(lastViewedAt),
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("sqlite viewed history rows %q: %w", repo.FullName, err)
+	}
+	return out, nil
+}
+
+// SaveViewedHistory atomically replaces the viewed history for a repository
+// with the provided records. Records for other repositories are untouched.
+func (c *Cache) SaveViewedHistory(ctx context.Context, repo domain.Repository, records []domain.ViewedPRRecord) error {
+	tx, err := c.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("sqlite save viewed history begin %q: %w", repo.FullName, err)
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM viewed_history WHERE host = ? AND repo = ?`,
+		repo.Host, repo.FullName,
+	); err != nil {
+		return fmt.Errorf("sqlite save viewed history delete %q: %w", repo.FullName, err)
+	}
+
+	stmt, err := tx.PrepareContext(ctx, `
+		INSERT INTO viewed_history(host, repo, pr_number, summary_json, last_viewed_at)
+		VALUES (?, ?, ?, ?, ?)
+	`)
+	if err != nil {
+		return fmt.Errorf("sqlite save viewed history prepare %q: %w", repo.FullName, err)
+	}
+	defer stmt.Close()
+
+	for _, r := range records {
+		if !sameRepo(r.Repo, repo.FullName) {
+			continue
+		}
+		summaryJSON, err := json.Marshal(r.Summary)
+		if err != nil {
+			return fmt.Errorf("sqlite save viewed history marshal %s#%d: %w", r.Repo, r.Number, err)
+		}
+		if _, err := stmt.ExecContext(ctx,
+			repo.Host, repo.FullName, r.Number, string(summaryJSON), toUnixMillis(r.LastViewedAt),
+		); err != nil {
+			return fmt.Errorf("sqlite save viewed history insert %s#%d: %w", r.Repo, r.Number, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("sqlite save viewed history commit %q: %w", repo.FullName, err)
+	}
+	return nil
+}
+
+func sameRepo(a, b string) bool {
+	return strings.EqualFold(strings.TrimSpace(a), strings.TrimSpace(b))
 }
 
 func toUnixMillis(t time.Time) int64 {

@@ -17,7 +17,6 @@ const (
 	cacheTTL                 = 2 * time.Minute
 	cacheKindDashboardPRs    = "dashboard_prs"
 	cacheKindDashboardInvolv = "dashboard_involving"
-	cacheKindDashboardRecent = "dashboard_recent"
 	cacheKindPreview         = "preview"
 	defaultPreviewHost       = "github.com"
 )
@@ -26,8 +25,7 @@ type DashboardService interface {
 	SelectInitialRepo(repos []domain.Repository, cwd string) (*domain.Repository, error)
 	LoadRepo(ctx context.Context, repo domain.Repository, force bool) (domain.DashboardSnapshot, error)
 	LoadInvolving(ctx context.Context, repo domain.Repository, viewer string, force bool) (domain.InvolvingSnapshot, error)
-	LoadRecent(ctx context.Context, repo domain.Repository, force bool) (domain.RecentSnapshot, error)
-	LoadPreview(ctx context.Context, repo string, number int) (domain.PRPreviewSnapshot, error)
+	LoadPreview(ctx context.Context, repo string, number int, force bool) (domain.PRPreviewSnapshot, error)
 	LoadAllPRsPage(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
 }
 
@@ -153,48 +151,6 @@ func (s *Service) LoadInvolving(ctx context.Context, repo domain.Repository, vie
 		FetchedAt:  s.now().UTC(),
 	}
 	meta := dashboardMeta(key, repo, cacheKindDashboardInvolv, nil, out.FetchedAt)
-	if err := s.Cache.Write(ctx, key, out, meta); err != nil {
-		return out, err
-	}
-	return out, nil
-}
-
-func (s *Service) LoadRecent(ctx context.Context, repo domain.Repository, force bool) (domain.RecentSnapshot, error) {
-	if err := s.ensureReady(); err != nil {
-		return domain.RecentSnapshot{}, err
-	}
-	repo = normalizeRepository(repo)
-	key := dashboardCacheKey(repo, "recent")
-
-	var cached domain.RecentSnapshot
-	found := false
-	if !force {
-		_, _, found, _ = s.Cache.StaleWhileRevalidate(ctx, key, &cached, func(string) {
-			s.spawn(func() {
-				_, _ = s.LoadRecent(context.Background(), repo, true)
-			})
-		})
-		if found {
-			return cached, nil
-		}
-	} else {
-		found = false
-	}
-
-	items, err := s.Client.FetchRecentActivity(ctx, repo)
-	if err != nil {
-		if found {
-			return cached, fmt.Errorf("refresh recent %s: %w", repo.FullName, err)
-		}
-		return domain.RecentSnapshot{}, err
-	}
-
-	out := domain.RecentSnapshot{
-		Repo:      repo,
-		Items:     items,
-		FetchedAt: s.now().UTC(),
-	}
-	meta := dashboardMeta(key, repo, cacheKindDashboardRecent, nil, out.FetchedAt)
 	if err := s.Cache.Write(ctx, key, out, meta); err != nil {
 		return out, err
 	}

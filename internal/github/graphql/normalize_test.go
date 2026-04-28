@@ -71,32 +71,6 @@ func TestNormalizeInvolvingResponse_Fixture(t *testing.T) {
 	}
 }
 
-func TestNormalizeRecentResponse_Fixture(t *testing.T) {
-	var resp model.RecentResponse
-	loadFixture(t, filepath.Join("recent", "response.json"), &resp)
-
-	repo := testRepo()
-	items, err := normalizeRecentResponse(repo, resp.Data)
-	if err != nil {
-		t.Fatalf("normalize recent: %v", err)
-	}
-	if len(items) != 4 {
-		t.Fatalf("unexpected recent item count: %d", len(items))
-	}
-	if got := items[0]; got.Kind != domain.ActivityKindCommit || got.CommitOID != "abc123def456abc123def456abc123def456abc1" || got.Author != "alice" {
-		t.Fatalf("unexpected commit item: %+v", got)
-	}
-	if got := items[1]; got.Kind != domain.ActivityKindComment || got.Author != "bob" || !strings.Contains(got.BodySnippet, "inline comments") {
-		t.Fatalf("unexpected comment item: %+v", got)
-	}
-	if got := items[2]; got.Kind != domain.ActivityKindReview || got.Author != "carol" || got.BodySnippet == "" {
-		t.Fatalf("unexpected review item: %+v", got)
-	}
-	if got := items[3]; got.Kind != domain.ActivityKindMerged || got.CommitOID != "merged123abc456merged123abc456merged123ab" {
-		t.Fatalf("unexpected merged item: %+v", got)
-	}
-}
-
 func TestNormalizePreviewResponse_Fixture(t *testing.T) {
 	var resp model.PreviewResponse
 	loadFixture(t, filepath.Join("preview", "response.json"), &resp)

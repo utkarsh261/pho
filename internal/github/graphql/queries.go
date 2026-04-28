@@ -84,68 +84,6 @@ func buildInvolvingQuery(profile githubpkg.GitHubHostProfile) string {
 }`, pullRequestSummarySelection(profile))
 }
 
-func buildRecentActivityQuery() string {
-	return `query RecentActivityQuery($owner: String!, $name: String!) {
-  repository(owner: $owner, name: $name) {
-    nameWithOwner
-    pullRequests(first: 1, orderBy: {field: UPDATED_AT, direction: DESC}) {
-      nodes {
-        number
-        timelineItems(last: 50) {
-          nodes {
-            ... on PullRequestCommit {
-              __typename
-              id
-              commit {
-                oid
-                messageHeadline
-                committedDate
-                author {
-                  user {
-                    login
-                  }
-                }
-              }
-            }
-            ... on IssueComment {
-              __typename
-              id
-              body
-              createdAt
-              author {
-                login
-              }
-            }
-            ... on PullRequestReview {
-              __typename
-              id
-              state
-              body
-              submittedAt
-              author {
-                login
-              }
-            }
-            ... on MergedEvent {
-              __typename
-              id
-              createdAt
-              actor {
-                login
-              }
-              commit {
-                oid
-              }
-              mergeRefName
-            }
-          }
-        }
-      }
-    }
-  }
-}`
-}
-
 func buildPreviewQuery(profile githubpkg.GitHubHostProfile) string {
 	return fmt.Sprintf(`query PreviewQuery($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {

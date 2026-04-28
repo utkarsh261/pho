@@ -20,7 +20,6 @@ type DiscoveryService interface {
 type DashboardService interface {
 	LoadRepo(ctx context.Context, repo domain.Repository, force bool) (domain.DashboardSnapshot, error)
 	LoadInvolving(ctx context.Context, repo domain.Repository, viewer string, force bool) (domain.InvolvingSnapshot, error)
-	LoadRecent(ctx context.Context, repo domain.Repository, force bool) (domain.RecentSnapshot, error)
 	LoadPreview(ctx context.Context, repo string, number int, force bool) (domain.PRPreviewSnapshot, error)
 	LoadAllPRsPage(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
 }
@@ -79,13 +78,6 @@ type DashboardLoaded struct {
 type InvolvingLoaded struct {
 	Repo      string
 	Snapshot  domain.InvolvingSnapshot
-	FromCache bool
-	Err       error
-}
-
-type RecentLoaded struct {
-	Repo      string
-	Snapshot  domain.RecentSnapshot
 	FromCache bool
 	Err       error
 }
@@ -169,13 +161,6 @@ func LoadInvolvingCmd(svc DashboardService, repo domain.Repository, viewer strin
 	return func() tea.Msg {
 		snap, err := svc.LoadInvolving(context.Background(), repo, viewer, force)
 		return InvolvingLoaded{Repo: repoKey(repo), Snapshot: snap, Err: err}
-	}
-}
-
-func LoadRecentCmd(svc DashboardService, repo domain.Repository, force bool) tea.Cmd {
-	return func() tea.Msg {
-		snap, err := svc.LoadRecent(context.Background(), repo, force)
-		return RecentLoaded{Repo: repoKey(repo), Snapshot: snap, Err: err}
 	}
 }
 

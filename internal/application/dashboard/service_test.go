@@ -15,10 +15,9 @@ import (
 )
 
 type fakeGitHubClient struct {
-	FetchDashboardPRsFn   func(ctx context.Context, repo domain.Repository) ([]domain.PullRequestSummary, int, bool, string, error)
-	FetchInvolvingPRsFn   func(ctx context.Context, repo domain.Repository, viewer string) ([]domain.PullRequestSummary, int, bool, error)
-	FetchRecentActivityFn func(ctx context.Context, repo domain.Repository) ([]domain.ActivityItem, error)
-	FetchPreviewFn        func(ctx context.Context, repo domain.Repository, number int) (domain.PRPreviewSnapshot, error)
+	FetchDashboardPRsFn func(ctx context.Context, repo domain.Repository) ([]domain.PullRequestSummary, int, bool, string, error)
+	FetchInvolvingPRsFn func(ctx context.Context, repo domain.Repository, viewer string) ([]domain.PullRequestSummary, int, bool, error)
+	FetchPreviewFn      func(ctx context.Context, repo domain.Repository, number int) (domain.PRPreviewSnapshot, error)
 }
 
 func (f *fakeGitHubClient) FetchViewer(ctx context.Context, host string) (string, error) {
@@ -37,13 +36,6 @@ func (f *fakeGitHubClient) FetchInvolvingPRs(ctx context.Context, repo domain.Re
 		return nil, 0, false, fmt.Errorf("unexpected FetchInvolvingPRs(%s,%s)", repo.FullName, viewer)
 	}
 	return f.FetchInvolvingPRsFn(ctx, repo, viewer)
-}
-
-func (f *fakeGitHubClient) FetchRecentActivity(ctx context.Context, repo domain.Repository) ([]domain.ActivityItem, error) {
-	if f.FetchRecentActivityFn == nil {
-		return nil, fmt.Errorf("unexpected FetchRecentActivity(%s)", repo.FullName)
-	}
-	return f.FetchRecentActivityFn(ctx, repo)
 }
 
 func (f *fakeGitHubClient) FetchPreview(ctx context.Context, repo domain.Repository, number int) (domain.PRPreviewSnapshot, error) {

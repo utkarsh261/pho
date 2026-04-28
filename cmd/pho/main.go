@@ -21,6 +21,7 @@ import (
 	"github.com/utkarsh261/pho/internal/cache/memory"
 	sqlitecache "github.com/utkarsh261/pho/internal/cache/sqlite"
 	"github.com/utkarsh261/pho/internal/config"
+	"github.com/utkarsh261/pho/internal/domain"
 	"github.com/utkarsh261/pho/internal/github/auth"
 	"github.com/utkarsh261/pho/internal/github/graphql"
 	"github.com/utkarsh261/pho/internal/github/rest"
@@ -131,11 +132,13 @@ func main() {
 
 	l2, err := sqlitecache.New(filepath.Join(cfg.Cache.Dir, "cache.db"), 1)
 	var l2Store cache.Store
+	var viewedHistoryStore domain.ViewedHistoryStore
 	if err != nil {
 		logger.Warn("sqlite cache unavailable, using memory-only cache", "err", err)
 		l2Store = l1
 	} else {
 		l2Store = l2
+		viewedHistoryStore = l2
 	}
 
 	coordinator := cache.NewCoordinator(l1, l2Store, logger)
@@ -162,15 +165,16 @@ func main() {
 	prSvc.Log = logger
 
 	deps := app.Dependencies{
-		Viewer:     ghClient,
-		Discovery:  discoverySvc,
-		Dashboard:  dashboardSvc,
-		Search:     searchSvc,
-		PR:         prSvc,
-		Root:       rootDir,
-		Host:       profiles[0].Host,
-		MaxJumpPRs: cfg.Palette.MaxPRs,
-		Logger:     logger,
+		Viewer:        ghClient,
+		Discovery:     discoverySvc,
+		Dashboard:     dashboardSvc,
+		Search:        searchSvc,
+		PR:            prSvc,
+		ViewedHistory: viewedHistoryStore,
+		Root:          rootDir,
+		Host:          profiles[0].Host,
+		MaxJumpPRs:    cfg.Palette.MaxPRs,
+		Logger:        logger,
 	}
 	model := app.NewModel(deps)
 

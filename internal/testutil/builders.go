@@ -69,15 +69,6 @@ func InvolvingSnap(repo domain.Repository, prs ...domain.PullRequestSummary) dom
 	}
 }
 
-// RecentSnap returns a RecentSnapshot from provided activity items.
-func RecentSnap(repo domain.Repository, items ...domain.ActivityItem) domain.RecentSnapshot {
-	return domain.RecentSnapshot{
-		Repo:      repo,
-		Items:     items,
-		FetchedAt: time.Now(),
-	}
-}
-
 // SeededState returns an AppState with discovered repos and a selected repo.
 func SeededState(opts ...func(*domain.AppState)) domain.AppState {
 	repos := []domain.Repository{
