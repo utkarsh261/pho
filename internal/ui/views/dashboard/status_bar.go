@@ -145,15 +145,15 @@ func (m *StatusBarModel) hintText() string {
 	}
 	switch m.Focus {
 	case domain.FocusRepoPanel:
-		return "j/k: Move | Enter: Select | R: Refresh | Tab: Next panel | Ctrl+P: Jump to PR/Repository"
+		return "j/k: Move | Enter: Select | Tab: Next panel | ?: Keymap"
 	case domain.FocusPRListPanel:
-		return "j/k: Navigate | h/l: Tab | Enter: Open detailed view | o: Open browser | R: Refresh | Tab: Next panel | Ctrl+P: Jump to PR/Repository"
+		return "j/k: Navigate | h/l: Tab | Enter: Open | Tab: Next panel | ?: Keymap"
 	case domain.FocusPreviewPanel:
-		return "j/k: Scroll | Enter: Open detailed view | o: Open browser | R: Refresh | Tab: Next panel"
+		return "j/k: Scroll | Enter: Open | Tab: Next panel | ?: Keymap"
 	case domain.FocusCmdPalette:
 		return "Esc: Close | Enter: Run"
 	default:
-		return "Tab: Next panel | Ctrl+P: Search"
+		return "Tab: Next panel | ?: Keymap"
 	}
 }
 

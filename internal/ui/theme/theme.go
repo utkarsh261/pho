@@ -91,6 +91,10 @@ type Theme struct {
 	BoxGlyphDraft  lipgloss.Style // border  — draft PR
 	BoxPRNum       lipgloss.Style // cyan + bold for #1234
 	BoxPRAuthor    lipgloss.Style // muted for @author
+
+	// Keymap overlay styles
+	Keycap       lipgloss.Style // subtle bg + secondary fg key badge
+	KeymapHeader lipgloss.Style // bold primary for category headers
 }
 
 // Default constructs a Theme with the standard "Terminal Workshop" palette.
@@ -248,6 +252,15 @@ func Default() *Theme {
 	t.BoxGlyphDraft = lipgloss.NewStyle().Foreground(t.Border)
 	t.BoxPRNum = lipgloss.NewStyle().Foreground(t.Secondary).Bold(true)
 	t.BoxPRAuthor = lipgloss.NewStyle().Foreground(t.Muted)
+
+	// Keymap overlay.
+	t.Keycap = lipgloss.NewStyle().
+		Foreground(t.Secondary).
+		Bold(true)
+
+	t.KeymapHeader = lipgloss.NewStyle().
+		Bold(true).
+		Foreground(t.Primary)
 
 	return t
 }

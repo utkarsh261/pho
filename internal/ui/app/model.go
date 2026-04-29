@@ -16,6 +16,7 @@ import (
 	achdashboard "github.com/utkarsh261/pho/internal/application/dashboard"
 	"github.com/utkarsh261/pho/internal/domain"
 	gitlog "github.com/utkarsh261/pho/internal/log"
+	"github.com/utkarsh261/pho/internal/ui/components/keymapoverlay"
 	"github.com/utkarsh261/pho/internal/ui/components/overlay"
 	"github.com/utkarsh261/pho/internal/ui/keymap"
 	"github.com/utkarsh261/pho/internal/ui/layout"
@@ -71,8 +72,9 @@ type Model struct {
 	repoPanel *dashboard.RepoPanelModel
 	prList    *dashboard.PRListPanelModel
 	preview   *dashboard.PreviewPanelModel
-	status    *dashboard.StatusBarModel
-	palette   overlay.Model
+	status        *dashboard.StatusBarModel
+	palette       overlay.Model
+	keymapOverlay keymapoverlay.Model
 
 	focus         domain.FocusTarget
 	previousFocus domain.FocusTarget
@@ -127,6 +129,7 @@ func NewModel(deps Dependencies) *Model {
 		preview:           dashboard.NewPreviewPanelModel(),
 		status:            dashboard.NewStatusBarModel(),
 		palette:           overlay.NewModel(deps.Search),
+		keymapOverlay:     keymapoverlay.NewModel(),
 		focus:             domain.FocusRepoPanel,
 		previousFocus:     domain.FocusRepoPanel,
 		state: domain.AppState{
@@ -168,6 +171,7 @@ func (m *Model) SetTheme(th *theme.Theme) {
 	m.preview.SetTheme(th)
 	m.status.SetTheme(th)
 	m.palette.SetTheme(th)
+	m.keymapOverlay.SetTheme(th)
 }
 
 // SetFocus changes the focused panel.
@@ -290,6 +294,8 @@ func (m *Model) View() string {
 	if m.state.Search.OverlayOpen {
 		return m.palette.ViewOver(m.renderDashboard())
 	}
+
+	var bg string
 	switch m.currentView() {
 	case domain.PrimaryViewPRDetail:
 		if m.prDetail != nil {
@@ -299,17 +305,23 @@ func (m *Model) View() string {
 			body := m.prDetail.View()
 			status := m.status.View()
 			if strings.TrimSpace(body) == "" {
-				return status
+				bg = status
+			} else if strings.TrimSpace(status) == "" {
+				bg = body
+			} else {
+				bg = body + "\n" + status
 			}
-			if strings.TrimSpace(status) == "" {
-				return body
-			}
-			return body + "\n" + status
+		} else {
+			bg = m.renderDashboard()
 		}
-		return m.renderDashboard()
 	default:
-		return m.renderDashboard()
+		bg = m.renderDashboard()
 	}
+
+	if m.keymapOverlay.Visible {
+		return m.keymapOverlay.ViewOver(bg)
+	}
+	return bg
 }
 
 func (m *Model) State() domain.AppState {
@@ -364,6 +376,12 @@ func (m *Model) Layout() layout.LayoutState {
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.logDebug("key", "key", msg.String(), "view", string(m.currentView()), "focus", string(m.focus))
 
+	// Keymap overlay takes priority when visible.
+	if m.keymapOverlay.Visible {
+		m.keymapOverlay, _ = m.keymapOverlay.Update(msg)
+		return m, nil
+	}
+
 	// keymap.Dispatch is a dashboard-scoped concern. It understands the four
 	// dashboard focus targets (repo panel, PR list, preview, command palette)
 	// and maps keys to typed Actions that the root model then executes.
@@ -380,6 +398,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// handling, so the right move is to forward directly and skip the
 	// dashboard dispatcher altogether.
 	if m.currentView() == domain.PrimaryViewPRDetail {
+		if msg.String() == "?" {
+			return m, m.toggleKeymapOverlay()
+		}
 		return m, m.forwardKey(msg)
 	}
 
@@ -411,9 +432,28 @@ func (m *Model) handleRootAction(action keymap.Action) tea.Cmd {
 		return tea.Quit
 	case keymap.OpenDashboardFilter:
 		return nil
+	case keymap.ToggleKeymapOverlay:
+		return m.toggleKeymapOverlay()
 	default:
 		return nil
 	}
+}
+
+func (m *Model) toggleKeymapOverlay() tea.Cmd {
+	if m.keymapOverlay.Visible {
+		m.keymapOverlay.Visible = false
+		return nil
+	}
+	ctx := keymapoverlay.Context{
+		View:  m.currentView(),
+		Focus: m.focus,
+	}
+	if m.currentView() == domain.PrimaryViewPRDetail && m.prDetail != nil {
+		ctx.Tab = m.prDetail.ActiveTab()
+	}
+	m.keymapOverlay.Groups = keymapoverlay.BuildBindings(ctx)
+	m.keymapOverlay.Visible = true
+	return nil
 }
 
 func (m *Model) forwardKey(msg tea.KeyMsg) tea.Cmd {
@@ -1028,6 +1068,7 @@ func (m *Model) applyWindowSize(msg tea.WindowSizeMsg) {
 	m.preview.SetRect(m.layout.Current.Preview, bodyH-2)
 	m.status.SetRect(m.layout.Current.Width)
 	m.palette, _ = m.palette.Update(msg)
+	m.keymapOverlay.SetSize(msg.Width, msg.Height)
 	m.syncPaletteStats()
 	m.syncStatus()
 }
@@ -1366,7 +1407,7 @@ func batch(cmdsOut ...tea.Cmd) tea.Cmd {
 
 func isRootAction(action keymap.Action) bool {
 	switch action.(type) {
-	case keymap.ToggleCmdPalette, keymap.CloseCmdPalette, keymap.CycleFocus, keymap.TriggerRefresh, keymap.OpenBrowser, keymap.OpenPRDetail, keymap.SelectPR, keymap.Quit, keymap.OpenDashboardFilter:
+	case keymap.ToggleCmdPalette, keymap.CloseCmdPalette, keymap.CycleFocus, keymap.TriggerRefresh, keymap.OpenBrowser, keymap.OpenPRDetail, keymap.SelectPR, keymap.Quit, keymap.OpenDashboardFilter, keymap.ToggleKeymapOverlay:
 		return true
 	default:
 		return false

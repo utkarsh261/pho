@@ -405,8 +405,8 @@ func TestStatusHintWithDrafts(t *testing.T) {
 	m := makeInlineReviewModel(100, 40)
 	m.drafts = []domain.DraftInlineComment{{Body: "draft"}}
 	hint := m.StatusHint()
-	if !contains(hint, "D: Discard all drafts") {
-		t.Errorf("expected hint to contain 'D: Discard all drafts', got %q", hint)
+	if !contains(hint, "D: Discard drafts") {
+		t.Errorf("expected hint to contain 'D: Discard drafts', got %q", hint)
 	}
 }
 

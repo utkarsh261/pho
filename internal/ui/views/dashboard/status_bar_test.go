@@ -23,8 +23,6 @@ func TestStatusBarFocusLoadingAndAuthError(t *testing.T) {
 	view := m.View()
 	for _, want := range []string{
 		"j/k: Navigate",
-		"o: Open browser",
-		"R: Refresh",
 		"Tab: Next panel",
 		"stale",
 		"auth:",

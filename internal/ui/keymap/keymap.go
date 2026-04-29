@@ -72,6 +72,8 @@ func dispatchGlobal(msg tea.KeyMsg) Result {
 			return Result{Action: OpenDashboardFilter{}}
 		case 'R':
 			return Result{Action: TriggerRefresh{}}
+		case '?':
+			return Result{Action: ToggleKeymapOverlay{}}
 		}
 	}
 	return Result{}
@@ -102,6 +104,8 @@ func dispatchRepoPanel(msg tea.KeyMsg) Result {
 			return Result{Action: OpenDashboardFilter{}}
 		case 'R':
 			return Result{Action: TriggerRefresh{}}
+		case '?':
+			return Result{Action: ToggleKeymapOverlay{}}
 		}
 	}
 	return dispatchGlobal(msg)
@@ -138,6 +142,8 @@ func dispatchPRListPanel(msg tea.KeyMsg) Result {
 			return Result{Action: OpenDashboardFilter{}}
 		case 'R':
 			return Result{Action: TriggerRefresh{}}
+		case '?':
+			return Result{Action: ToggleKeymapOverlay{}}
 		}
 	}
 	return dispatchGlobal(msg)
@@ -170,6 +176,8 @@ func dispatchPreviewPanel(msg tea.KeyMsg) Result {
 			return Result{Action: OpenDashboardFilter{}}
 		case 'R':
 			return Result{Action: TriggerRefresh{}}
+		case '?':
+			return Result{Action: ToggleKeymapOverlay{}}
 		}
 	}
 	return dispatchGlobal(msg)
@@ -291,3 +299,7 @@ func (OpenPRDetail) isAction() {}
 type Quit struct{}
 
 func (Quit) isAction() {}
+
+type ToggleKeymapOverlay struct{}
+
+func (ToggleKeymapOverlay) isAction() {}

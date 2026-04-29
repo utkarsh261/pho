@@ -66,11 +66,11 @@ func (m *PRDetailModel) contentViewportHeight() int {
 	return max(innerH-2, 1)
 }
 
-// contentTab identifies the active tab in the right content panel.
-type contentTab int
+// ContentTab identifies the active tab in the right content panel.
+type ContentTab int
 
 const (
-	TabDescription contentTab = iota
+	TabDescription ContentTab = iota
 	TabDiff
 	TabComments
 )
@@ -145,7 +145,7 @@ type PRDetailModel struct {
 	cachedBodyHeight int
 
 	// Content tabs
-	activeTab      contentTab
+	activeTab      ContentTab
 	descScroll     int
 	diffScroll     int
 	commentsScroll int
@@ -744,7 +744,7 @@ func (m *PRDetailModel) renderSectionTabs() string {
 	}
 
 	type tabDef struct {
-		num  contentTab
+		num  ContentTab
 		key  string
 		name string
 	}
@@ -1684,7 +1684,7 @@ func (m *PRDetailModel) ciVisibleRows() int {
 }
 
 // switchTab changes the active content tab, saving and restoring per-tab scroll.
-func (m *PRDetailModel) switchTab(tab contentTab) {
+func (m *PRDetailModel) switchTab(tab ContentTab) {
 	if m.activeTab == tab {
 		return
 	}
@@ -2194,6 +2194,9 @@ func (m *PRDetailModel) isInDiffSection() bool {
 // IsDiffTabActive reports whether the Diff tab is currently active.
 func (m *PRDetailModel) IsDiffTabActive() bool { return m.activeTab == TabDiff }
 
+// ActiveTab returns the currently active content tab.
+func (m *PRDetailModel) ActiveTab() ContentTab { return m.activeTab }
+
 // generateDraftID creates a simple unique ID for a draft comment.
 func generateDraftID() string {
 	return fmt.Sprintf("draft-%d-%d", time.Now().UnixNano(), rand.Intn(10000))
@@ -2220,9 +2223,9 @@ func (m *PRDetailModel) StatusHint() string {
 	if m.mergeErr != "" {
 		return m.mergeErr
 	}
-	hint := "Tab: Switch Panel | Space: Visual | 1/2/3: Switch tab | R: Refresh | v: Review | C: Comment | a: Approve | m: Merge | /: Search in Diff"
+	hint := "Tab: Switch | Space: Visual | 1/2/3: Tabs | R: Refresh | /: Search | ?"
 	if len(m.drafts) > 0 {
-		hint += " | D: Discard all drafts"
+		hint = "Tab: Switch | Space: Visual | 1/2/3: Tabs | R: Refresh | /: Search | D: Discard drafts | ?"
 	}
 	return hint
 }
