@@ -67,7 +67,7 @@ type Theme struct {
 	TabInactive lipgloss.Style // muted text + padding
 
 	// ── status bar ─────────────────────────────────────────────────
-	StatusHelp    lipgloss.Style // muted + faint
+	StatusHelp    lipgloss.Style // light gray, readable but not attention-grabbing
 	StatusLoading lipgloss.Style // warning
 	StatusStale   lipgloss.Style // warning
 	StatusError   lipgloss.Style // error + bold
@@ -195,8 +195,7 @@ func Default() *Theme {
 
 	// Status bar.
 	t.StatusHelp = lipgloss.NewStyle().
-		Foreground(t.Muted).
-		Faint(true)
+		Foreground(lipgloss.Color("#9CA3AF"))
 
 	t.StatusLoading = lipgloss.NewStyle().
 		Foreground(t.Warning)
