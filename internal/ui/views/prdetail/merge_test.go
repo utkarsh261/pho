@@ -52,6 +52,8 @@ func (s *mergePRService) CheckMergeable(ctx context.Context, repo domain.Reposit
 	}
 	return domain.MergeableState{}, nil
 }
+func (s *mergePRService) ClosePR(_ context.Context, _ domain.Repository, _ int, _ string) error  { return nil }
+func (s *mergePRService) ReopenPR(_ context.Context, _ domain.Repository, _ int, _ string) error { return nil }
 
 func newMergeModel(mergeable, mergeState string) *PRDetailModel {
 	repo := testutil.Repo("acme/api")

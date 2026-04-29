@@ -159,6 +159,34 @@ func (s *PRService) MergePR(ctx context.Context, repo domain.Repository, number 
 	return nil
 }
 
+// ClosePR closes a PR and invalidates related caches.
+func (s *PRService) ClosePR(ctx context.Context, repo domain.Repository, number int, prID string) error {
+	s.logDebug("close pr", "repo", repo.FullName, "number", number)
+	if err := s.Client.ClosePullRequest(ctx, repo.Host, prID); err != nil {
+		s.logWarn("close pr failed", "repo", repo.FullName, "number", number, "err", err)
+		return err
+	}
+	previewKey := previewCacheKey(repo.Host, repoFullName(repo), number)
+	if delErr := s.Cache.Delete(ctx, previewKey); delErr != nil {
+		s.logWarn("close pr cache delete failed", "key", previewKey, "err", delErr)
+	}
+	return nil
+}
+
+// ReopenPR reopens a closed PR and invalidates related caches.
+func (s *PRService) ReopenPR(ctx context.Context, repo domain.Repository, number int, prID string) error {
+	s.logDebug("reopen pr", "repo", repo.FullName, "number", number)
+	if err := s.Client.ReopenPullRequest(ctx, repo.Host, prID); err != nil {
+		s.logWarn("reopen pr failed", "repo", repo.FullName, "number", number, "err", err)
+		return err
+	}
+	previewKey := previewCacheKey(repo.Host, repoFullName(repo), number)
+	if delErr := s.Cache.Delete(ctx, previewKey); delErr != nil {
+		s.logWarn("reopen pr cache delete failed", "key", previewKey, "err", delErr)
+	}
+	return nil
+}
+
 // SaveDraftComments persists draft inline comments for a PR.
 func (s *PRService) SaveDraftComments(ctx context.Context, repo domain.Repository, number int, headSHA string, drafts []domain.DraftInlineComment) error {
 	key := draftInlineCacheKey(repo.Host, repoFullName(repo), number, headSHA)

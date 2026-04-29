@@ -471,6 +471,8 @@ func (s *prService) MergePR(_ context.Context, _ domain.Repository, _ int, _, _,
 func (s *prService) CheckMergeable(_ context.Context, _ domain.Repository, _ int) (domain.MergeableState, error) {
 	return domain.MergeableState{}, nil
 }
+func (s *prService) ClosePR(_ context.Context, _ domain.Repository, _ int, _ string) error  { return nil }
+func (s *prService) ReopenPR(_ context.Context, _ domain.Repository, _ int, _ string) error { return nil }
 
 func splitRepo(full string) (string, string, bool) {
 	for i := 0; i < len(full); i++ {

@@ -42,6 +42,28 @@ func buildMergePullRequestMutation() string {
 }`
 }
 
+func buildClosePullRequestMutation() string {
+	return `mutation ClosePullRequest($pullRequestId: ID!) {
+  closePullRequest(input: {pullRequestId: $pullRequestId}) {
+    pullRequest {
+      id
+      state
+    }
+  }
+}`
+}
+
+func buildReopenPullRequestMutation() string {
+	return `mutation ReopenPullRequest($pullRequestId: ID!) {
+  reopenPullRequest(input: {pullRequestId: $pullRequestId}) {
+    pullRequest {
+      id
+      state
+    }
+  }
+}`
+}
+
 func buildCheckMergeableQuery() string {
 	return `query CheckMergeable($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {

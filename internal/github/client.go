@@ -24,4 +24,8 @@ type GitHubClient interface {
 	MergePullRequest(ctx context.Context, host, pullRequestID, expectedHeadOid, mergeMethod string) error
 	// CheckMergeable fetches fresh mergeability state for a PR.
 	CheckMergeable(ctx context.Context, repo domain.Repository, number int) (domain.MergeableState, error)
+	// ClosePullRequest closes a PR.
+	ClosePullRequest(ctx context.Context, host, pullRequestID string) error
+	// ReopenPullRequest reopens a closed PR.
+	ReopenPullRequest(ctx context.Context, host, pullRequestID string) error
 }

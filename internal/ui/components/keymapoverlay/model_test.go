@@ -213,7 +213,7 @@ func TestBuildBindings_PRDetailHasSearchGroup(t *testing.T) {
 }
 
 func TestBuildBindings_PRDetailHasDiscardDrafts(t *testing.T) {
-	groups := BuildBindings(Context{View: domain.PrimaryViewPRDetail, Focus: domain.FocusPRDetail, Tab: prdetail.TabDiff})
+	groups := BuildBindings(Context{View: domain.PrimaryViewPRDetail, Focus: domain.FocusPRDetail, Tab: prdetail.TabDiff, DraftCount: 3})
 	for _, g := range groups {
 		if g.Name == "Actions" {
 			found := false
@@ -224,6 +224,63 @@ func TestBuildBindings_PRDetailHasDiscardDrafts(t *testing.T) {
 			}
 			if !found {
 				t.Fatal("expected Actions group to contain D: Discard all drafts")
+			}
+		}
+	}
+}
+
+func TestBuildBindings_PRDetailOmitsDiscardWhenNoDrafts(t *testing.T) {
+	groups := BuildBindings(Context{View: domain.PrimaryViewPRDetail, Focus: domain.FocusPRDetail, Tab: prdetail.TabDiff, DraftCount: 0})
+	for _, g := range groups {
+		if g.Name == "Actions" {
+			for _, b := range g.Bindings {
+				if b.Key == "D" {
+					t.Fatal("expected Actions group to omit D when no drafts")
+				}
+			}
+		}
+	}
+}
+
+func TestBuildBindings_PRDetailContextualX(t *testing.T) {
+	openGroups := BuildBindings(Context{View: domain.PrimaryViewPRDetail, Focus: domain.FocusPRDetail, Tab: prdetail.TabDiff, PRState: domain.PRStateOpen})
+	closedGroups := BuildBindings(Context{View: domain.PrimaryViewPRDetail, Focus: domain.FocusPRDetail, Tab: prdetail.TabDiff, PRState: domain.PRStateClosed})
+	mergedGroups := BuildBindings(Context{View: domain.PrimaryViewPRDetail, Focus: domain.FocusPRDetail, Tab: prdetail.TabDiff, PRState: domain.PRStateMerged})
+
+	for _, g := range openGroups {
+		if g.Name == "Actions" {
+			found := false
+			for _, b := range g.Bindings {
+				if b.Key == "x" && b.Description == "Close" {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatal("expected x: Close for open PR")
+			}
+		}
+	}
+
+	for _, g := range closedGroups {
+		if g.Name == "Actions" {
+			found := false
+			for _, b := range g.Bindings {
+				if b.Key == "x" && b.Description == "Reopen" {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatal("expected x: Reopen for closed PR")
+			}
+		}
+	}
+
+	for _, g := range mergedGroups {
+		if g.Name == "Actions" {
+			for _, b := range g.Bindings {
+				if b.Key == "x" {
+					t.Fatal("expected no x binding for merged PR")
+				}
 			}
 		}
 	}

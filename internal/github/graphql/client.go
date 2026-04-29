@@ -172,6 +172,26 @@ func (c *Client) CheckMergeable(ctx context.Context, repo domain.Repository, num
 	}, nil
 }
 
+// ClosePullRequest closes a PR.
+func (c *Client) ClosePullRequest(ctx context.Context, host, pullRequestID string) error {
+	_, err := queryGraphQL[model.PullRequestStateData](c, ctx, host, func(_ githubpkg.GitHubHostProfile) string {
+		return buildClosePullRequestMutation()
+	}, map[string]any{
+		"pullRequestId": pullRequestID,
+	})
+	return err
+}
+
+// ReopenPullRequest reopens a closed PR.
+func (c *Client) ReopenPullRequest(ctx context.Context, host, pullRequestID string) error {
+	_, err := queryGraphQL[model.PullRequestStateData](c, ctx, host, func(_ githubpkg.GitHubHostProfile) string {
+		return buildReopenPullRequestMutation()
+	}, map[string]any{
+		"pullRequestId": pullRequestID,
+	})
+	return err
+}
+
 // FetchViewer resolves the current viewer login for a host.
 func (c *Client) FetchViewer(ctx context.Context, host string) (string, error) {
 	c.log.Debug("fetch viewer", "host", host)

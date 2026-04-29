@@ -447,3 +447,5 @@ func (s *prServiceStub) MergePR(_ context.Context, _ domain.Repository, _ int, _
 func (s *prServiceStub) CheckMergeable(_ context.Context, _ domain.Repository, _ int) (domain.MergeableState, error) {
 	return domain.MergeableState{}, nil
 }
+func (s *prServiceStub) ClosePR(_ context.Context, _ domain.Repository, _ int, _ string) error  { return nil }
+func (s *prServiceStub) ReopenPR(_ context.Context, _ domain.Repository, _ int, _ string) error { return nil }

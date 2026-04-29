@@ -180,6 +180,11 @@ type PRDetailModel struct {
 	mergeErr    string
 	mergeRepo   domain.Repository
 	mergePRID   string
+
+	// Close/reopen flow state
+	closeStep   closeStep
+	closeTarget string // "CLOSE" or "REOPEN"
+	closeErr    string
 }
 
 // mergeStep tracks the PR merge workflow state.
@@ -191,6 +196,15 @@ const (
 	mergeStepConfirm
 	mergeStepChecking
 	mergeStepExecuting
+)
+
+// closeStep tracks the close/reopen workflow state.
+type closeStep int
+
+const (
+	closeStepNone closeStep = iota
+	closeStepConfirm
+	closeStepExecuting
 )
 
 // hunkLineKey identifies a specific line within a hunk for draft highlighting.
@@ -497,6 +511,25 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 			m.Detail.State = "MERGED"
 		}
 		// Refresh detail to show merged state.
+		var refreshCmd tea.Cmd
+		if m.PRService != nil {
+			refreshCmd = cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true)
+		}
+		return m, tea.Batch(spinCmd, composeCmd, refreshCmd)
+
+	case cmds.PRStateChangedMsg:
+		if m.closeStep != closeStepExecuting {
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		m.closeStep = closeStepNone
+		if msg.Err != nil {
+			m.closeErr = "Failed: " + msg.Err.Error()
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		m.closeErr = ""
+		if m.Detail != nil {
+			m.Detail.State = msg.NewState
+		}
 		var refreshCmd tea.Cmd
 		if m.PRService != nil {
 			refreshCmd = cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true)
@@ -1249,6 +1282,11 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		return m, nil
 	}
 
+	// Close/reopen flow state machine.
+	if cmd := m.handleCloseKey(msg); cmd != nil {
+		return m, cmd
+	}
+
 	// Merge flow state machine.
 	if cmd := m.handleMergeKey(msg); cmd != nil {
 		return m, cmd
@@ -1273,6 +1311,8 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		}
 	case "q":
 		return m, m.emitBackToDashboard()
+	case "x":
+		return m, m.handleCloseStart()
 	case "R":
 		return m.handleRefresh()
 	case "C":
@@ -2197,6 +2237,9 @@ func (m *PRDetailModel) IsDiffTabActive() bool { return m.activeTab == TabDiff }
 // ActiveTab returns the currently active content tab.
 func (m *PRDetailModel) ActiveTab() ContentTab { return m.activeTab }
 
+// DraftCount returns the number of pending draft inline comments.
+func (m *PRDetailModel) DraftCount() int { return len(m.drafts) }
+
 // generateDraftID creates a simple unique ID for a draft comment.
 func generateDraftID() string {
 	return fmt.Sprintf("draft-%d-%d", time.Now().UnixNano(), rand.Intn(10000))
@@ -2222,6 +2265,22 @@ func (m *PRDetailModel) StatusHint() string {
 	}
 	if m.mergeErr != "" {
 		return m.mergeErr
+	}
+	switch m.closeStep {
+	case closeStepConfirm:
+		action := "Close"
+		if m.closeTarget == "REOPEN" {
+			action = "Reopen"
+		}
+		return fmt.Sprintf("%s #%d? (y/n)", action, m.Summary.Number)
+	case closeStepExecuting:
+		if m.closeTarget == "CLOSE" {
+			return "Closing..."
+		}
+		return "Reopening..."
+	}
+	if m.closeErr != "" {
+		return m.closeErr
 	}
 	hint := "Tab: Switch | Space: Visual | 1/2/3: Tabs | R: Refresh | /: Search | ?"
 	if len(m.drafts) > 0 {
@@ -2299,6 +2358,64 @@ func (m *PRDetailModel) resetMergeFlow() {
 	m.mergeStep = mergeStepNone
 	m.mergeMethod = ""
 	m.mergeErr = ""
+}
+
+// handleCloseStart initiates the close/reopen flow when x is pressed.
+func (m *PRDetailModel) handleCloseStart() tea.Cmd {
+	if m.PRService == nil {
+		return nil
+	}
+	if m.Detail == nil {
+		return nil
+	}
+	state := m.Detail.State
+	if state == domain.PRStateMerged {
+		m.closeErr = "Merged PRs cannot be closed"
+		return nil
+	}
+	m.closeErr = ""
+	if state == domain.PRStateOpen {
+		m.closeTarget = "CLOSE"
+	} else {
+		m.closeTarget = "REOPEN"
+	}
+	m.closeStep = closeStepConfirm
+	return nil
+}
+
+// handleCloseKey routes keys when the close/reopen flow is active.
+func (m *PRDetailModel) handleCloseKey(msg tea.KeyMsg) tea.Cmd {
+	switch m.closeStep {
+	case closeStepConfirm:
+		switch msg.String() {
+		case "y":
+			m.closeStep = closeStepExecuting
+			if m.closeTarget == "CLOSE" {
+				return cmds.ClosePRCmd(m.PRService, m.Repo, m.Summary.Number, m.Summary.ID)
+			}
+			return cmds.ReopenPRCmd(m.PRService, m.Repo, m.Summary.Number, m.Summary.ID)
+		case "n", "esc":
+			m.resetCloseFlow()
+		}
+		return func() tea.Msg { return nil }
+	case closeStepExecuting:
+		return func() tea.Msg { return nil }
+	case closeStepNone:
+		if msg.String() == "x" {
+			m.handleCloseStart()
+			return func() tea.Msg { return nil }
+		}
+		if m.closeErr != "" {
+			m.closeErr = ""
+		}
+	}
+	return nil
+}
+
+func (m *PRDetailModel) resetCloseFlow() {
+	m.closeStep = closeStepNone
+	m.closeTarget = ""
+	m.closeErr = ""
 }
 
 func humanizeMergeState(state string) string {

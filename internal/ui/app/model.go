@@ -256,14 +256,23 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		return m, nil
-	case cmds.MergeableChecked, cmds.MergePRMsg:
+	case cmds.MergeableChecked, cmds.MergePRMsg, cmds.PRStateChangedMsg:
 		if m.prDetail != nil {
 			next, cmd := m.prDetail.Update(msg)
 			m.prDetail = next
 			m.syncStatus()
-			if mergeMsg, ok := msg.(cmds.MergePRMsg); ok && mergeMsg.Err == nil {
-				if repo, ok := m.findRepoByFullName(mergeMsg.Repo); ok && m.deps.Dashboard != nil {
-					_ = m.deps.Dashboard.InvalidateRepo(context.Background(), repo)
+			switch stateMsg := msg.(type) {
+			case cmds.MergePRMsg:
+				if stateMsg.Err == nil {
+					if repo, ok := m.findRepoByFullName(stateMsg.Repo); ok && m.deps.Dashboard != nil {
+						_ = m.deps.Dashboard.InvalidateRepo(context.Background(), repo)
+					}
+				}
+			case cmds.PRStateChangedMsg:
+				if stateMsg.Err == nil {
+					if repo, ok := m.findRepoByFullName(stateMsg.Repo); ok && m.deps.Dashboard != nil {
+						_ = m.deps.Dashboard.InvalidateRepo(context.Background(), repo)
+					}
 				}
 			}
 			return m, cmd
@@ -450,6 +459,10 @@ func (m *Model) toggleKeymapOverlay() tea.Cmd {
 	}
 	if m.currentView() == domain.PrimaryViewPRDetail && m.prDetail != nil {
 		ctx.Tab = m.prDetail.ActiveTab()
+		if m.prDetail.Detail != nil {
+			ctx.PRState = m.prDetail.Detail.State
+		}
+		ctx.DraftCount = m.prDetail.DraftCount()
 	}
 	m.keymapOverlay.Groups = keymapoverlay.BuildBindings(ctx)
 	m.keymapOverlay.Visible = true

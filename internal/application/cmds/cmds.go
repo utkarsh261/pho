@@ -42,6 +42,8 @@ type PRService interface {
 	DeleteDraftComments(ctx context.Context, repo domain.Repository, number int, headSHA string) error
 	MergePR(ctx context.Context, repo domain.Repository, number int, prID string, headRefOID string, method string) error
 	CheckMergeable(ctx context.Context, repo domain.Repository, number int) (domain.MergeableState, error)
+	ClosePR(ctx context.Context, repo domain.Repository, number int, prID string) error
+	ReopenPR(ctx context.Context, repo domain.Repository, number int, prID string) error
 }
 
 type PRDetailLoaded struct {
@@ -140,6 +142,14 @@ type MergePRMsg struct {
 	Number int
 	Method string
 	Err    error
+}
+
+// PRStateChangedMsg is emitted when a close or reopen mutation completes.
+type PRStateChangedMsg struct {
+	Repo     string
+	Number   int
+	NewState domain.PRState
+	Err      error
 }
 
 type RefreshStarted struct {
@@ -313,5 +323,23 @@ func MergePRCmd(svc PRService, repo domain.Repository, number int, prID string, 
 			return MergePRMsg{Repo: repoKey(repo), Number: number, Method: method, Err: err}
 		}
 		return MergePRMsg{Repo: repoKey(repo), Number: number, Method: method}
+	}
+}
+
+func ClosePRCmd(svc PRService, repo domain.Repository, number int, prID string) tea.Cmd {
+	return func() tea.Msg {
+		if err := svc.ClosePR(context.Background(), repo, number, prID); err != nil {
+			return PRStateChangedMsg{Repo: repoKey(repo), Number: number, NewState: domain.PRStateClosed, Err: err}
+		}
+		return PRStateChangedMsg{Repo: repoKey(repo), Number: number, NewState: domain.PRStateClosed}
+	}
+}
+
+func ReopenPRCmd(svc PRService, repo domain.Repository, number int, prID string) tea.Cmd {
+	return func() tea.Msg {
+		if err := svc.ReopenPR(context.Background(), repo, number, prID); err != nil {
+			return PRStateChangedMsg{Repo: repoKey(repo), Number: number, NewState: domain.PRStateOpen, Err: err}
+		}
+		return PRStateChangedMsg{Repo: repoKey(repo), Number: number, NewState: domain.PRStateOpen}
 	}
 }

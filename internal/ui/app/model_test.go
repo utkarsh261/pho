@@ -183,6 +183,8 @@ func (s *stubPRService) MergePR(_ context.Context, _ domain.Repository, _ int, _
 func (s *stubPRService) CheckMergeable(_ context.Context, _ domain.Repository, _ int) (domain.MergeableState, error) {
 	return domain.MergeableState{}, nil
 }
+func (s *stubPRService) ClosePR(_ context.Context, _ domain.Repository, _ int, _ string) error  { return nil }
+func (s *stubPRService) ReopenPR(_ context.Context, _ domain.Repository, _ int, _ string) error { return nil }
 
 func TestColdStartThenDashboardLoadedPopulates(t *testing.T) {
 	t.Parallel()

@@ -34,9 +34,11 @@ type Group struct {
 
 // Context describes the UI state used to select bindings.
 type Context struct {
-	View  domain.PrimaryView
-	Focus domain.FocusTarget
-	Tab   prdetail.ContentTab // only meaningful when View == PRDetail
+	View       domain.PrimaryView
+	Focus      domain.FocusTarget
+	Tab        prdetail.ContentTab // only meaningful when View == PRDetail
+	PRState    domain.PRState      // only meaningful when View == PRDetail
+	DraftCount int                 // only meaningful when View == PRDetail
 }
 
 // Model is the keymap overlay state.
@@ -354,16 +356,26 @@ func buildPRDetailBindings(ctx Context) []Group {
 		},
 		{
 			Name: "Actions",
-			Bindings: []Binding{
-				{Key: "o", Description: "Open in browser"},
-				{Key: "R", Description: "Refresh"},
-				{Key: "C", Description: "Comment"},
-				{Key: "a", Description: "Approve"},
-				{Key: "v", Description: "Review"},
-				{Key: "m", Description: "Merge"},
-				{Key: "D", Description: "Discard all drafts"},
-				{Key: "esc / q", Description: "Back to dashboard"},
-			},
+			Bindings: func() []Binding {
+				b := []Binding{
+					{Key: "o", Description: "Open in browser"},
+					{Key: "R", Description: "Refresh"},
+					{Key: "C", Description: "Comment"},
+					{Key: "a", Description: "Approve"},
+					{Key: "v", Description: "Review"},
+					{Key: "m", Description: "Merge"},
+				}
+				if ctx.PRState == domain.PRStateOpen {
+					b = append(b, Binding{Key: "x", Description: "Close"})
+				} else if ctx.PRState == domain.PRStateClosed {
+					b = append(b, Binding{Key: "x", Description: "Reopen"})
+				}
+				if ctx.DraftCount > 0 {
+					b = append(b, Binding{Key: "D", Description: "Discard all drafts"})
+				}
+				b = append(b, Binding{Key: "esc / q", Description: "Back to dashboard"})
+				return b
+			}(),
 		},
 		{
 			Name: "Search",

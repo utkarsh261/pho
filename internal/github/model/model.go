@@ -62,10 +62,26 @@ type AddPullRequestReviewData struct {
 type MergePullRequestData struct {
 	MergePullRequest struct {
 		PullRequest struct {
-			ID    string `json:"id"`
-			State string `json:"state"`
-		} `json:"pullRequest"`
-	} `json:"mergePullRequest"`
+			ID    string
+			State string
+		}
+	}
+}
+
+// PullRequestStateData is the data object returned by close/reopen mutations.
+type PullRequestStateData struct {
+	ClosePullRequest struct {
+		PullRequest struct {
+			ID    string
+			State string
+		}
+	} `json:"closePullRequest"`
+	ReopenPullRequest struct {
+		PullRequest struct {
+			ID    string
+			State string
+		}
+	} `json:"reopenPullRequest"`
 }
 
 // CheckMergeableData is the data object returned by the checkMergeable query.
