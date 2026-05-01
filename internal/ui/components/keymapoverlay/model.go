@@ -353,7 +353,7 @@ func buildCommitDetailBindings() []Group {
 			Name: "Actions",
 			Bindings: []Binding{
 				{Key: "o", Description: "Open in browser"},
-				{Key: "y", Description: "Copy permalink"},
+				{Key: "y", Description: "Copy SHA"},
 				{Key: "R", Description: "Refresh"},
 				{Key: "esc / q", Description: "Back to PR detail"},
 			},

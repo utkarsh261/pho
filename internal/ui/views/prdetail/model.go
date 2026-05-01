@@ -2531,9 +2531,9 @@ func (m *PRDetailModel) StatusHint() string {
 			return fmt.Sprintf("Search: %s  (%d/%d)  | Enter: commit  | Esc: clear", m.searchQuery, m.searchCursor+1, len(m.searchMatches))
 		}
 		if m.leftPanel.Focus == FocusFiles {
-			return "j/k: Move | Enter: Jump to file | l: Focus diff | o: Open browser | q: Back"
+			return "j/k: Move | Enter: Jump | l: Focus diff | ?: Keymap"
 		}
-		return "j/k: Scroll | h: Focus files | gg/G: Top/bottom | /: Search | o: Open browser | y: Copy permalink | q: Back"
+		return "j/k: Scroll | h: Focus files | o: Open browser | y: Copy SHA | q: Back | ?: Keymap"
 	}
 	hint := "Tab: Switch | Space: Visual | 1/2/3: Tabs | R: Refresh | /: Search | ?"
 	if len(m.drafts) > 0 {
