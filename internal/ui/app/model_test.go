@@ -185,10 +185,10 @@ func (s *stubPRService) CheckMergeable(_ context.Context, _ domain.Repository, _
 }
 func (s *stubPRService) ClosePR(_ context.Context, _ domain.Repository, _ int, _ string) error  { return nil }
 func (s *stubPRService) ReopenPR(_ context.Context, _ domain.Repository, _ int, _ string) error { return nil }
-func (s *stubPRService) LoadPRCommits(_ context.Context, _ domain.Repository, _ int) ([]domain.Commit, error) {
+func (s *stubPRService) LoadPRCommits(_ context.Context, _ domain.Repository, _ int, _ bool) ([]domain.Commit, error) {
 	return nil, nil
 }
-func (s *stubPRService) LoadCommitDiff(_ context.Context, _ domain.Repository, _ string) (model.DiffModel, error) {
+func (s *stubPRService) LoadCommitDiff(_ context.Context, _ domain.Repository, _ string, _ bool) (model.DiffModel, error) {
 	return model.DiffModel{}, nil
 }
 

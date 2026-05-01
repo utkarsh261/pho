@@ -187,10 +187,10 @@ func (f *fakePRService) LoadDetail(ctx context.Context, repo domain.Repository, 
 func (f *fakePRService) LoadDiff(ctx context.Context, repo domain.Repository, number int, headSHA string, force bool) (diffmodel.DiffModel, bool, error) {
 	return diffmodel.DiffModel{}, false, nil
 }
-func (f *fakePRService) LoadPRCommits(ctx context.Context, repo domain.Repository, number int) ([]domain.Commit, error) {
+func (f *fakePRService) LoadPRCommits(ctx context.Context, repo domain.Repository, number int, force bool) ([]domain.Commit, error) {
 	return nil, nil
 }
-func (f *fakePRService) LoadCommitDiff(ctx context.Context, repo domain.Repository, sha string) (diffmodel.DiffModel, error) {
+func (f *fakePRService) LoadCommitDiff(ctx context.Context, repo domain.Repository, sha string, force bool) (diffmodel.DiffModel, error) {
 	return diffmodel.DiffModel{}, nil
 }
 func (f *fakePRService) PostComment(ctx context.Context, prID string, body string) error { return nil }

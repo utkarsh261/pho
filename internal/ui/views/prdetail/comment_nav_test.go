@@ -428,10 +428,10 @@ func (s *prServiceStub) LoadDetail(_ context.Context, _ domain.Repository, _ int
 func (s *prServiceStub) LoadDiff(_ context.Context, _ domain.Repository, _ int, _ string, _ bool) (diffmodel.DiffModel, bool, error) {
 	return diffmodel.DiffModel{}, false, nil
 }
-func (s *prServiceStub) LoadPRCommits(_ context.Context, _ domain.Repository, _ int) ([]domain.Commit, error) {
+func (s *prServiceStub) LoadPRCommits(_ context.Context, _ domain.Repository, _ int, _ bool) ([]domain.Commit, error) {
 	return nil, nil
 }
-func (s *prServiceStub) LoadCommitDiff(_ context.Context, _ domain.Repository, _ string) (diffmodel.DiffModel, error) {
+func (s *prServiceStub) LoadCommitDiff(_ context.Context, _ domain.Repository, _ string, _ bool) (diffmodel.DiffModel, error) {
 	return diffmodel.DiffModel{}, nil
 }
 func (s *prServiceStub) PostComment(_ context.Context, _, _ string) error       { return nil }

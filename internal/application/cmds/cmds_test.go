@@ -473,10 +473,10 @@ func (s *prService) CheckMergeable(_ context.Context, _ domain.Repository, _ int
 }
 func (s *prService) ClosePR(_ context.Context, _ domain.Repository, _ int, _ string) error  { return nil }
 func (s *prService) ReopenPR(_ context.Context, _ domain.Repository, _ int, _ string) error { return nil }
-func (s *prService) LoadPRCommits(_ context.Context, _ domain.Repository, _ int) ([]domain.Commit, error) {
+func (s *prService) LoadPRCommits(_ context.Context, _ domain.Repository, _ int, _ bool) ([]domain.Commit, error) {
 	return nil, nil
 }
-func (s *prService) LoadCommitDiff(_ context.Context, _ domain.Repository, _ string) (diffmodel.DiffModel, error) {
+func (s *prService) LoadCommitDiff(_ context.Context, _ domain.Repository, _ string, _ bool) (diffmodel.DiffModel, error) {
 	return diffmodel.DiffModel{}, nil
 }
 

@@ -262,10 +262,10 @@ func (s *closeReopenPRService) LoadDetail(_ context.Context, _ domain.Repository
 func (s *closeReopenPRService) LoadDiff(_ context.Context, _ domain.Repository, _ int, _ string, _ bool) (diffmodel.DiffModel, bool, error) {
 	return diffmodel.DiffModel{}, false, nil
 }
-func (s *closeReopenPRService) LoadPRCommits(_ context.Context, _ domain.Repository, _ int) ([]domain.Commit, error) {
+func (s *closeReopenPRService) LoadPRCommits(_ context.Context, _ domain.Repository, _ int, _ bool) ([]domain.Commit, error) {
 	return nil, nil
 }
-func (s *closeReopenPRService) LoadCommitDiff(_ context.Context, _ domain.Repository, _ string) (diffmodel.DiffModel, error) {
+func (s *closeReopenPRService) LoadCommitDiff(_ context.Context, _ domain.Repository, _ string, _ bool) (diffmodel.DiffModel, error) {
 	return diffmodel.DiffModel{}, nil
 }
 func (s *closeReopenPRService) PostComment(_ context.Context, _, _ string) error       { return nil }

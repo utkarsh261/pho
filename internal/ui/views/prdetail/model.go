@@ -304,7 +304,7 @@ func (m *PRDetailModel) Init() tea.Cmd {
 	if m.PRService != nil {
 		if m.CommitMode {
 			cmdsOut = append(cmdsOut,
-				cmds.LoadCommitDiffCmd(m.PRService, m.Repo, m.Commit.SHA),
+				cmds.LoadCommitDiffCmd(m.PRService, m.Repo, m.Commit.SHA, false),
 			)
 		} else {
 			headSHA := m.Summary.HeadRefOID
@@ -411,11 +411,11 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 
 	case cmds.CommitsLoaded:
 		m.commitsLoading = false
-		m.commitsLoaded = true
 		if msg.Err != nil {
 			m.commits = nil
 			return m, tea.Batch(spinCmd, composeCmd)
 		}
+		m.commitsLoaded = true
 		m.commits = msg.Commits
 		m.commitCursor = 0
 		return m, tea.Batch(spinCmd, composeCmd)
@@ -1641,7 +1641,7 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 			needLoad := !m.commitsLoaded && !m.commitsLoading && m.PRService != nil
 			m.switchTab(TabCommits)
 			if needLoad {
-				return m, cmds.LoadPRCommitsCmd(m.PRService, m.Repo, m.Summary.Number)
+				return m, cmds.LoadPRCommitsCmd(m.PRService, m.Repo, m.Summary.Number, false)
 			}
 		}
 	case "g":
@@ -2055,13 +2055,21 @@ func (m *PRDetailModel) handleRefresh() (*PRDetailModel, tea.Cmd) {
 	m.DetailLoading = true
 	m.DiffLoading = true
 	m.leftPanel.Loading = true
+	m.commits = nil
+	m.commitsLoaded = false
+	m.commitsLoading = false
 	m.searchIndex = nil
 	m.refreshSearchMatches()
 	headSHA := m.Summary.HeadRefOID
-	return m, tea.Batch(
+	cmds_ := []tea.Cmd{
 		cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true),
 		cmds.LoadDiffCmd(m.PRService, m.Repo, m.Summary.Number, headSHA, true),
-	)
+	}
+	if m.activeTab == TabCommits || m.CommitMode {
+		m.commitsLoading = true
+		cmds_ = append(cmds_, cmds.LoadPRCommitsCmd(m.PRService, m.Repo, m.Summary.Number, true))
+	}
+	return m, tea.Batch(cmds_...)
 }
 
 func (m *PRDetailModel) handleCommitRefresh() (*PRDetailModel, tea.Cmd) {
@@ -2073,7 +2081,7 @@ func (m *PRDetailModel) handleCommitRefresh() (*PRDetailModel, tea.Cmd) {
 	m.leftPanel.Loading = true
 	m.searchIndex = nil
 	m.refreshSearchMatches()
-	return m, cmds.LoadCommitDiffCmd(m.PRService, m.Repo, m.Commit.SHA)
+	return m, cmds.LoadCommitDiffCmd(m.PRService, m.Repo, m.Commit.SHA, true)
 }
 
 // ── Visual mode & draft helpers ───────────────────────────────────────────────

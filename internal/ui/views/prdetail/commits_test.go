@@ -175,10 +175,10 @@ func (f *fakePRService) LoadDetail(ctx context.Context, repo domain.Repository, 
 func (f *fakePRService) LoadDiff(ctx context.Context, repo domain.Repository, number int, headSHA string, force bool) (diffmodel.DiffModel, bool, error) {
 	return diffmodel.DiffModel{}, false, nil
 }
-func (f *fakePRService) LoadPRCommits(ctx context.Context, repo domain.Repository, number int) ([]domain.Commit, error) {
+func (f *fakePRService) LoadPRCommits(ctx context.Context, repo domain.Repository, number int, force bool) ([]domain.Commit, error) {
 	return nil, nil
 }
-func (f *fakePRService) LoadCommitDiff(ctx context.Context, repo domain.Repository, sha string) (diffmodel.DiffModel, error) {
+func (f *fakePRService) LoadCommitDiff(ctx context.Context, repo domain.Repository, sha string, force bool) (diffmodel.DiffModel, error) {
 	return diffmodel.DiffModel{}, nil
 }
 func (f *fakePRService) PostComment(ctx context.Context, prID string, body string) error { return nil }
@@ -343,5 +343,41 @@ func TestCommitsTabGoldenWidths(t *testing.T) {
 			got := stripCommitsANSI(strings.Join(lines, "\n"))
 			checkCommitsGolden(t, got, fmt.Sprintf("commits_normal_w%d.txt", w))
 		})
+	}
+}
+
+func TestHandleRefreshOnCommitsTabFiresCommitsReload(t *testing.T) {
+	t.Parallel()
+	m := makePRDetail(100, 30, nil, nil)
+	m.PRService = &fakePRService{}
+	m.SetTheme(theme.Default())
+	m.activeTab = TabCommits
+	m.commitsLoaded = true
+	m.commits = []domain.Commit{{SHA: "abc1234", MessageHeadline: "Test commit"}}
+
+	_, cmd := m.handleRefresh()
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd from handleRefresh on commits tab")
+	}
+	if !m.commitsLoading {
+		t.Fatal("expected commitsLoading=true after handleRefresh on commits tab")
+	}
+}
+
+func TestHandleCommitRefreshFiresCommitDiffReload(t *testing.T) {
+	t.Parallel()
+	m := makePRDetail(100, 30, nil, nil)
+	m.PRService = &fakePRService{}
+	m.SetTheme(theme.Default())
+	m.CommitMode = true
+	m.Commit = domain.Commit{SHA: "abc1234", MessageHeadline: "Test commit"}
+	m.Diff = &diffmodel.DiffModel{HeadSHA: "old-sha"}
+
+	_, cmd := m.handleCommitRefresh()
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd from handleCommitRefresh")
+	}
+	if !m.DiffLoading {
+		t.Fatal("expected DiffLoading=true after handleCommitRefresh")
 	}
 }

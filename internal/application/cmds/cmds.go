@@ -33,8 +33,8 @@ type SearchService interface {
 type PRService interface {
 	LoadDetail(ctx context.Context, repo domain.Repository, number int, force bool) (domain.PRPreviewSnapshot, bool, error)
 	LoadDiff(ctx context.Context, repo domain.Repository, number int, headSHA string, force bool) (model.DiffModel, bool, error)
-	LoadPRCommits(ctx context.Context, repo domain.Repository, number int) ([]domain.Commit, error)
-	LoadCommitDiff(ctx context.Context, repo domain.Repository, sha string) (model.DiffModel, error)
+	LoadPRCommits(ctx context.Context, repo domain.Repository, number int, force bool) ([]domain.Commit, error)
+	LoadCommitDiff(ctx context.Context, repo domain.Repository, sha string, force bool) (model.DiffModel, error)
 	PostComment(ctx context.Context, prID string, body string) error
 	PostReviewComment(ctx context.Context, prID string, body string) error
 	ApprovePR(ctx context.Context, prID string, body string) error
@@ -321,9 +321,9 @@ func LoadDiffCmd(svc PRService, repo domain.Repository, number int, headSHA stri
 	}
 }
 
-func LoadPRCommitsCmd(svc PRService, repo domain.Repository, number int) tea.Cmd {
+func LoadPRCommitsCmd(svc PRService, repo domain.Repository, number int, force bool) tea.Cmd {
 	return func() tea.Msg {
-		commits, err := svc.LoadPRCommits(context.Background(), repo, number)
+		commits, err := svc.LoadPRCommits(context.Background(), repo, number, force)
 		return CommitsLoaded{
 			Repo:    repoKey(repo),
 			Number:  number,
@@ -333,9 +333,9 @@ func LoadPRCommitsCmd(svc PRService, repo domain.Repository, number int) tea.Cmd
 	}
 }
 
-func LoadCommitDiffCmd(svc PRService, repo domain.Repository, sha string) tea.Cmd {
+func LoadCommitDiffCmd(svc PRService, repo domain.Repository, sha string, force bool) tea.Cmd {
 	return func() tea.Msg {
-		diff, err := svc.LoadCommitDiff(context.Background(), repo, sha)
+		diff, err := svc.LoadCommitDiff(context.Background(), repo, sha, force)
 		return CommitDiffLoaded{
 			Repo: repoKey(repo),
 			SHA:  sha,

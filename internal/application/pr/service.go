@@ -311,14 +311,17 @@ func (s *PRService) loadDiffInner(ctx context.Context, repo domain.Repository, n
 }
 
 // LoadPRCommits loads the commit list for a PR via GraphQL.
-func (s *PRService) LoadPRCommits(ctx context.Context, repo domain.Repository, number int) ([]domain.Commit, error) {
+func (s *PRService) LoadPRCommits(ctx context.Context, repo domain.Repository, number int, force bool) ([]domain.Commit, error) {
 	key := commitsCacheKey(repo.Host, repoFullName(repo), number)
 
 	var cached []domain.Commit
-	_, _, found, _ := s.Cache.StaleWhileRevalidate(ctx, key, &cached, nil)
-	if found {
-		s.logDebug("commits cache hit", "key", key, "number", number)
-		return cached, nil
+	found := false
+	if !force {
+		_, _, found, _ = s.Cache.StaleWhileRevalidate(ctx, key, &cached, nil)
+		if found {
+			s.logDebug("commits cache hit", "key", key, "number", number)
+			return cached, nil
+		}
 	}
 
 	s.logDebug("commits cache miss, fetching", "key", key, "number", number)
@@ -341,14 +344,17 @@ func (s *PRService) LoadPRCommits(ctx context.Context, repo domain.Repository, n
 }
 
 // LoadCommitDiff loads the raw diff for a single commit via REST.
-func (s *PRService) LoadCommitDiff(ctx context.Context, repo domain.Repository, sha string) (model.DiffModel, error) {
+func (s *PRService) LoadCommitDiff(ctx context.Context, repo domain.Repository, sha string, force bool) (model.DiffModel, error) {
 	key := commitDiffCacheKey(repo.Host, repoFullName(repo), sha)
 
 	var cached model.DiffModel
-	_, _, found, _ := s.Cache.StaleWhileRevalidate(ctx, key, &cached, nil)
-	if found {
-		s.logDebug("commit diff cache hit", "key", key, "sha", sha)
-		return cached, nil
+	found := false
+	if !force {
+		_, _, found, _ = s.Cache.StaleWhileRevalidate(ctx, key, &cached, nil)
+		if found {
+			s.logDebug("commit diff cache hit", "key", key, "sha", sha)
+			return cached, nil
+		}
 	}
 
 	s.logDebug("commit diff cache miss, fetching", "key", key, "sha", sha)
