@@ -166,9 +166,9 @@ func (c *Client) CheckMergeable(ctx context.Context, repo domain.Repository, num
 	}
 	pr := resp.Data.Repository.PullRequest
 	return domain.MergeableState{
-		Mergeable:      pr.Mergeable,
+		Mergeable:        pr.Mergeable,
 		MergeStateStatus: pr.MergeStateStatus,
-		HeadRefOid:     pr.HeadRefOid,
+		HeadRefOid:       pr.HeadRefOid,
 	}, nil
 }
 

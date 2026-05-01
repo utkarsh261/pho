@@ -48,11 +48,11 @@ func makePanelWithFiles(files []diffmodel.DiffFile, focus PRDetailFocus) LeftPan
 
 func makePanelWithChecks(checks []domain.PreviewCheckRow) LeftPanelModel {
 	return LeftPanelModel{
-		Files:       makeFiles("main.go"),
-		Checks:      checks,
-		Loading:     false,
-		Focus:       FocusFiles,
-		theme:       theme.Default(),
+		Files:   makeFiles("main.go"),
+		Checks:  checks,
+		Loading: false,
+		Focus:   FocusFiles,
+		theme:   theme.Default(),
 	}
 }
 
@@ -336,7 +336,7 @@ func TestLeftPanelSpinnerWhileLoading(t *testing.T) {
 	panel := LeftPanelModel{
 		Files:   files,
 		Loading: true, // diff is still loading
-		Focus:       FocusFiles,
+		Focus:   FocusFiles,
 	}
 	spinnerFrame := "⠋"
 	output := panel.View(20, spinnerFrame)
@@ -906,12 +906,12 @@ func TestCISelectionHighlight(t *testing.T) {
 		{Name: "test", State: "FAILURE"},
 	}
 	panel := LeftPanelModel{
-		Files:  makeFiles("a.go"),
-		Checks: checks,
-		Loading:     false,
-		Focus:       FocusCI,
-		CICursor:    1,
-		theme:       theme.Default(),
+		Files:    makeFiles("a.go"),
+		Checks:   checks,
+		Loading:  false,
+		Focus:    FocusCI,
+		CICursor: 1,
+		theme:    theme.Default(),
 	}
 	row := panel.renderCIRow(checks[1], 1)
 	// Selected row should have ANSI codes (ListSelected applies styling).

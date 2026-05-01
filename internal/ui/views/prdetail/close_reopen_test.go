@@ -283,12 +283,18 @@ func (s *closeReopenPRService) LoadDraftComments(_ context.Context, _ domain.Rep
 func (s *closeReopenPRService) DeleteDraftComments(_ context.Context, _ domain.Repository, _ int, _ string) error {
 	return nil
 }
-func (s *closeReopenPRService) MergePR(_ context.Context, _ domain.Repository, _ int, _, _, _ string) error { return nil }
+func (s *closeReopenPRService) MergePR(_ context.Context, _ domain.Repository, _ int, _, _, _ string) error {
+	return nil
+}
 func (s *closeReopenPRService) CheckMergeable(_ context.Context, _ domain.Repository, _ int) (domain.MergeableState, error) {
 	return domain.MergeableState{}, nil
 }
-func (s *closeReopenPRService) ClosePR(_ context.Context, _ domain.Repository, _ int, _ string) error  { return nil }
-func (s *closeReopenPRService) ReopenPR(_ context.Context, _ domain.Repository, _ int, _ string) error { return nil }
+func (s *closeReopenPRService) ClosePR(_ context.Context, _ domain.Repository, _ int, _ string) error {
+	return nil
+}
+func (s *closeReopenPRService) ReopenPR(_ context.Context, _ domain.Repository, _ int, _ string) error {
+	return nil
+}
 
 func makeCloseReopenModel(state domain.PRState) *PRDetailModel {
 	m := NewModel(domain.PullRequestSummary{
@@ -306,5 +312,3 @@ func makeCloseReopenModel(state domain.PRState) *PRDetailModel {
 	m.Height = 40
 	return m
 }
-
-

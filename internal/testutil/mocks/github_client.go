@@ -14,32 +14,32 @@ var _ githubclient.GitHubClient = (*MockGitHubClient)(nil)
 // Each function field must be set before calling the method.
 // Calling an unset function panics with a descriptive message.
 type MockGitHubClient struct {
-	FetchViewerFn         func(ctx context.Context, host string) (string, error)
-	FetchDashboardPRsFn   func(ctx context.Context, repo domain.Repository) ([]domain.PullRequestSummary, int, bool, string, error)
-	FetchInvolvingPRsFn   func(ctx context.Context, repo domain.Repository, viewer string) ([]domain.PullRequestSummary, int, bool, error)
-	FetchPreviewFn        func(ctx context.Context, repo domain.Repository, number int) (domain.PRPreviewSnapshot, error)
-	FetchCommitsFn        func(ctx context.Context, repo domain.Repository, number int) ([]domain.Commit, error)
-	PostCommentFn          func(ctx context.Context, host, pullRequestID, body string) error
-	PostReviewCommentFn    func(ctx context.Context, host, pullRequestID, body string) error
-	ApprovePullRequestFn   func(ctx context.Context, host, pullRequestID, body string) error
+	FetchViewerFn              func(ctx context.Context, host string) (string, error)
+	FetchDashboardPRsFn        func(ctx context.Context, repo domain.Repository) ([]domain.PullRequestSummary, int, bool, string, error)
+	FetchInvolvingPRsFn        func(ctx context.Context, repo domain.Repository, viewer string) ([]domain.PullRequestSummary, int, bool, error)
+	FetchPreviewFn             func(ctx context.Context, repo domain.Repository, number int) (domain.PRPreviewSnapshot, error)
+	FetchCommitsFn             func(ctx context.Context, repo domain.Repository, number int) ([]domain.Commit, error)
+	PostCommentFn              func(ctx context.Context, host, pullRequestID, body string) error
+	PostReviewCommentFn        func(ctx context.Context, host, pullRequestID, body string) error
+	ApprovePullRequestFn       func(ctx context.Context, host, pullRequestID, body string) error
 	SubmitReviewWithCommentsFn func(ctx context.Context, host, pullRequestID, body, event string, comments []domain.DraftInlineComment) error
-	FetchAllPRsFn          func(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
-	MergePullRequestFn     func(ctx context.Context, host, pullRequestID, expectedHeadOid, mergeMethod string) error
-	CheckMergeableFn       func(ctx context.Context, repo domain.Repository, number int) (domain.MergeableState, error)
-	ClosePullRequestFn     func(ctx context.Context, host, pullRequestID string) error
-	ReopenPullRequestFn    func(ctx context.Context, host, pullRequestID string) error
+	FetchAllPRsFn              func(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
+	MergePullRequestFn         func(ctx context.Context, host, pullRequestID, expectedHeadOid, mergeMethod string) error
+	CheckMergeableFn           func(ctx context.Context, repo domain.Repository, number int) (domain.MergeableState, error)
+	ClosePullRequestFn         func(ctx context.Context, host, pullRequestID string) error
+	ReopenPullRequestFn        func(ctx context.Context, host, pullRequestID string) error
 
 	// Call counters — incremented on each call.
-	FetchDashboardPRsCalls  int
-	FetchPreviewCalls       int
-	FetchCommitsCalls       int
-	PostCommentCalls        int
-	ApprovePullRequestCalls int
+	FetchDashboardPRsCalls        int
+	FetchPreviewCalls             int
+	FetchCommitsCalls             int
+	PostCommentCalls              int
+	ApprovePullRequestCalls       int
 	SubmitReviewWithCommentsCalls int
-	MergePullRequestCalls   int
-	CheckMergeableCalls     int
-	ClosePullRequestCalls   int
-	ReopenPullRequestCalls  int
+	MergePullRequestCalls         int
+	CheckMergeableCalls           int
+	ClosePullRequestCalls         int
+	ReopenPullRequestCalls        int
 }
 
 func (m *MockGitHubClient) FetchViewer(ctx context.Context, host string) (string, error) {

@@ -153,10 +153,10 @@ type PRDetailModel struct {
 	commitsScroll  int
 
 	// Commits tab state
-	commits       []domain.Commit
+	commits        []domain.Commit
 	commitsLoading bool
-	commitCursor  int
-	commitsLoaded bool
+	commitCursor   int
+	commitsLoaded  bool
 
 	// Diff cursor (line-by-line navigation in Diff tab)
 	diffCursor diffCursorLine

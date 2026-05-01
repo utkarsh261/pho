@@ -454,7 +454,7 @@ func (s *prService) PostComment(ctx context.Context, prID, body string) error {
 }
 
 func (s *prService) PostReviewComment(_ context.Context, _, _ string) error { return nil }
-func (s *prService) ApprovePR(_ context.Context, _, _ string) error          { return nil }
+func (s *prService) ApprovePR(_ context.Context, _, _ string) error         { return nil }
 func (s *prService) SubmitReviewWithComments(_ context.Context, _, _, _ string, _ []domain.DraftInlineComment) error {
 	return nil
 }
@@ -467,12 +467,18 @@ func (s *prService) LoadDraftComments(_ context.Context, _ domain.Repository, _ 
 func (s *prService) DeleteDraftComments(_ context.Context, _ domain.Repository, _ int, _ string) error {
 	return nil
 }
-func (s *prService) MergePR(_ context.Context, _ domain.Repository, _ int, _, _, _ string) error { return nil }
+func (s *prService) MergePR(_ context.Context, _ domain.Repository, _ int, _, _, _ string) error {
+	return nil
+}
 func (s *prService) CheckMergeable(_ context.Context, _ domain.Repository, _ int) (domain.MergeableState, error) {
 	return domain.MergeableState{}, nil
 }
-func (s *prService) ClosePR(_ context.Context, _ domain.Repository, _ int, _ string) error  { return nil }
-func (s *prService) ReopenPR(_ context.Context, _ domain.Repository, _ int, _ string) error { return nil }
+func (s *prService) ClosePR(_ context.Context, _ domain.Repository, _ int, _ string) error {
+	return nil
+}
+func (s *prService) ReopenPR(_ context.Context, _ domain.Repository, _ int, _ string) error {
+	return nil
+}
 func (s *prService) LoadPRCommits(_ context.Context, _ domain.Repository, _ int, _ bool) ([]domain.Commit, error) {
 	return nil, nil
 }

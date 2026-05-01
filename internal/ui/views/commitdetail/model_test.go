@@ -194,7 +194,9 @@ func (f *fakePRService) LoadCommitDiff(ctx context.Context, repo domain.Reposito
 	return diffmodel.DiffModel{}, nil
 }
 func (f *fakePRService) PostComment(ctx context.Context, prID string, body string) error { return nil }
-func (f *fakePRService) PostReviewComment(ctx context.Context, prID string, body string) error { return nil }
+func (f *fakePRService) PostReviewComment(ctx context.Context, prID string, body string) error {
+	return nil
+}
 func (f *fakePRService) ApprovePR(ctx context.Context, prID string, body string) error { return nil }
 func (f *fakePRService) SubmitReviewWithComments(ctx context.Context, prID, body, event string, comments []domain.DraftInlineComment) error {
 	return nil
@@ -214,8 +216,12 @@ func (f *fakePRService) MergePR(ctx context.Context, repo domain.Repository, num
 func (f *fakePRService) CheckMergeable(ctx context.Context, repo domain.Repository, number int) (domain.MergeableState, error) {
 	return domain.MergeableState{}, nil
 }
-func (f *fakePRService) ClosePR(ctx context.Context, repo domain.Repository, number int, prID string) error { return nil }
-func (f *fakePRService) ReopenPR(ctx context.Context, repo domain.Repository, number int, prID string) error { return nil }
+func (f *fakePRService) ClosePR(ctx context.Context, repo domain.Repository, number int, prID string) error {
+	return nil
+}
+func (f *fakePRService) ReopenPR(ctx context.Context, repo domain.Repository, number int, prID string) error {
+	return nil
+}
 
 func TestCommitDetailGoldenLoading(t *testing.T) {
 	t.Parallel()

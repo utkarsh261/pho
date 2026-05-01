@@ -11,6 +11,9 @@ test:
 test-race:
     go test -race -count=1 ./...
 
+fmt:
+    go fmt ./...
+
 vet:
     go vet ./...
 

@@ -604,7 +604,7 @@ func (m Model) formatPRResultStyled(result domain.SearchResult, width int) strin
 
 	line := coloredGlyph + " " + coloredNum + "  " + coloredTitle
 	if authorStr != "" {
-		line += m.theme.BoxPRAuthor.Render(sepStr+authorStr)
+		line += m.theme.BoxPRAuthor.Render(sepStr + authorStr)
 	}
 	return line
 }

@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	tea 	"github.com/charmbracelet/bubbletea"
 	"github.com/atotto/clipboard"
+	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/utkarsh261/pho/internal/application/cmds"
 	achdashboard "github.com/utkarsh261/pho/internal/application/dashboard"
@@ -38,12 +38,12 @@ type SearchService interface {
 
 // Dependencies wires the root model to application services.
 type Dependencies struct {
-	Viewer         cmds.ViewerService
-	Discovery      cmds.DiscoveryService
-	Dashboard      cmds.DashboardService
-	Search         SearchService
-	PR             cmds.PRService
-	ViewedHistory  domain.ViewedHistoryStore
+	Viewer        cmds.ViewerService
+	Discovery     cmds.DiscoveryService
+	Dashboard     cmds.DashboardService
+	Search        SearchService
+	PR            cmds.PRService
+	ViewedHistory domain.ViewedHistoryStore
 
 	Root string
 	Host string
@@ -74,9 +74,9 @@ type Model struct {
 
 	layout layout.LayoutState
 
-	repoPanel *dashboard.RepoPanelModel
-	prList    *dashboard.PRListPanelModel
-	preview   *dashboard.PreviewPanelModel
+	repoPanel     *dashboard.RepoPanelModel
+	prList        *dashboard.PRListPanelModel
+	preview       *dashboard.PreviewPanelModel
 	status        *dashboard.StatusBarModel
 	palette       overlay.Model
 	keymapOverlay keymapoverlay.Model

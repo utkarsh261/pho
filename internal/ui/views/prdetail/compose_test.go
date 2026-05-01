@@ -314,4 +314,3 @@ func checkGolden(t *testing.T, got, name string) {
 		t.Errorf("golden mismatch for %s\ngot:\n%s\nwant:\n%s", name, got, string(data))
 	}
 }
-

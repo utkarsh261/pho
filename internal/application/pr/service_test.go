@@ -72,7 +72,7 @@ func (f *fakeGitHubClient) MergePullRequest(_ context.Context, _, _, _, _ string
 func (f *fakeGitHubClient) CheckMergeable(_ context.Context, _ domain.Repository, _ int) (domain.MergeableState, error) {
 	return domain.MergeableState{}, nil
 }
-func (f *fakeGitHubClient) ClosePullRequest(_ context.Context, _, _ string) error    { return nil }
+func (f *fakeGitHubClient) ClosePullRequest(_ context.Context, _, _ string) error  { return nil }
 func (f *fakeGitHubClient) ReopenPullRequest(_ context.Context, _, _ string) error { return nil }
 func (f *fakeGitHubClient) FetchCommits(ctx context.Context, repo domain.Repository, number int) ([]domain.Commit, error) {
 	if f.FetchCommitsFn == nil {

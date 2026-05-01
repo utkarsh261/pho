@@ -14,9 +14,9 @@ type commentEntry struct {
 	state       string // review state ("APPROVED", "COMMENTED", etc.) or "" for plain comments
 	ts          time.Time
 	body        string
-	path        string  // empty for PR-level comments
-	line        int     // 0 for PR-level comments
-	contextLine string  // the raw diff line text
+	path        string // empty for PR-level comments
+	line        int    // 0 for PR-level comments
+	contextLine string // the raw diff line text
 	isDraft     bool
 }
 

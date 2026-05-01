@@ -3,8 +3,8 @@ package commitdetail
 import (
 	tea "github.com/charmbracelet/bubbletea"
 
-	diffmodel "github.com/utkarsh261/pho/internal/diff/model"
 	"github.com/utkarsh261/pho/internal/application/cmds"
+	diffmodel "github.com/utkarsh261/pho/internal/diff/model"
 	"github.com/utkarsh261/pho/internal/domain"
 	"github.com/utkarsh261/pho/internal/ui/theme"
 	"github.com/utkarsh261/pho/internal/ui/views/prdetail"

@@ -11,9 +11,10 @@ import (
 
 // makeDiffCursorModel creates a PRDetailModel with a multi-file diff suitable for
 // cursor navigation tests. Layout:
-//   file 0 (a.go): 2 hunks, 3 lines each
-//   file 1 (b.go): 1 hunk, 1 line
-//   file 2 (binary.bin): binary, no lines
+//
+//	file 0 (a.go): 2 hunks, 3 lines each
+//	file 1 (b.go): 1 hunk, 1 line
+//	file 2 (binary.bin): binary, no lines
 func makeDiffCursorModel(width, height int) *PRDetailModel {
 	l1, l2, l3, l4, l5 := 1, 2, 3, 4, 5
 	return makeDiffCursorModelWithLines(width, height, l1, l2, l3, l4, l5)
@@ -531,14 +532,14 @@ func TestMoveCursorUpSkipsMultipleBinaries(t *testing.T) {
 		{OldPath: "a.go", NewPath: "a.go", Status: "modified",
 			Hunks: []diffmodel.DiffHunk{{
 				Header: "@@ -1,1 +1,1 @@",
-				Lines: []diffmodel.DiffLine{{Kind: "context", Raw: " line1", NewLine: ptrInt(1)}},
+				Lines:  []diffmodel.DiffLine{{Kind: "context", Raw: " line1", NewLine: ptrInt(1)}},
 			}}},
 		{OldPath: "bin1.bin", NewPath: "bin1.bin", Status: "modified", IsBinary: true},
 		{OldPath: "bin2.bin", NewPath: "bin2.bin", Status: "modified", IsBinary: true},
 		{OldPath: "b.go", NewPath: "b.go", Status: "modified",
 			Hunks: []diffmodel.DiffHunk{{
 				Header: "@@ -1,1 +1,1 @@",
-				Lines: []diffmodel.DiffLine{{Kind: "context", Raw: " line2", NewLine: ptrInt(1)}},
+				Lines:  []diffmodel.DiffLine{{Kind: "context", Raw: " line2", NewLine: ptrInt(1)}},
 			}}},
 	}
 	m := makeDiffCursorModelCustom(files, 100, 40)
@@ -556,7 +557,7 @@ func TestMoveCursorUpPrevFileNoHunks(t *testing.T) {
 		{OldPath: "b.go", NewPath: "b.go", Status: "modified",
 			Hunks: []diffmodel.DiffHunk{{
 				Header: "@@ -1,1 +1,1 @@",
-				Lines: []diffmodel.DiffLine{{Kind: "context", Raw: " line1", NewLine: ptrInt(1)}},
+				Lines:  []diffmodel.DiffLine{{Kind: "context", Raw: " line1", NewLine: ptrInt(1)}},
 			}}},
 	}
 	m := makeDiffCursorModelCustom(files, 100, 40)
@@ -574,13 +575,13 @@ func TestMoveCursorUpPrevFileAfterHunkExhaustionIsBinary(t *testing.T) {
 		{OldPath: "a.go", NewPath: "a.go", Status: "modified",
 			Hunks: []diffmodel.DiffHunk{{
 				Header: "@@ -1,1 +1,1 @@",
-				Lines: []diffmodel.DiffLine{{Kind: "context", Raw: " line1", NewLine: ptrInt(1)}},
+				Lines:  []diffmodel.DiffLine{{Kind: "context", Raw: " line1", NewLine: ptrInt(1)}},
 			}}},
 		{OldPath: "bin.bin", NewPath: "bin.bin", Status: "modified", IsBinary: true},
 		{OldPath: "b.go", NewPath: "b.go", Status: "modified",
 			Hunks: []diffmodel.DiffHunk{{
 				Header: "@@ -1,1 +1,1 @@",
-				Lines: []diffmodel.DiffLine{{Kind: "context", Raw: " line2", NewLine: ptrInt(1)}},
+				Lines:  []diffmodel.DiffLine{{Kind: "context", Raw: " line2", NewLine: ptrInt(1)}},
 			}}},
 	}
 	m := makeDiffCursorModelCustom(files, 100, 40)
@@ -599,7 +600,7 @@ func TestMoveCursorUpLeadingBinary(t *testing.T) {
 		{OldPath: "a.go", NewPath: "a.go", Status: "modified",
 			Hunks: []diffmodel.DiffHunk{{
 				Header: "@@ -1,1 +1,1 @@",
-				Lines: []diffmodel.DiffLine{{Kind: "context", Raw: " line1", NewLine: ptrInt(1)}},
+				Lines:  []diffmodel.DiffLine{{Kind: "context", Raw: " line1", NewLine: ptrInt(1)}},
 			}}},
 	}
 	m := makeDiffCursorModelCustom(files, 100, 40)
@@ -628,7 +629,7 @@ func TestMoveCursorUpFromFirstLineToPrevFileMultiHunk(t *testing.T) {
 		{OldPath: "b.go", NewPath: "b.go", Status: "modified",
 			Hunks: []diffmodel.DiffHunk{{
 				Header: "@@ -1,1 +1,1 @@",
-				Lines: []diffmodel.DiffLine{{Kind: "context", Raw: " line4", NewLine: ptrInt(1)}},
+				Lines:  []diffmodel.DiffLine{{Kind: "context", Raw: " line4", NewLine: ptrInt(1)}},
 			}}},
 	}
 	m := makeDiffCursorModelCustom(files, 100, 40)
@@ -700,7 +701,7 @@ func TestMoveCursorUpPrevFileAllBinaries(t *testing.T) {
 		{OldPath: "a.go", NewPath: "a.go", Status: "modified",
 			Hunks: []diffmodel.DiffHunk{{
 				Header: "@@ -1,1 +1,1 @@",
-				Lines: []diffmodel.DiffLine{{Kind: "context", Raw: " line1", NewLine: ptrInt(1)}},
+				Lines:  []diffmodel.DiffLine{{Kind: "context", Raw: " line1", NewLine: ptrInt(1)}},
 			}}},
 	}
 	m := makeDiffCursorModelCustom(files, 100, 40)

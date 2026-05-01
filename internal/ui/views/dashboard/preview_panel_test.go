@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/utkarsh261/pho/internal/domain"
 	"github.com/utkarsh261/pho/internal/ui/theme"
 )
@@ -350,12 +350,12 @@ func TestPreviewPanelMoreFilesLine(t *testing.T) {
 	m := NewPreviewPanelModel()
 	m.SetTheme(theme.Default())
 	m.preview = &domain.PRPreviewSnapshot{
-		Repo:       "org/repo",
-		Number:     1,
-		Title:      "PR with many files",
-		Author:     "alice",
-		FileCount:  25,
-		TopFiles:   makeFileStat(20), // TopFiles capped at 20
+		Repo:      "org/repo",
+		Number:    1,
+		Title:     "PR with many files",
+		Author:    "alice",
+		FileCount: 25,
+		TopFiles:  makeFileStat(20), // TopFiles capped at 20
 	}
 	// Height 40: enough to show header (~10) + 20 files + "+N more files" line.
 	m.SetRect(80, 40)
@@ -374,12 +374,12 @@ func TestPreviewPanelNoMoreFilesWhenUnderCap(t *testing.T) {
 	m := NewPreviewPanelModel()
 	m.SetTheme(theme.Default())
 	m.preview = &domain.PRPreviewSnapshot{
-		Repo:     "org/repo",
-		Number:   1,
-		Title:    "Small PR",
-		Author:   "alice",
+		Repo:      "org/repo",
+		Number:    1,
+		Title:     "Small PR",
+		Author:    "alice",
 		FileCount: 5,
-		TopFiles: makeFileStat(5),
+		TopFiles:  makeFileStat(5),
 	}
 	m.SetRect(80, 30)
 
@@ -586,4 +586,3 @@ func TestPreviewPanelReusesPendingFetchOnSamePR(t *testing.T) {
 		t.Fatalf("expected second SelectPRMsg to return nil when PendingFetch is true, got a command")
 	}
 }
-

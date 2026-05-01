@@ -154,16 +154,16 @@ type PreviewInlineComment struct {
 // DraftInlineComment is a user-created inline comment that has not been
 // submitted to GitHub yet. It persists across app restarts via cache.
 type DraftInlineComment struct {
-	ID        string    // UUID (client-generated)
-	Path      string    // file path
-	Line      int       // end line number
-	Side      string    // "RIGHT" | "LEFT"
-	StartLine int       // start line (0 for single-line)
-	StartSide string    // start side (empty for single-line)
-	Body      string
-	ContextLine string  // the raw diff line text for display
-	HeadSHA   string    // commit SHA this draft is anchored to
-	CreatedAt time.Time
+	ID          string // UUID (client-generated)
+	Path        string // file path
+	Line        int    // end line number
+	Side        string // "RIGHT" | "LEFT"
+	StartLine   int    // start line (0 for single-line)
+	StartSide   string // start side (empty for single-line)
+	Body        string
+	ContextLine string // the raw diff line text for display
+	HeadSHA     string // commit SHA this draft is anchored to
+	CreatedAt   time.Time
 }
 
 type PreviewReviewer struct {
@@ -223,9 +223,9 @@ type PRPreviewSnapshot struct {
 
 // MergeableState holds fresh mergeability data for a single PR.
 type MergeableState struct {
-	Mergeable      string
+	Mergeable        string
 	MergeStateStatus string
-	HeadRefOid     string
+	HeadRefOid       string
 }
 
 // Snapshot envelopes
@@ -397,9 +397,9 @@ type AppState struct {
 type PrimaryView string
 
 const (
-	PrimaryViewDashboard     PrimaryView = "dashboard"
-	PrimaryViewPRDetail      PrimaryView = "pr_detail"
-	PrimaryViewCommitDetail  PrimaryView = "commit_detail"
+	PrimaryViewDashboard    PrimaryView = "dashboard"
+	PrimaryViewPRDetail     PrimaryView = "pr_detail"
+	PrimaryViewCommitDetail PrimaryView = "commit_detail"
 )
 
 type OverlayView string

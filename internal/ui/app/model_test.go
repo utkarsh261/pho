@@ -111,7 +111,9 @@ func (s *stubDashboardService) LoadPreview(ctx context.Context, repo string, num
 func (s *stubDashboardService) LoadAllPRsPage(_ context.Context, _ domain.Repository, _ string) ([]domain.PullRequestSummary, bool, string, error) {
 	return nil, false, "", nil
 }
-func (s *stubDashboardService) InvalidateRepo(_ context.Context, _ domain.Repository) error { return nil }
+func (s *stubDashboardService) InvalidateRepo(_ context.Context, _ domain.Repository) error {
+	return nil
+}
 
 type stubSearchService struct {
 	buildPRCalls   int
@@ -144,14 +146,14 @@ func (s *stubSearchService) SetJumpIndexComplete(repo string) {}
 
 // stubPRService implements cmds.PRService for testing.
 type stubPRService struct {
-	detailResult      domain.PRPreviewSnapshot
-	detailFromCache   bool
-	detailErr         error
-	diffResult        model.DiffModel
-	diffFromCache     bool
-	diffErr           error
-	loadDetailCalls   int
-	loadDiffCalls     int
+	detailResult    domain.PRPreviewSnapshot
+	detailFromCache bool
+	detailErr       error
+	diffResult      model.DiffModel
+	diffFromCache   bool
+	diffErr         error
+	loadDetailCalls int
+	loadDiffCalls   int
 }
 
 func (s *stubPRService) LoadDetail(ctx context.Context, repo domain.Repository, number int, force bool) (domain.PRPreviewSnapshot, bool, error) {
@@ -179,12 +181,18 @@ func (s *stubPRService) LoadDraftComments(_ context.Context, _ domain.Repository
 func (s *stubPRService) DeleteDraftComments(_ context.Context, _ domain.Repository, _ int, _ string) error {
 	return nil
 }
-func (s *stubPRService) MergePR(_ context.Context, _ domain.Repository, _ int, _, _, _ string) error { return nil }
+func (s *stubPRService) MergePR(_ context.Context, _ domain.Repository, _ int, _, _, _ string) error {
+	return nil
+}
 func (s *stubPRService) CheckMergeable(_ context.Context, _ domain.Repository, _ int) (domain.MergeableState, error) {
 	return domain.MergeableState{}, nil
 }
-func (s *stubPRService) ClosePR(_ context.Context, _ domain.Repository, _ int, _ string) error  { return nil }
-func (s *stubPRService) ReopenPR(_ context.Context, _ domain.Repository, _ int, _ string) error { return nil }
+func (s *stubPRService) ClosePR(_ context.Context, _ domain.Repository, _ int, _ string) error {
+	return nil
+}
+func (s *stubPRService) ReopenPR(_ context.Context, _ domain.Repository, _ int, _ string) error {
+	return nil
+}
 func (s *stubPRService) LoadPRCommits(_ context.Context, _ domain.Repository, _ int, _ bool) ([]domain.Commit, error) {
 	return nil, nil
 }
@@ -1723,4 +1731,3 @@ func TestOpenPRDetailSavesViewedHistory(t *testing.T) {
 		t.Fatalf("expected saved PR #1, got #%d", viewedStore.data[key][0].Number)
 	}
 }
-

@@ -88,9 +88,9 @@ type PullRequestStateData struct {
 type CheckMergeableData struct {
 	Repository struct {
 		PullRequest struct {
-			Mergeable      string `json:"mergeable"`
+			Mergeable        string `json:"mergeable"`
 			MergeStateStatus string `json:"mergeStateStatus"`
-			HeadRefOid     string `json:"headRefOid"`
+			HeadRefOid       string `json:"headRefOid"`
 		} `json:"pullRequest"`
 	} `json:"repository"`
 }
@@ -305,10 +305,10 @@ type ReviewConnection struct {
 
 // ReviewNode captures an individual review for preview rendering.
 type ReviewNode struct {
-	Author      *ActorNode             `json:"author"`
-	State       string                 `json:"state"`
-	SubmittedAt *string                `json:"submittedAt"`
-	Body        string                 `json:"body,omitempty"`
+	Author      *ActorNode              `json:"author"`
+	State       string                  `json:"state"`
+	SubmittedAt *string                 `json:"submittedAt"`
+	Body        string                  `json:"body,omitempty"`
 	Comments    ReviewCommentConnection `json:"comments"`
 }
 

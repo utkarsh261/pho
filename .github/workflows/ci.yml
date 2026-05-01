@@ -15,6 +15,12 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - run: |
+          if [ -n "$(gofmt -l .)" ]; then
+            echo "The following files need formatting:"
+            gofmt -l .
+            exit 1
+          fi
       - run: go vet ./...
       - run: go test -race -count=1 ./...
       - run: go build -o /dev/null ./cmd/pho

@@ -30,7 +30,6 @@ func makeDetailWithComments() *domain.PRPreviewSnapshot {
 	}
 }
 
-
 // makeCommentModel builds a PRDetailModel with comments loaded and focus on the Comments section.
 func makeCommentModel(width, height int) *PRDetailModel {
 	m := makePRDetail(width, height, nil, nil)
@@ -249,9 +248,9 @@ func TestComposePostingAllowsNavigation(t *testing.T) {
 	t.Parallel()
 	m := makeCommentModel(100, 40)
 	m.PRService = &prServiceStub{}
-	m = pressKey(m, "C") // open compose
+	m = pressKey(m, "C")                    // open compose
 	m.compose.status = composeStatusPosting // simulate posting in-flight
-	m = pressKey(m, "j") // should navigate, not be swallowed
+	m = pressKey(m, "j")                    // should navigate, not be swallowed
 	if m.commentCursor != 0 {
 		t.Errorf("expected commentCursor=0 after j during posting, got %d", m.commentCursor)
 	}
@@ -262,7 +261,7 @@ func TestComposePostingRendersNewTab(t *testing.T) {
 	m := makeDiffCursorModel(100, 40) // has a Diff with files
 	m.PRService = &prServiceStub{}
 	m.switchTab(TabComments)
-	m = pressKey(m, "C") // open compose
+	m = pressKey(m, "C")                    // open compose
 	m.compose.status = composeStatusPosting // simulate posting in-flight
 	// Pre-warm the view cache while on Comments tab.
 	_ = m.View()
@@ -449,9 +448,15 @@ func (s *prServiceStub) LoadDraftComments(_ context.Context, _ domain.Repository
 func (s *prServiceStub) DeleteDraftComments(_ context.Context, _ domain.Repository, _ int, _ string) error {
 	return nil
 }
-func (s *prServiceStub) MergePR(_ context.Context, _ domain.Repository, _ int, _, _, _ string) error { return nil }
+func (s *prServiceStub) MergePR(_ context.Context, _ domain.Repository, _ int, _, _, _ string) error {
+	return nil
+}
 func (s *prServiceStub) CheckMergeable(_ context.Context, _ domain.Repository, _ int) (domain.MergeableState, error) {
 	return domain.MergeableState{}, nil
 }
-func (s *prServiceStub) ClosePR(_ context.Context, _ domain.Repository, _ int, _ string) error  { return nil }
-func (s *prServiceStub) ReopenPR(_ context.Context, _ domain.Repository, _ int, _ string) error { return nil }
+func (s *prServiceStub) ClosePR(_ context.Context, _ domain.Repository, _ int, _ string) error {
+	return nil
+}
+func (s *prServiceStub) ReopenPR(_ context.Context, _ domain.Repository, _ int, _ string) error {
+	return nil
+}

@@ -18,10 +18,10 @@ import (
 
 const (
 	// Cache key prefixes.
-	cacheKindPreview      = "preview"
-	cacheKindDiff         = "diff"
-	cacheKindDraftInline  = "draft_inline"
-	cacheVersion          = 1
+	cacheKindPreview     = "preview"
+	cacheKindDiff        = "diff"
+	cacheKindDraftInline = "draft_inline"
+	cacheVersion         = 1
 
 	// Preview cache TTL (shared with dashboard).
 	cacheTTL = 2 * time.Minute

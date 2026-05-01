@@ -34,8 +34,8 @@ const (
 	//   truncated path     : lpPathMax chars
 	//   stats " +N -N"    : lpStatsWidth chars
 	lpPaddingWidth = 2
-	lpStatsWidth     = 10
-	lpPathMax        = lpInner - lpPaddingWidth - lpStatsWidth
+	lpStatsWidth   = 10
+	lpPathMax      = lpInner - lpPaddingWidth - lpStatsWidth
 
 	// CI row layout within lpInner (28 chars):
 	//   icon + space     : lpCIIconWidth chars (2)

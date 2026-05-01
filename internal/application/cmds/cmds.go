@@ -146,10 +146,10 @@ type ReviewFailed struct{ Err error }
 
 // MergeableChecked is emitted when the pre-merge check completes.
 type MergeableChecked struct {
-	Repo     string
-	Number   int
-	State    domain.MergeableState
-	Err      error
+	Repo   string
+	Number int
+	State  domain.MergeableState
+	Err    error
 }
 
 // MergePRMsg is emitted when the merge mutation completes.
