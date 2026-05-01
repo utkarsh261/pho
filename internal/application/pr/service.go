@@ -541,5 +541,3 @@ func draftInlineMeta(key string, repo domain.Repository, number int, headSHA str
 		Encoding:  "json",
 	}
 }
-
-
