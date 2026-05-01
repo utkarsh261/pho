@@ -74,7 +74,7 @@ func buildBox(view string, contentW, height int, focused bool) string {
 
 	lines := make([]string, 0, height)
 
-	// TODO: this is hack af, fix it
+	// TODO: this is hacky af, fix it
 	// Top: ┌───┐
 	lines = append(lines, border("┌"+strings.Repeat("─", contentW)+"┐"))
 

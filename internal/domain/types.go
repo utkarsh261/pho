@@ -1,4 +1,4 @@
-// Package domain defines the canonical data model for pho.
+// Package domain defines the data model for pho.
 // Types in this package are shared across the application, cache, and UI
 // layers. No GitHub transport details belong here.
 package domain
@@ -155,7 +155,7 @@ type PreviewInlineComment struct {
 // submitted to GitHub yet. It persists across app restarts via cache.
 type DraftInlineComment struct {
 	ID          string // UUID (client-generated)
-	Path        string // file path
+	Path        string
 	Line        int    // end line number
 	Side        string // "RIGHT" | "LEFT"
 	StartLine   int    // start line (0 for single-line)
@@ -473,27 +473,6 @@ const (
 	SectionDiff
 	SectionComments
 )
-
-// SectionState tracks the load status of a single content section.
-// Reserved for future use when sections are rendered independently.
-type SectionState struct {
-	Loaded  bool
-	Loading bool
-	Error   error
-}
-
-// PRDetailState is the planned state container for the PR detail view.
-// Currently unused — PRDetailModel manages its own parallel state.
-// Kept as a type alias target for when the view layer is refactored.
-type PRDetailState struct {
-	Repo    string
-	Number  int
-	Summary PullRequestSummary // extended via FetchPreview (labels, assignees)
-	Reviews []PreviewReviewer  // from FetchPreview reviews(first:20)
-	Checks  []PreviewCheckRow  // from FetchPreview statusCheckRollup
-	// Sections map[PRDetailSection]*SectionState — deferred until section-level
-	// loading is implemented. PRDetailModel currently uses parallel bool fields.
-}
 
 // FocusPRDetail is the internal focus target for PR detail view.
 // It is NOT added to the dashboard focus cycle.

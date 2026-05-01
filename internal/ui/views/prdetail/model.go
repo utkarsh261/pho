@@ -20,6 +20,7 @@ import (
 	"github.com/utkarsh261/pho/internal/diff/model"
 	diffsearch "github.com/utkarsh261/pho/internal/diff/search"
 	"github.com/utkarsh261/pho/internal/domain"
+	pholog "github.com/utkarsh261/pho/internal/log"
 	"github.com/utkarsh261/pho/internal/ui/markdown"
 	"github.com/utkarsh261/pho/internal/ui/theme"
 )
@@ -114,6 +115,7 @@ type PRDetailModel struct {
 
 	PRService cmds.PRService
 	Repo      domain.Repository
+	Log       *pholog.Logger
 
 	ContentScroll int
 
@@ -652,6 +654,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 }
 
 func (m *PRDetailModel) View() string {
+	defer m.log().Timer("render pr detail")()
 	if m.Width <= 0 || m.Height <= 0 {
 		return ""
 	}
@@ -739,23 +742,16 @@ func (m *PRDetailModel) renderHeader() string {
 
 	innerW := max(m.Width-2, 1)
 
-	// Build the title ensuring we don't overflow the width
-	// Padding needed: spaces around components
-	// Format: "Title <author> <state>                  [o: Browser | Esc: Back]"
-
 	reservedSpace := metaLen
 	if hintsLen > 0 {
-		// we want spacing between meta and hints, or we right-align hints
 		reservedSpace += 1 + hintsLen
 	}
 
-	// Prepend PR number
 	baseTitle := fmt.Sprintf("#%d %s", m.Summary.Number, m.Summary.Title)
 	if m.Summary.Title == "" {
 		baseTitle = fmt.Sprintf("Pull Request #%d", m.Summary.Number)
 	}
 
-	// 1 space between title and meta
 	titleBudget := innerW - reservedSpace - 2 // -2 just for padding
 	if titleBudget < 5 {
 		titleBudget = 5
@@ -780,7 +776,6 @@ func (m *PRDetailModel) renderHeader() string {
 	var content string
 	var borderColor lipgloss.Color
 	if m.theme != nil {
-		// Apply the blueish background to the entire string
 		content = m.theme.Header.Width(innerW).Render(finalHeader)
 		borderColor = m.theme.Border
 	} else {
@@ -788,7 +783,6 @@ func (m *PRDetailModel) renderHeader() string {
 		borderColor = theme.Default().Border
 	}
 
-	// Restore the island (the bordered box)
 	return lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder()).
 		BorderForeground(borderColor).
@@ -2167,8 +2161,7 @@ func (m *PRDetailModel) exitVisualMode() {
 	m.visual.Active = false
 }
 
-// anchorForLine returns the best available anchor data for a diff line.
-// It uses the generated anchor if present; otherwise it infers path, line
+// It uses the generated anchor if present, otherwise it infers path, line
 // number and side from the line kind and surrounding file so that inline
 // comments can be created even when anchors were not populated (e.g. empty
 // head SHA on hosts that don't expose headRefOid).
@@ -2392,7 +2385,6 @@ func (m *PRDetailModel) loadDrafts() {
 	m.commentEntriesDirty = true
 }
 
-// headSHA returns the best available head SHA for draft persistence.
 func (m *PRDetailModel) headSHA() string {
 	if m.Diff != nil && m.Diff.HeadSHA != "" {
 		return m.Diff.HeadSHA
@@ -2794,6 +2786,13 @@ type OpenBrowserCommit struct {
 // CopyCommitPermalink is emitted when the user presses 'y' with a diff cursor in commit mode.
 type CopyCommitPermalink struct {
 	URL string
+}
+
+func (m *PRDetailModel) log() *pholog.Logger {
+	if m.Log != nil {
+		return m.Log
+	}
+	return pholog.NewNop()
 }
 
 // CopyCommitSHA is emitted when the user presses 'y' on a commit in the Commits tab.

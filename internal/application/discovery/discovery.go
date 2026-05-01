@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/utkarsh261/pho/internal/domain"
+	pholog "github.com/utkarsh261/pho/internal/log"
 )
 
 type DiscoveryService interface {
@@ -34,6 +35,7 @@ type Service struct {
 	pinned  map[string]struct{}
 	exclude map[string]struct{}
 	cache   map[string][]domain.Repository
+	Log     *pholog.Logger
 }
 
 func New(cfg Config) *Service {
@@ -45,6 +47,7 @@ func New(cfg Config) *Service {
 }
 
 func (s *Service) Discover(ctx context.Context, root string) ([]domain.Repository, error) {
+	defer s.log().Timer("discovery scan", "root", root)()
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
 		return nil, fmt.Errorf("discovery: resolve root: %w", err)
@@ -302,6 +305,13 @@ func activityValue(t *time.Time) time.Time {
 		return time.Time{}
 	}
 	return *t
+}
+
+func (s *Service) log() *pholog.Logger {
+	if s.Log != nil {
+		return s.Log
+	}
+	return pholog.NewNop()
 }
 
 func normalizeRepoSet(values []string) map[string]struct{} {

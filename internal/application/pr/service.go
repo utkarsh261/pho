@@ -13,6 +13,7 @@ import (
 	"github.com/utkarsh261/pho/internal/domain"
 	githubclient "github.com/utkarsh261/pho/internal/github"
 	"github.com/utkarsh261/pho/internal/github/rest"
+	pholog "github.com/utkarsh261/pho/internal/log"
 )
 
 const (
@@ -34,13 +35,8 @@ type PRService struct {
 	Now          func() time.Time
 	Owner        string // repo owner
 	Repo         string // repo name
-	Log          logger
+	Log          *pholog.Logger
 	BackgroundFn func(func())
-}
-
-type logger interface {
-	Debug(msg string, fields ...any)
-	Warn(msg string, fields ...any)
 }
 
 // NewService builds a PR service with sensible defaults.
@@ -54,6 +50,7 @@ func NewService(cacheCoordinator *cache.Coordinator, client githubclient.GitHubC
 }
 
 func (s *PRService) LoadDetail(ctx context.Context, repo domain.Repository, number int, force bool) (domain.PRPreviewSnapshot, bool, error) {
+	defer s.logTimer("pr load detail", pholog.FieldRepo, repo.FullName, pholog.FieldPRNumber, number)()
 	key := previewCacheKey(repo.Host, repoFullName(repo), number)
 
 	var cached domain.PRPreviewSnapshot
@@ -93,6 +90,7 @@ func (s *PRService) LoadDetail(ctx context.Context, repo domain.Repository, numb
 
 // PostComment posts a PR-level comment via the GitHub client.
 func (s *PRService) PostComment(ctx context.Context, repo domain.Repository, prID string, body string) error {
+	defer s.logTimer("pr post comment", "prID", prID, pholog.FieldHost, repo.Host)()
 	s.logDebug("post comment", "prID", prID, "host", repo.Host)
 	if err := s.Client.PostComment(ctx, repo.Host, prID, body); err != nil {
 		s.logWarn("post comment failed", "prID", prID, "err", err)
@@ -103,6 +101,7 @@ func (s *PRService) PostComment(ctx context.Context, repo domain.Repository, prI
 
 // PostReviewComment submits a PR review with COMMENT decision via the GitHub client.
 func (s *PRService) PostReviewComment(ctx context.Context, repo domain.Repository, prID string, body string) error {
+	defer s.logTimer("pr post review comment", "prID", prID, pholog.FieldHost, repo.Host)()
 	s.logDebug("post review comment", "prID", prID, "host", repo.Host)
 	if err := s.Client.PostReviewComment(ctx, repo.Host, prID, body); err != nil {
 		s.logWarn("post review comment failed", "prID", prID, "err", err)
@@ -113,6 +112,7 @@ func (s *PRService) PostReviewComment(ctx context.Context, repo domain.Repositor
 
 // ApprovePR submits a PR review with APPROVE decision via the GitHub client.
 func (s *PRService) ApprovePR(ctx context.Context, repo domain.Repository, prID string, body string) error {
+	defer s.logTimer("pr approve", "prID", prID, pholog.FieldHost, repo.Host)()
 	s.logDebug("approve pr", "prID", prID, "host", repo.Host)
 	if err := s.Client.ApprovePullRequest(ctx, repo.Host, prID, body); err != nil {
 		s.logWarn("approve pr failed", "prID", prID, "err", err)
@@ -123,6 +123,7 @@ func (s *PRService) ApprovePR(ctx context.Context, repo domain.Repository, prID 
 
 // SubmitReviewWithComments submits a PR review with inline comments.
 func (s *PRService) SubmitReviewWithComments(ctx context.Context, repo domain.Repository, prID, body, event string, comments []domain.DraftInlineComment) error {
+	defer s.logTimer("pr submit review", "prID", prID, "event", event, "comments", len(comments), pholog.FieldHost, repo.Host)()
 	s.logDebug("submit review with comments", "prID", prID, "event", event, "comments", len(comments), "host", repo.Host)
 	if err := s.Client.SubmitReviewWithComments(ctx, repo.Host, prID, body, event, comments); err != nil {
 		s.logWarn("submit review with comments failed", "prID", prID, "err", err)
@@ -133,6 +134,7 @@ func (s *PRService) SubmitReviewWithComments(ctx context.Context, repo domain.Re
 
 // CheckMergeable fetches fresh mergeability state for a PR.
 func (s *PRService) CheckMergeable(ctx context.Context, repo domain.Repository, number int) (domain.MergeableState, error) {
+	defer s.logTimer("pr check mergeable", pholog.FieldRepo, repo.FullName, pholog.FieldPRNumber, number)()
 	s.logDebug("check mergeable", "repo", repo.FullName, "number", number)
 	state, err := s.Client.CheckMergeable(ctx, repo, number)
 	if err != nil {
@@ -144,6 +146,7 @@ func (s *PRService) CheckMergeable(ctx context.Context, repo domain.Repository, 
 
 // MergePR merges a PR using the specified method and invalidates related caches.
 func (s *PRService) MergePR(ctx context.Context, repo domain.Repository, number int, prID string, headRefOID string, method string) error {
+	defer s.logTimer("pr merge", pholog.FieldRepo, repo.FullName, pholog.FieldPRNumber, number, "method", method)()
 	s.logDebug("merge pr", "repo", repo.FullName, "number", number, "method", method)
 	if err := s.Client.MergePullRequest(ctx, repo.Host, prID, headRefOID, method); err != nil {
 		s.logWarn("merge pr failed", "repo", repo.FullName, "number", number, "err", err)
@@ -159,6 +162,7 @@ func (s *PRService) MergePR(ctx context.Context, repo domain.Repository, number 
 
 // ClosePR closes a PR and invalidates related caches.
 func (s *PRService) ClosePR(ctx context.Context, repo domain.Repository, number int, prID string) error {
+	defer s.logTimer("pr close", pholog.FieldRepo, repo.FullName, pholog.FieldPRNumber, number)()
 	s.logDebug("close pr", "repo", repo.FullName, "number", number)
 	if err := s.Client.ClosePullRequest(ctx, repo.Host, prID); err != nil {
 		s.logWarn("close pr failed", "repo", repo.FullName, "number", number, "err", err)
@@ -173,6 +177,7 @@ func (s *PRService) ClosePR(ctx context.Context, repo domain.Repository, number 
 
 // ReopenPR reopens a closed PR and invalidates related caches.
 func (s *PRService) ReopenPR(ctx context.Context, repo domain.Repository, number int, prID string) error {
+	defer s.logTimer("pr reopen", pholog.FieldRepo, repo.FullName, pholog.FieldPRNumber, number)()
 	s.logDebug("reopen pr", "repo", repo.FullName, "number", number)
 	if err := s.Client.ReopenPullRequest(ctx, repo.Host, prID); err != nil {
 		s.logWarn("reopen pr failed", "repo", repo.FullName, "number", number, "err", err)
@@ -187,6 +192,7 @@ func (s *PRService) ReopenPR(ctx context.Context, repo domain.Repository, number
 
 // SaveDraftComments persists draft inline comments for a PR.
 func (s *PRService) SaveDraftComments(ctx context.Context, repo domain.Repository, number int, headSHA string, drafts []domain.DraftInlineComment) error {
+	defer s.logTimer("pr save drafts", pholog.FieldRepo, repo.FullName, pholog.FieldPRNumber, number)()
 	key := draftInlineCacheKey(repo.Host, repoFullName(repo), number, headSHA)
 	meta := draftInlineMeta(key, repo, number, headSHA, s.Now().UTC())
 	if err := s.Cache.Write(ctx, key, drafts, meta); err != nil {
@@ -200,6 +206,7 @@ func (s *PRService) SaveDraftComments(ctx context.Context, repo domain.Repositor
 // LoadDraftComments loads draft inline comments for a PR.
 // If headSHA is empty or doesn't match the stored SHA, returns empty slice.
 func (s *PRService) LoadDraftComments(ctx context.Context, repo domain.Repository, number int, headSHA string) ([]domain.DraftInlineComment, error) {
+	defer s.logTimer("pr load drafts", pholog.FieldRepo, repo.FullName, pholog.FieldPRNumber, number)()
 	if headSHA == "" {
 		return nil, nil
 	}
@@ -219,6 +226,7 @@ func (s *PRService) LoadDraftComments(ctx context.Context, repo domain.Repositor
 
 // DeleteDraftComments removes draft inline comments for a PR.
 func (s *PRService) DeleteDraftComments(ctx context.Context, repo domain.Repository, number int, headSHA string) error {
+	defer s.logTimer("pr delete drafts", pholog.FieldRepo, repo.FullName, pholog.FieldPRNumber, number)()
 	key := draftInlineCacheKey(repo.Host, repoFullName(repo), number, headSHA)
 	if err := s.Cache.Delete(ctx, key); err != nil {
 		s.logWarn("delete draft comments failed", "key", key, "err", err)
@@ -229,6 +237,7 @@ func (s *PRService) DeleteDraftComments(ctx context.Context, repo domain.Reposit
 }
 
 func (s *PRService) LoadDiff(ctx context.Context, repo domain.Repository, number int, headSHA string, force bool) (model.DiffModel, bool, error) {
+	defer s.logTimer("pr load diff", pholog.FieldRepo, repo.FullName, pholog.FieldPRNumber, number)()
 	if headSHA == "" {
 		// No SHA available — use a placeholder key. Validation will be skipped.
 		return s.loadDiffInner(ctx, repo, number, "", force)
@@ -237,6 +246,7 @@ func (s *PRService) LoadDiff(ctx context.Context, repo domain.Repository, number
 }
 
 func (s *PRService) loadDiffInner(ctx context.Context, repo domain.Repository, number int, headSHA string, force bool) (model.DiffModel, bool, error) {
+	defer s.logTimer("pr load diff inner", pholog.FieldRepo, repo.FullName, pholog.FieldPRNumber, number)()
 	key := diffCacheKey(repo.Host, repoFullName(repo), number, headSHA)
 
 	var cached model.DiffModel
@@ -310,6 +320,7 @@ func (s *PRService) loadDiffInner(ctx context.Context, repo domain.Repository, n
 
 // LoadPRCommits loads the commit list for a PR via GraphQL.
 func (s *PRService) LoadPRCommits(ctx context.Context, repo domain.Repository, number int, force bool) ([]domain.Commit, error) {
+	defer s.logTimer("pr load commits", pholog.FieldRepo, repo.FullName, pholog.FieldPRNumber, number)()
 	key := commitsCacheKey(repo.Host, repoFullName(repo), number)
 
 	var cached []domain.Commit
@@ -343,6 +354,7 @@ func (s *PRService) LoadPRCommits(ctx context.Context, repo domain.Repository, n
 
 // LoadCommitDiff loads the raw diff for a single commit via REST.
 func (s *PRService) LoadCommitDiff(ctx context.Context, repo domain.Repository, sha string, force bool) (model.DiffModel, error) {
+	defer s.logTimer("pr load commit diff", pholog.FieldRepo, repo.FullName, "sha", sha)()
 	key := commitDiffCacheKey(repo.Host, repoFullName(repo), sha)
 
 	var cached model.DiffModel
@@ -435,6 +447,13 @@ func (s *PRService) logWarn(msg string, fields ...any) {
 	if s.Log != nil {
 		s.Log.Warn(msg, fields...)
 	}
+}
+
+func (s *PRService) logTimer(msg string, fields ...any) func() {
+	if s.Log != nil {
+		return s.Log.Timer(msg, fields...)
+	}
+	return func() {}
 }
 
 func repoFullName(repo domain.Repository) string {

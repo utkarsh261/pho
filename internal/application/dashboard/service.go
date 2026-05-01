@@ -10,6 +10,7 @@ import (
 	"github.com/utkarsh261/pho/internal/cache"
 	"github.com/utkarsh261/pho/internal/domain"
 	githubclient "github.com/utkarsh261/pho/internal/github"
+	pholog "github.com/utkarsh261/pho/internal/log"
 )
 
 const (
@@ -36,6 +37,7 @@ type Service struct {
 	DefaultHost  string
 	Now          func() time.Time
 	BackgroundFn func(func())
+	Log          *pholog.Logger
 }
 
 func NewService(cacheCoordinator *cache.Coordinator, client githubclient.GitHubClient) *Service {
@@ -68,6 +70,7 @@ func (s *Service) SelectInitialRepo(repos []domain.Repository, cwd string) (*dom
 }
 
 func (s *Service) LoadRepo(ctx context.Context, repo domain.Repository, force bool) (domain.DashboardSnapshot, error) {
+	defer s.log().Timer("dashboard load repo", pholog.FieldRepo, repo.FullName)()
 	if err := s.ensureReady(); err != nil {
 		return domain.DashboardSnapshot{}, err
 	}
@@ -114,6 +117,7 @@ func (s *Service) LoadRepo(ctx context.Context, repo domain.Repository, force bo
 }
 
 func (s *Service) LoadInvolving(ctx context.Context, repo domain.Repository, viewer string, force bool) (domain.InvolvingSnapshot, error) {
+	defer s.log().Timer("dashboard load involving", pholog.FieldRepo, repo.FullName)()
 	if err := s.ensureReady(); err != nil {
 		return domain.InvolvingSnapshot{}, err
 	}
@@ -165,6 +169,7 @@ func (s *Service) LoadPreview(ctx context.Context, repo string, number int, forc
 	if err != nil {
 		return domain.PRPreviewSnapshot{}, err
 	}
+	defer s.log().Timer("dashboard load preview", pholog.FieldRepo, parsedRepo.FullName, pholog.FieldPRNumber, number)()
 	return s.loadPreview(ctx, parsedRepo, number, force)
 }
 
@@ -206,6 +211,7 @@ func (s *Service) loadPreview(ctx context.Context, parsedRepo domain.Repository,
 }
 
 func (s *Service) LoadAllPRsPage(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error) {
+	defer s.log().Timer("dashboard load all prs page", pholog.FieldRepo, repo.FullName)()
 	if err := s.ensureReady(); err != nil {
 		return nil, false, "", err
 	}
@@ -268,6 +274,13 @@ func (s *Service) now() time.Time {
 		return s.Now()
 	}
 	return time.Now()
+}
+
+func (s *Service) log() *pholog.Logger {
+	if s.Log != nil {
+		return s.Log
+	}
+	return pholog.NewNop()
 }
 
 func (s *Service) spawn(fn func()) {

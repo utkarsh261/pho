@@ -307,10 +307,9 @@ func TestLoadDetailReturnsStaleOnBackgroundRefresh(t *testing.T) {
 	if detail.Title != "Stale" {
 		t.Errorf("expected stale title=%q, got %q", "Stale", detail.Title)
 	}
-	// Verify background refresh was scheduled.
+
 	select {
 	case <-backgroundScheduled:
-		// Good — background refresh was scheduled.
 	default:
 		t.Error("expected background refresh to be scheduled for stale data")
 	}

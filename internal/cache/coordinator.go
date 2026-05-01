@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/utkarsh261/pho/internal/domain"
-	gitlog "github.com/utkarsh261/pho/internal/log"
+	pholog "github.com/utkarsh261/pho/internal/log"
 )
 
 // Coordinator wires L1 and L2 stores together and exposes a stale-while-
@@ -16,13 +16,13 @@ type Coordinator struct {
 	L1  Store
 	L2  Store
 	Now func() time.Time
-	log *gitlog.Logger
+	log *pholog.Logger
 }
 
 // NewCoordinator constructs a two-tier cache coordinator.
-func NewCoordinator(l1 Store, l2 Store, logger *gitlog.Logger) *Coordinator {
+func NewCoordinator(l1 Store, l2 Store, logger *pholog.Logger) *Coordinator {
 	if logger == nil {
-		logger = gitlog.NewNop()
+		logger = pholog.NewNop()
 	}
 	return &Coordinator{
 		L1:  l1,
@@ -40,13 +40,15 @@ func (c *Coordinator) StaleWhileRevalidate(
 	dest any,
 	scheduleRefresh func(key string),
 ) (meta domain.CacheMeta, freshness domain.Freshness, found bool, err error) {
+	defer c.log.Timer("cache swr", pholog.FieldCacheKey, key)()
+
 	meta, found, err = c.L1.Get(ctx, key, dest)
 	if err != nil {
-		c.log.Warn("cache error", gitlog.FieldCacheKey, key, "err", err)
+		c.log.Warn("cache error", pholog.FieldCacheKey, key, "err", err)
 		return domain.CacheMeta{}, domain.FreshnessErrorStale, false, fmt.Errorf("l1 get %q: %w", key, err)
 	}
 	if found {
-		c.log.Debug("cache swr", gitlog.FieldCacheKey, key, "found", true, "stale", false, "revalidating", scheduleRefresh != nil)
+		c.log.Debug("cache l1 hit", pholog.FieldCacheKey, key)
 		freshness = c.freshness(meta)
 		if freshness != domain.FreshnessFresh && scheduleRefresh != nil {
 			scheduleRefresh(key)
@@ -56,20 +58,24 @@ func (c *Coordinator) StaleWhileRevalidate(
 
 	meta, found, err = c.L2.Get(ctx, key, dest)
 	if err != nil {
-		c.log.Warn("cache error", gitlog.FieldCacheKey, key, "err", err)
+		c.log.Warn("cache error", pholog.FieldCacheKey, key, "err", err)
 		return domain.CacheMeta{}, domain.FreshnessErrorStale, false, fmt.Errorf("l2 get %q: %w", key, err)
 	}
 	if !found {
-		c.log.Debug("cache swr", gitlog.FieldCacheKey, key, "found", false, "stale", false, "revalidating", scheduleRefresh != nil)
+		c.log.Debug("cache miss", pholog.FieldCacheKey, key)
 		return domain.CacheMeta{}, domain.FreshnessStale, false, nil
 	}
 
 	stale := c.freshness(meta) != domain.FreshnessFresh
-	c.log.Debug("cache swr", gitlog.FieldCacheKey, key, "found", true, "stale", stale, "revalidating", scheduleRefresh != nil)
+	if stale {
+		c.log.Debug("cache l2 hit stale", pholog.FieldCacheKey, key)
+	} else {
+		c.log.Debug("cache l2 hit fresh", pholog.FieldCacheKey, key)
+	}
 
 	// L2 hit: promote to L1. Promotion failure should not discard useful data.
 	if putErr := c.L1.Put(ctx, key, dest, meta); putErr != nil {
-		c.log.Warn("cache error", gitlog.FieldCacheKey, key, "err", putErr)
+		c.log.Warn("cache error", pholog.FieldCacheKey, key, "err", putErr)
 		err = errors.Join(err, fmt.Errorf("l1 promote %q: %w", key, putErr))
 	}
 	freshness = c.freshness(meta)

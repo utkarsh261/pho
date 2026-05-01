@@ -43,7 +43,7 @@ func New(dbPath string, version int) (*Cache, error) {
 	}
 	// Single connection eliminates SQLITE_BUSY: all reads and writes are
 	// serialized through one connection, so there is never a second writer
-	// waiting on the lock. For an in-process cache this is the right default.
+	// waiting on the lock.
 	db.SetMaxOpenConns(1)
 
 	c := &Cache{

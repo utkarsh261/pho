@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 )
 
 // Field name constants for structured log entries. Using these constants
@@ -98,6 +99,22 @@ func (l *Logger) Error(msg string, args ...any) {
 // every subsequent log entry emitted by the returned logger.
 func (l *Logger) With(args ...any) *Logger {
 	return &Logger{inner: l.inner.With(args...)}
+}
+
+// Timer starts a timer and returns a function that logs the elapsed duration
+// in milliseconds when called. Use with defer:
+//
+//	defer logger.Timer("operation", "repo", repo.FullName)()
+func (l *Logger) Timer(msg string, attrs ...any) func() {
+	if l == nil {
+		return func() {}
+	}
+	start := time.Now()
+	return func() {
+		ms := time.Since(start).Milliseconds()
+		all := append([]any{FieldDurationMS, ms}, attrs...)
+		l.Debug(msg, all...)
+	}
 }
 
 // IsDebug returns true if the process was started with --debug or

@@ -59,7 +59,6 @@ type rawConfig struct {
 	} `toml:"palette"`
 }
 
-// Config is the fully-resolved application configuration.
 type Config struct {
 	Discovery struct {
 		MaxRepos    int
@@ -89,7 +88,6 @@ type Config struct {
 	}
 }
 
-// Paths holds fully-resolved filesystem paths used by the application.
 type Paths struct {
 	ConfigFile string
 	CacheDir   string
@@ -107,7 +105,6 @@ func xdgDir(envVar, homeRelDefault string) string {
 	return filepath.Join(home, homeRelDefault)
 }
 
-// expandTilde replaces a leading "~" with the user's home directory.
 func expandTilde(path string) string {
 	if !strings.HasPrefix(path, "~") {
 		return path
@@ -135,7 +132,6 @@ func ResolvePaths(configPath string) Paths {
 	}
 }
 
-// defaults returns a Config pre-populated with all hardcoded default values.
 func defaults() Config {
 	var cfg Config
 	cfg.Discovery.MaxRepos = 50

@@ -16,7 +16,7 @@ import (
 	"github.com/utkarsh261/pho/internal/application/cmds"
 	achdashboard "github.com/utkarsh261/pho/internal/application/dashboard"
 	"github.com/utkarsh261/pho/internal/domain"
-	gitlog "github.com/utkarsh261/pho/internal/log"
+	pholog "github.com/utkarsh261/pho/internal/log"
 	"github.com/utkarsh261/pho/internal/ui/components/keymapoverlay"
 	"github.com/utkarsh261/pho/internal/ui/components/overlay"
 	"github.com/utkarsh261/pho/internal/ui/keymap"
@@ -53,13 +53,13 @@ type Dependencies struct {
 	Classifier achdashboard.SummaryTabClassifier
 	Now        func() time.Time
 
-	Logger *gitlog.Logger
+	Logger *pholog.Logger
 }
 
 type Model struct {
 	deps Dependencies
 
-	log   *gitlog.Logger
+	log   *pholog.Logger
 	state domain.AppState
 
 	// viewStack tracks the stack of base views. Top element is current view.
@@ -118,7 +118,7 @@ func NewModel(deps Dependencies) *Model {
 
 	log := deps.Logger
 	if log == nil {
-		log = gitlog.NewNop()
+		log = pholog.NewNop()
 	}
 
 	m := &Model{
@@ -356,6 +356,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) View() string {
+	defer m.log.Timer("render root view", "view", string(m.currentView()))()
 	if m.state.Search.OverlayOpen {
 		return m.palette.ViewOver(m.renderDashboard())
 	}
@@ -453,8 +454,6 @@ func (m *Model) Layout() layout.LayoutState {
 }
 
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	m.logDebug("key", "key", msg.String(), "view", string(m.currentView()), "focus", string(m.focus))
-
 	// Keymap overlay takes priority when visible.
 	if m.keymapOverlay.Visible {
 		m.keymapOverlay, _ = m.keymapOverlay.Update(msg)
@@ -631,7 +630,7 @@ func (m *Model) applyMessage(msg tea.Msg) tea.Cmd {
 		return nil
 	case cmds.RefreshFailed:
 		delete(m.state.Jobs.InFlight, msg.Key)
-		m.logError("refresh failed", gitlog.FieldJobKey, msg.Key, "err", msg.Err)
+		m.logError("refresh failed", pholog.FieldJobKey, msg.Key, "err", msg.Err)
 		m.recordError(domain.ErrorKindNetwork, msg.Err, "")
 		m.syncStatus()
 		return nil
@@ -1698,6 +1697,7 @@ func (m *Model) openPRDetailForJump(summary domain.PullRequestSummary) tea.Cmd {
 
 	m.recordPRViewed(summary, repo, m.now())
 	m.prDetail = prdetail.NewModel(summary, repo, m.deps.PR)
+	m.prDetail.Log = m.log
 	m.prDetail.SetTheme(m.theme)
 	m.prDetail.Width = m.layout.Current.Width
 	m.prDetail.Height = m.layout.Current.Height - 2
@@ -1741,6 +1741,7 @@ func (m *Model) openPRDetail() tea.Cmd {
 	// Different PR or nil — construct fresh model.
 	// PR service may be nil (not wired yet) — model still renders from summary.
 	m.prDetail = prdetail.NewModel(current, repo, m.deps.PR)
+	m.prDetail.Log = m.log
 	m.prDetail.SetTheme(m.theme)
 	m.prDetail.Width = m.layout.Current.Width
 	m.prDetail.Height = m.layout.Current.Height - 2 // minus status bar
@@ -1777,6 +1778,7 @@ func (m *Model) handleBackToDashboard() tea.Cmd {
 
 func (m *Model) handleOpenCommitDetail(msg prdetail.OpenCommitDetail) tea.Cmd {
 	m.commitDetail = commitdetail.NewModel(msg.Repo, msg.Commit, m.deps.PR)
+	m.commitDetail.Log = m.log
 	m.commitDetail.SetTheme(m.theme)
 	if m.layout.Current.Width > 0 {
 		_, _ = m.commitDetail.Update(tea.WindowSizeMsg{Width: m.layout.Current.Width, Height: m.layout.Current.Height - 2})
@@ -1851,21 +1853,21 @@ func (m *Model) prSlug(repo string, number int) string {
 }
 
 func (m *Model) logInfo(msg string, attrs ...any) {
-	pairs := append([]any{gitlog.FieldRepo, m.slug()}, attrs...)
+	pairs := append([]any{pholog.FieldRepo, m.slug()}, attrs...)
 	m.log.Info(msg, pairs...)
 }
 
 func (m *Model) logWarn(msg string, attrs ...any) {
-	pairs := append([]any{gitlog.FieldRepo, m.slug()}, attrs...)
+	pairs := append([]any{pholog.FieldRepo, m.slug()}, attrs...)
 	m.log.Warn(msg, pairs...)
 }
 
 func (m *Model) logError(msg string, attrs ...any) {
-	pairs := append([]any{gitlog.FieldRepo, m.slug()}, attrs...)
+	pairs := append([]any{pholog.FieldRepo, m.slug()}, attrs...)
 	m.log.Error(msg, pairs...)
 }
 
 func (m *Model) logDebug(msg string, attrs ...any) {
-	pairs := append([]any{gitlog.FieldRepo, m.slug()}, attrs...)
+	pairs := append([]any{pholog.FieldRepo, m.slug()}, attrs...)
 	m.log.Debug(msg, pairs...)
 }

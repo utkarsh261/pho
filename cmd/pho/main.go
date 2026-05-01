@@ -41,7 +41,7 @@ import (
 	"github.com/utkarsh261/pho/internal/github/auth"
 	"github.com/utkarsh261/pho/internal/github/graphql"
 	"github.com/utkarsh261/pho/internal/github/rest"
-	gitlog "github.com/utkarsh261/pho/internal/log"
+	pholog "github.com/utkarsh261/pho/internal/log"
 	"github.com/utkarsh261/pho/internal/ui/app"
 	"github.com/utkarsh261/pho/internal/ui/theme"
 )
@@ -116,7 +116,7 @@ func main() {
 	if debug {
 		level = "debug"
 	}
-	logger := gitlog.New(cfg.Logging.File, level)
+	logger := pholog.New(cfg.Logging.File, level)
 
 	if reset {
 		if err := clearCaches(); err != nil {
@@ -127,7 +127,9 @@ func main() {
 	}
 
 	authSvc := auth.NewAuthService()
+	authDone := logger.Timer("auth resolution")
 	profiles, err := authSvc.ResolveHosts(context.Background())
+	authDone()
 	if err != nil {
 		logger.Error("auth failed", "err", err)
 		fmt.Fprintf(os.Stderr, "pho: authentication error: %v\n  [auth]\nRun 'gh auth login' to authenticate.\n", err)
@@ -144,6 +146,7 @@ func main() {
 		logger.Warn("failed to create cache directory", "dir", cfg.Cache.Dir, "err", err)
 	}
 
+	cacheDone := logger.Timer("cache init")
 	l1 := memory.NewJSONStore(cfg.Cache.MaxMemoryMB * 1024 * 1024)
 
 	l2, err := sqlitecache.New(filepath.Join(cfg.Cache.Dir, "cache.db"), 1)
@@ -160,20 +163,22 @@ func main() {
 	coordinator := cache.NewCoordinator(l1, l2Store, logger)
 
 	ghClient := graphql.NewClient(profiles, &http.Client{Timeout: 30 * time.Second}, logger)
+	cacheDone()
 
+	wireDone := logger.Timer("service wiring")
 	discoverySvc := discovery.New(discovery.Config{
 		Pin:     cfg.Repos.Pin,
 		Exclude: cfg.Repos.Exclude,
 	})
+	discoverySvc.Log = logger
 	dashboardSvc := dashboard.NewService(coordinator, ghClient)
+	dashboardSvc.Log = logger
 	searchSvc := search.New()
+	searchSvc.Log = logger
 
 	// REST client for raw diff fetching (one per primary host).
-	restClient := &rest.Client{
-		HTTPClient: &http.Client{Timeout: 30 * time.Second},
-		BaseURL:    profiles[0].RESTURL,
-		Token:      profiles[0].Token,
-	}
+	restClient := rest.NewClient(profiles[0].RESTURL, profiles[0].Token, logger)
+	restClient.HTTPClient = &http.Client{Timeout: 30 * time.Second}
 
 	// PR detail service: loads PR metadata (GraphQL) and diffs (REST).
 	prSvc := apppr.NewService(coordinator, ghClient, restClient)
@@ -196,7 +201,9 @@ func main() {
 	lipgloss.SetColorProfile(termenv.NewOutput(os.Stderr).Profile)
 	th := theme.Default()
 	model.SetTheme(th)
+	wireDone()
 
+	defer logger.Timer("total session")()
 	p := tea.NewProgram(model, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)

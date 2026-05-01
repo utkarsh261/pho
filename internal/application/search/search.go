@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/utkarsh261/pho/internal/domain"
+	pholog "github.com/utkarsh261/pho/internal/log"
 )
 
 type SearchService interface {
@@ -30,6 +31,7 @@ type Service struct {
 	currentRepo string
 	currentTab  domain.DashboardTab
 	prTabSignal map[string]map[int]map[domain.DashboardTab]bool
+	Log         *pholog.Logger
 }
 
 type prIndex struct {
@@ -135,6 +137,7 @@ func (s *Service) SetPRTabs(repo string, number int, tabs ...domain.DashboardTab
 
 // BuildPRIndex replaces the PR index for one repository.
 func (s *Service) BuildPRIndex(repo domain.Repository, snap domain.DashboardSnapshot) error {
+	defer s.log().Timer("search build pr index", pholog.FieldRepo, repo.FullName, "pr_count", len(snap.PRs))()
 	key := canonicalRepoKey(repo.FullName)
 	if key == "" {
 		key = canonicalRepoKey(repoKey(repo))
@@ -207,6 +210,7 @@ func (s *Service) BuildPRIndex(repo domain.Repository, snap domain.DashboardSnap
 
 // BuildRepoIndex replaces the repo search index.
 func (s *Service) BuildRepoIndex(repos []domain.Repository) error {
+	defer s.log().Timer("search build repo index", "repo_count", len(repos))()
 	entries := make([]repoEntry, 0, len(repos))
 	for _, repo := range repos {
 		entries = append(entries, repoEntry{repo: repo})
@@ -447,6 +451,13 @@ func (s *Service) SetJumpIndexComplete(repo string) {
 		}
 	}
 	s.prIndexes[key].jumpComplete = true
+}
+
+func (s *Service) log() *pholog.Logger {
+	if s.Log != nil {
+		return s.Log
+	}
+	return pholog.NewNop()
 }
 
 func scoredPRResults(results []scoredPR, limit int) []domain.SearchResult {

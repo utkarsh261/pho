@@ -6,6 +6,7 @@ import (
 	"github.com/utkarsh261/pho/internal/application/cmds"
 	diffmodel "github.com/utkarsh261/pho/internal/diff/model"
 	"github.com/utkarsh261/pho/internal/domain"
+	pholog "github.com/utkarsh261/pho/internal/log"
 	"github.com/utkarsh261/pho/internal/ui/theme"
 	"github.com/utkarsh261/pho/internal/ui/views/prdetail"
 )
@@ -15,12 +16,20 @@ import (
 // the embedded PRDetailModel in CommitMode.
 type Model struct {
 	inner *prdetail.PRDetailModel
+	Log   *pholog.Logger
 }
 
 // NewModel creates a commit detail view by delegating to PRDetailModel in CommitMode.
 func NewModel(repo domain.Repository, commit domain.Commit, svc cmds.PRService) *Model {
 	inner := prdetail.NewCommitModel(repo, commit, svc)
 	return &Model{inner: inner}
+}
+
+func (m *Model) log() *pholog.Logger {
+	if m.Log != nil {
+		return m.Log
+	}
+	return pholog.NewNop()
 }
 
 // SetTheme applies a theme to the commit detail view.
@@ -42,6 +51,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 
 // View delegates to the inner PRDetailModel.
 func (m *Model) View() string {
+	defer m.log().Timer("render commit detail")()
 	return m.inner.View()
 }
 

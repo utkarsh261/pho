@@ -6,23 +6,36 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+
+	pholog "github.com/utkarsh261/pho/internal/log"
 )
 
 const (
-	// acceptDiffHeader is the Accept header required to get raw unified diff output.
 	acceptDiffHeader = "application/vnd.github.v3.diff"
-	// userAgentHeader is a standard User-Agent for GitHub API requests.
+
 	userAgentHeader = "pho/1.0"
 )
 
-// Client fetches raw diff content from the GitHub REST API.
 type Client struct {
-	// HTTPClient is used for making requests. If nil, http.DefaultClient is used.
 	HTTPClient *http.Client
-	// BaseURL is the GitHub REST API base (e.g. "https://api.github.com").
+
 	BaseURL string
-	// Token is the authentication token (without "token " prefix).
+
 	Token string
+
+	log *pholog.Logger
+}
+
+// NewClient creates a new REST client with the given base URL, token, and logger.
+func NewClient(baseURL, token string, logger *pholog.Logger) *Client {
+	if logger == nil {
+		logger = pholog.NewNop()
+	}
+	return &Client{
+		BaseURL: baseURL,
+		Token:   token,
+		log:     logger,
+	}
 }
 
 // FetchRawDiff retrieves the raw unified diff for a specific PR.
@@ -34,6 +47,9 @@ type Client struct {
 //
 // Auth header: Authorization: token <token>
 func (c *Client) FetchRawDiff(ctx context.Context, owner, repo string, number int) (string, error) {
+	var statusCode int
+	defer c.log.Timer("rest diff fetch", pholog.FieldHost, c.BaseURL, pholog.FieldStatusCode, statusCode)()
+
 	url := buildDiffURL(c.BaseURL, owner, repo, number)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -55,6 +71,7 @@ func (c *Client) FetchRawDiff(ctx context.Context, owner, repo string, number in
 		return "", fmt.Errorf("rest: request failed: %w", err)
 	}
 	defer resp.Body.Close()
+	statusCode = resp.StatusCode
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
@@ -78,6 +95,9 @@ func (c *Client) FetchRawDiff(ctx context.Context, owner, repo string, number in
 //
 // Auth header: Authorization: token <token>
 func (c *Client) FetchCommitDiff(ctx context.Context, owner, repo, sha string) (string, error) {
+	var statusCode int
+	defer c.log.Timer("rest diff fetch", pholog.FieldHost, c.BaseURL, pholog.FieldStatusCode, statusCode)()
+
 	url := buildCommitDiffURL(c.BaseURL, owner, repo, sha)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -99,6 +119,7 @@ func (c *Client) FetchCommitDiff(ctx context.Context, owner, repo, sha string) (
 		return "", fmt.Errorf("rest: request failed: %w", err)
 	}
 	defer resp.Body.Close()
+	statusCode = resp.StatusCode
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))

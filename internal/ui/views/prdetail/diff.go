@@ -81,16 +81,8 @@ func (m *PRDetailModel) renderDiffTab(scroll, contentH, contentWidth int) []stri
 // Applies file-level virtualization: only files whose row ranges overlap
 // [localStart, localEnd) are processed. Rendering stops at maxDiffDisplayRows;
 // a truncation banner is injected at that position when the diff is larger.
-//
-// Row layout per DiffFile (via diffFileDisplayRows):
-//
-//	row 0   : blank line (padding before separator)
-//	row 1   : dashed separator "╌╌╌╌╌" (muted)
-//	row 2   : file header bar  (Subtle bg, bold, full-width)
-//	row 3   : first hunk header "@@ … @@" (cyan+bold) — or binary placeholder
-//	rows 4+ : diff lines: additions (green), deletions (red), context (plain)
-//	          second hunk header if any, then its lines, etc.
 func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidth int) []string {
+	defer m.log().Timer("render diff section")()
 	n := localEnd - localStart
 	out := make([]string, n)
 

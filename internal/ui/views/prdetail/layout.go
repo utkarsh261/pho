@@ -19,31 +19,21 @@ var panelHeadBorder = lipgloss.Border{
 }
 
 const (
-	// LeftPanelWidth is the fixed OUTER width of the left panel (including 1-char side borders).
+	// LeftPanelWidth is the fixed outer width of the left panel (including side borders).
 	LeftPanelWidth = 42
 	// MinWidthForSidebar is the minimum terminal width at which the sidebar is shown.
 	MinWidthForSidebar = 80
 
 	// lpInner is the usable content width inside the left panel border and padding.
-	// 4-sided border: 1-char left border + 1-char right border = 2 overhead.
-	// 2-pad: 1-char left pad + 1-char right pad = 2 overhead. Total = 4 overhead.
 	lpInner = LeftPanelWidth - 4
 
-	// File row layout within lpInner (38 chars):
-	//   "  " left padding : 2 chars
-	//   truncated path     : lpPathMax chars
-	//   stats " +N -N"    : lpStatsWidth chars
 	lpPaddingWidth = 2
 	lpStatsWidth   = 10
 	lpPathMax      = lpInner - lpPaddingWidth - lpStatsWidth
 
-	// CI row layout within lpInner (28 chars):
-	//   icon + space     : lpCIIconWidth chars (2)
-	//   check name       : lpCINameMax chars (truncated)
-	//   space + status   : 1 + lpCIStatusWidth chars
-	lpCIIconWidth   = 2                                             // e.g. "✓ "
-	lpCIStatusWidth = 5                                             // e.g. "pass " — abbreviated status, 5 chars right-padded
-	lpCINameMax     = lpInner - lpCIIconWidth - 1 - lpCIStatusWidth // 20
+	lpCIIconWidth   = 2
+	lpCIStatusWidth = 5
+	lpCINameMax     = lpInner - lpCIIconWidth - 1 - lpCIStatusWidth
 )
 
 // truncatePathLeft truncates path from the LEFT so the filename (right side) stays visible.

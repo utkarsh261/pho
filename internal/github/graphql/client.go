@@ -14,13 +14,13 @@ import (
 	"github.com/utkarsh261/pho/internal/domain"
 	githubpkg "github.com/utkarsh261/pho/internal/github"
 	"github.com/utkarsh261/pho/internal/github/model"
-	gitlog "github.com/utkarsh261/pho/internal/log"
+	pholog "github.com/utkarsh261/pho/internal/log"
 )
 
 // Client implements github.GitHubClient over GitHub GraphQL.
 type Client struct {
 	httpClient *http.Client
-	log        *gitlog.Logger
+	log        *pholog.Logger
 
 	mu    sync.RWMutex
 	hosts map[string]*hostState
@@ -31,9 +31,9 @@ type hostState struct {
 }
 
 // NewClient builds a GraphQL transport from host profiles.
-func NewClient(profiles []githubpkg.GitHubHostProfile, httpClient *http.Client, logger *gitlog.Logger) *Client {
+func NewClient(profiles []githubpkg.GitHubHostProfile, httpClient *http.Client, logger *pholog.Logger) *Client {
 	if logger == nil {
-		logger = gitlog.NewNop()
+		logger = pholog.NewNop()
 	}
 	hosts := make(map[string]*hostState, len(profiles))
 	for _, profile := range profiles {
@@ -308,7 +308,7 @@ func queryGraphQL[T any](c *Client, ctx context.Context, host string, build func
 	}
 	ms := time.Since(start).Milliseconds()
 	if len(resp.Errors) == 0 {
-		c.log.Debug("graphql response ok", "host", host, "graphql_url", profile.GraphQLURL, gitlog.FieldDurationMS, ms)
+		c.log.Debug("graphql response ok", "host", host, "graphql_url", profile.GraphQLURL, pholog.FieldDurationMS, ms)
 		return resp, nil
 	}
 
