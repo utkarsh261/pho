@@ -110,14 +110,14 @@ func (m *PRDetailModel) renderCommitsTab(scroll, contentH, contentWidth int) []s
 			authorStyle := th.BoxPRAuthor
 			mutedStyle := lipgloss.NewStyle().Foreground(th.Muted)
 
-			globalRow1 := rowStart - localStart
-			if globalRow1 >= 0 && globalRow1 < contentH {
-				out[globalRow1] = "  " + shaStyle.Render(shortSHA) + "  " + truncateString(c.MessageHeadline, cw-lipgloss.Width(shortSHA)-6)
-			}
-			globalRow2 := rowStart + 1 - localStart
-			if globalRow2 >= 0 && globalRow2 < contentH {
-				out[globalRow2] = "  " + authorStyle.Render(author) + strings.Repeat(" ", max(1, cw-4-lipgloss.Width(author)-lipgloss.Width(relTime))) + mutedStyle.Render(relTime)
-			}
+		globalRow1 := rowStart - localStart
+		if globalRow1 >= 0 && globalRow1 < contentH {
+			out[globalRow1] = shaStyle.Render(shortSHA) + "  " + truncateString(c.MessageHeadline, cw-lipgloss.Width(shortSHA)-6)
+		}
+		globalRow2 := rowStart + 1 - localStart
+		if globalRow2 >= 0 && globalRow2 < contentH {
+			out[globalRow2] = authorStyle.Render(author) + strings.Repeat(" ", max(1, cw-4-lipgloss.Width(author)-lipgloss.Width(relTime))) + mutedStyle.Render(relTime)
+		}
 		}
 	}
 
