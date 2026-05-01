@@ -1,6 +1,6 @@
 bin    := "pho"
 module := "github.com/utkarsh261/pho"
-version := env("VERSION", "dev")
+version := env("VERSION", `git describe --tags --always --dirty 2>/dev/null || echo dev`)
 
 build:
     go build -ldflags="-X main.version={{version}}" -o {{bin}} ./cmd/pho
