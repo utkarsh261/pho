@@ -864,7 +864,7 @@ func (m *PRDetailModel) renderRightViewport(width, height int) string {
 	case TabComments:
 		lines = m.renderCommentsTab(scroll, contentH, contentW)
 	case TabCommits:
-		lines = m.renderCommitsTab(scroll, contentH, contentW)
+		lines = m.renderCommitsTab(scroll, contentH, innerW-1)
 	}
 
 	// Apply left-padding (1 space) to each content line.

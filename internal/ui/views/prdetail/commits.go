@@ -22,9 +22,11 @@ func (m *PRDetailModel) commitsSectionRowCount() int {
 }
 
 // renderCommitsTab renders the Commits tab content.
-func (m *PRDetailModel) renderCommitsTab(scroll, contentH, contentWidth int) []string {
+// availW is the available content width (innerW - 1, accounting for the left-pad
+// space that renderRightViewport adds to every line).
+func (m *PRDetailModel) renderCommitsTab(scroll, contentH, availW int) []string {
 	out := make([]string, contentH)
-	cw := max(contentWidth, 1)
+	cw := max(availW, 1)
 
 	if m.commitsLoading {
 		msg := "Loading commits…"
@@ -75,8 +77,10 @@ func (m *PRDetailModel) renderCommitsTab(scroll, contentH, contentWidth int) []s
 		if len(shortSHA) > 7 {
 			shortSHA = shortSHA[:7]
 		}
-		line1 := shortSHA + "  " + c.MessageHeadline
-		line1 = truncateString(line1, cw-4)
+		shaStyled := th.BoxPRNum.Render(shortSHA)
+		shaW := lipgloss.Width(shaStyled)
+		gap := "  "
+		gapW := 2
 
 		// Line 2: author (right-pad) + relative time
 		author := c.AuthorLogin
@@ -84,14 +88,18 @@ func (m *PRDetailModel) renderCommitsTab(scroll, contentH, contentWidth int) []s
 			author = c.AuthorName
 		}
 		relTime := relativeTime(c.CommittedAt)
-		line2 := author
-		padding := cw - 4 - lipgloss.Width(line2) - lipgloss.Width(relTime)
-		if padding > 0 {
-			line2 += strings.Repeat(" ", padding)
-		}
-		line2 += relTime
 
 		if isSelected {
+			line1 := shortSHA + gap + c.MessageHeadline
+			line1 = truncateString(line1, cw)
+
+			line2 := author
+			padding := cw - lipgloss.Width(line2) - lipgloss.Width(relTime)
+			if padding > 0 {
+				line2 += strings.Repeat(" ", padding)
+			}
+			line2 += relTime
+
 			fullRow := line1 + "\n" + line2
 			rendered := th.BoxSelected.Width(cw).Render(fullRow)
 			parts := strings.Split(rendered, "\n")
@@ -106,18 +114,24 @@ func (m *PRDetailModel) renderCommitsTab(scroll, contentH, contentWidth int) []s
 				outIdx++
 			}
 		} else {
-			shaStyle := th.BoxPRNum
 			authorStyle := th.BoxPRAuthor
 			mutedStyle := lipgloss.NewStyle().Foreground(th.Muted)
 
-		globalRow1 := rowStart - localStart
-		if globalRow1 >= 0 && globalRow1 < contentH {
-			out[globalRow1] = shaStyle.Render(shortSHA) + "  " + truncateString(c.MessageHeadline, cw-lipgloss.Width(shortSHA)-6)
-		}
-		globalRow2 := rowStart + 1 - localStart
-		if globalRow2 >= 0 && globalRow2 < contentH {
-			out[globalRow2] = authorStyle.Render(author) + strings.Repeat(" ", max(1, cw-4-lipgloss.Width(author)-lipgloss.Width(relTime))) + mutedStyle.Render(relTime)
-		}
+			globalRow1 := rowStart - localStart
+			if globalRow1 >= 0 && globalRow1 < contentH {
+				headlineMax := cw - shaW - gapW
+				out[globalRow1] = shaStyled + gap + truncateString(c.MessageHeadline, headlineMax)
+			}
+			globalRow2 := rowStart + 1 - localStart
+			if globalRow2 >= 0 && globalRow2 < contentH {
+				authorStyled := authorStyle.Render(author)
+				relStyled := mutedStyle.Render(relTime)
+				padding := cw - lipgloss.Width(authorStyled) - lipgloss.Width(relStyled)
+				if padding < 0 {
+					padding = 0
+				}
+				out[globalRow2] = authorStyled + strings.Repeat(" ", padding) + relStyled
+			}
 		}
 	}
 
