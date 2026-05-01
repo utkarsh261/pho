@@ -166,10 +166,16 @@ func (s *stubPRService) LoadDiff(ctx context.Context, repo domain.Repository, nu
 	return s.diffResult, s.diffFromCache, s.diffErr
 }
 
-func (s *stubPRService) PostComment(_ context.Context, _, _ string) error       { return nil }
-func (s *stubPRService) PostReviewComment(_ context.Context, _, _ string) error { return nil }
-func (s *stubPRService) ApprovePR(_ context.Context, _, _ string) error         { return nil }
-func (s *stubPRService) SubmitReviewWithComments(_ context.Context, _, _, _ string, _ []domain.DraftInlineComment) error {
+func (s *stubPRService) PostComment(_ context.Context, _ domain.Repository, _, _ string) error {
+	return nil
+}
+func (s *stubPRService) PostReviewComment(_ context.Context, _ domain.Repository, _, _ string) error {
+	return nil
+}
+func (s *stubPRService) ApprovePR(_ context.Context, _ domain.Repository, _, _ string) error {
+	return nil
+}
+func (s *stubPRService) SubmitReviewWithComments(_ context.Context, _ domain.Repository, _, _, _ string, _ []domain.DraftInlineComment) error {
 	return nil
 }
 func (s *stubPRService) SaveDraftComments(_ context.Context, _ domain.Repository, _ int, _ string, _ []domain.DraftInlineComment) error {

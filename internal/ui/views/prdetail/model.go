@@ -464,7 +464,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 			if m.compose.mode == composeModeApprove {
 				event = "APPROVE"
 			}
-			postCmd := cmds.SubmitReviewWithDraftsCmd(m.PRService, m.Summary.ID, body, event, m.drafts)
+			postCmd := cmds.SubmitReviewWithDraftsCmd(m.PRService, m.Repo, m.Summary.ID, body, event, m.drafts)
 			return m, tea.Batch(spinCmd, composeCmd, postCmd)
 		}
 		// No drafts: review comment with empty body is a no-op.
@@ -473,9 +473,9 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		}
 		var postCmd tea.Cmd
 		if m.compose.mode == composeModeReviewComment {
-			postCmd = cmds.PostReviewCommentCmd(m.PRService, m.Summary.ID, body)
+			postCmd = cmds.PostReviewCommentCmd(m.PRService, m.Repo, m.Summary.ID, body)
 		} else {
-			postCmd = cmds.PostCommentCmd(m.PRService, m.Summary.ID, body)
+			postCmd = cmds.PostCommentCmd(m.PRService, m.Repo, m.Summary.ID, body)
 		}
 		return m, tea.Batch(spinCmd, composeCmd, postCmd)
 
@@ -485,10 +485,10 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		}
 		// When drafts exist, batch-submit them as an approved review.
 		if len(m.drafts) > 0 {
-			postCmd := cmds.SubmitReviewWithDraftsCmd(m.PRService, m.Summary.ID, msg.body, "APPROVE", m.drafts)
+			postCmd := cmds.SubmitReviewWithDraftsCmd(m.PRService, m.Repo, m.Summary.ID, msg.body, "APPROVE", m.drafts)
 			return m, tea.Batch(spinCmd, composeCmd, postCmd)
 		}
-		return m, tea.Batch(spinCmd, composeCmd, cmds.ApprovePRCmd(m.PRService, m.Summary.ID, msg.body))
+		return m, tea.Batch(spinCmd, composeCmd, cmds.ApprovePRCmd(m.PRService, m.Repo, m.Summary.ID, msg.body))
 
 	case openEditorComposeMsg:
 		editor := os.Getenv("VISUAL")

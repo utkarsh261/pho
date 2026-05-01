@@ -177,7 +177,6 @@ func main() {
 
 	// PR detail service: loads PR metadata (GraphQL) and diffs (REST).
 	prSvc := apppr.NewService(coordinator, ghClient, restClient)
-	prSvc.Host = profiles[0].Host
 	prSvc.Log = logger
 
 	deps := app.Dependencies{
