@@ -26,17 +26,22 @@ const (
 // State mutations are driven entirely by PRDetailModel.Update() — this struct
 // intentionally has no Update() method.
 type LeftPanelModel struct {
+	// File list state — mutated by PRDetailModel.Update
+	Files           []diffmodel.DiffFile
+	Cursor          int // index of highlighted file
+	Scroll          int // index of first visible file row
+	LastOpenedIndex int // persisted after Enter/l
+
 	// Data — set by PRDetailModel when diff/detail data arrive
-	Files   []diffmodel.DiffFile
 	Checks  []domain.PreviewCheckRow
 	Loading bool // true while the diff is still being fetched
 
 	// Navigation state — mutated by PRDetailModel.Update
-	FilesScroll     int // index of first visible file row
-	CIScroll        int // index of first visible CI row
-	FileIndex       int // index of the highlighted (cursor) file
-	LastOpenedIndex int // index of the file last opened (Enter/l); persists when focus leaves files
-	CICursor        int // index of the highlighted (cursor) CI check
+	CIScroll int // index of first visible CI row
+	CICursor int // index of the highlighted (cursor) CI check
+
+	// HideCI suppresses the CI section entirely (used in commit mode).
+	HideCI bool
 
 	Focus PRDetailFocus
 
@@ -44,7 +49,9 @@ type LeftPanelModel struct {
 }
 
 // SetTheme wires the theme into the left panel.
-func (m *LeftPanelModel) SetTheme(th *theme.Theme) { m.theme = th }
+func (m *LeftPanelModel) SetTheme(th *theme.Theme) {
+	m.theme = th
+}
 
 // View renders the left panel into a string of LeftPanelWidth columns.
 // height is the total outer row count available for the left panel.
@@ -52,6 +59,9 @@ func (m *LeftPanelModel) SetTheme(th *theme.Theme) { m.theme = th }
 func (m *LeftPanelModel) View(height int, spinnerFrame string) string {
 	if height <= 0 {
 		return ""
+	}
+	if m.HideCI {
+		return m.renderFilesArea(height, spinnerFrame)
 	}
 	ciH := computeCIHeight(height, len(m.Checks))
 	filesH := max(height-ciH, 5)
@@ -129,7 +139,7 @@ func (m *LeftPanelModel) spinnerRows(innerH int, spinnerFrame string) []string {
 	return rows
 }
 
-// fileRows returns up to innerH rendered file rows, respecting FilesScroll, with double spacing.
+// fileRows returns up to innerH rendered file rows, respecting Scroll, with double spacing.
 func (m *LeftPanelModel) fileRows(innerH int) []string {
 	if len(m.Files) == 0 {
 		rows := make([]string, innerH)
@@ -147,7 +157,7 @@ func (m *LeftPanelModel) fileRows(innerH int) []string {
 
 	visibleItems := max(innerH, 1)
 
-	scroll := clamp(m.FilesScroll, 0, max(0, len(m.Files)-visibleItems))
+	scroll := clamp(m.Scroll, 0, max(0, len(m.Files)-visibleItems))
 	var rows []string
 
 	for i := range visibleItems {
@@ -172,7 +182,7 @@ func (m *LeftPanelModel) fileRows(innerH int) []string {
 // matching the command palette's selection UX.
 // Last-opened rows (persisted after Enter/l) get a lighter subtle highlight.
 func (m *LeftPanelModel) renderFileRow(f diffmodel.DiffFile, idx int) string {
-	isSelected := idx == m.FileIndex && m.Focus == FocusFiles
+	isSelected := idx == m.Cursor && m.Focus == FocusFiles
 	isOpened := idx == m.LastOpenedIndex && !isSelected
 
 	path := truncatePathLeft(f.NewPath, lpPathMax) // exactly lpPathMax visible chars
@@ -361,8 +371,4 @@ func formatCIStatus(state string) string {
 		runes = append(runes[:lpCIStatusWidth-1], '…')
 	}
 	return lipgloss.NewStyle().Width(lpCIStatusWidth).Align(lipgloss.Left).Render(string(runes))
-}
-
-func centerInWidth(s string, width int) string {
-	return lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(s)
 }

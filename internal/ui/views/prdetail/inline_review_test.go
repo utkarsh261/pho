@@ -773,11 +773,11 @@ func TestJKWithCommentsTabAndFilesFocus(t *testing.T) {
 	m.Diff = makeDiffForMapper()
 	m.activeTab = TabComments
 	m.leftPanel.Focus = FocusFiles
-	m.leftPanel.FileIndex = 0
+	m.leftPanel.Cursor = 0
 
-	beforeIdx := m.leftPanel.FileIndex
+	beforeIdx := m.leftPanel.Cursor
 	m = pressKey(m, "j")
-	if m.leftPanel.FileIndex == beforeIdx {
+	if m.leftPanel.Cursor == beforeIdx {
 		t.Error("expected j to move file cursor when focus is on Files")
 	}
 	if m.commentCursor >= 0 {

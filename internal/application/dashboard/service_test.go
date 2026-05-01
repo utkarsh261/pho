@@ -61,6 +61,9 @@ func (f *fakeGitHubClient) CheckMergeable(_ context.Context, _ domain.Repository
 }
 func (f *fakeGitHubClient) ClosePullRequest(_ context.Context, _, _ string) error  { return nil }
 func (f *fakeGitHubClient) ReopenPullRequest(_ context.Context, _, _ string) error { return nil }
+func (f *fakeGitHubClient) FetchCommits(_ context.Context, _ domain.Repository, _ int) ([]domain.Commit, error) {
+	return nil, nil
+}
 
 func newTestCoordinator(t *testing.T) *cache.Coordinator {
 	t.Helper()

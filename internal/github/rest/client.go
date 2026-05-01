@@ -68,3 +68,47 @@ func (c *Client) FetchRawDiff(ctx context.Context, owner, repo string, number in
 
 	return string(raw), nil
 }
+
+// FetchCommitDiff retrieves the raw unified diff for a single commit.
+//
+// It uses the GitHub REST API endpoint:
+//
+//	GET /repos/{owner}/{repo}/commits/{sha}
+//	with Accept: application/vnd.github.v3.diff
+//
+// Auth header: Authorization: token <token>
+func (c *Client) FetchCommitDiff(ctx context.Context, owner, repo, sha string) (string, error) {
+	url := buildCommitDiffURL(c.BaseURL, owner, repo, sha)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", fmt.Errorf("rest: create request: %w", err)
+	}
+
+	req.Header.Set("Accept", acceptDiffHeader)
+	req.Header.Set("User-Agent", userAgentHeader)
+	req.Header.Set("Authorization", "token "+c.Token)
+
+	client := c.HTTPClient
+	if client == nil {
+		client = http.DefaultClient
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("rest: request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return "", fmt.Errorf("rest: unexpected status %d: %s", resp.StatusCode, string(body))
+	}
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("rest: read body: %w", err)
+	}
+
+	return string(raw), nil
+}

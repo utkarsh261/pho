@@ -486,3 +486,35 @@ func numberOr(actual, fallback int) int {
 	}
 	return fallback
 }
+
+func normalizeCommitsResponse(resp model.CommitsData) []domain.Commit {
+	pr := resp.Repository.PullRequest
+	if pr == nil {
+		return nil
+	}
+	nodes := pr.Commits.Nodes
+	// GraphQL returns oldest first, but we want newest first.
+	// Reverse the slice in-place.
+	out := make([]domain.Commit, 0, len(nodes))
+	for i := len(nodes) - 1; i >= 0; i-- {
+		c := nodes[i].Commit
+		committedAt, _ := parseGraphQLTime(c.CommittedDate)
+		login := ""
+		name := ""
+		if c.Author != nil {
+			name = c.Author.Name
+			if c.Author.User != nil {
+				login = c.Author.User.Login
+			}
+		}
+		out = append(out, domain.Commit{
+			SHA:             c.OID,
+			MessageHeadline: c.MessageHeadline,
+			MessageBody:     c.MessageBody,
+			AuthorName:      name,
+			AuthorLogin:     login,
+			CommittedAt:     committedAt,
+		})
+	}
+	return out
+}

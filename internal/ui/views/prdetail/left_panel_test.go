@@ -48,11 +48,11 @@ func makePanelWithFiles(files []diffmodel.DiffFile, focus PRDetailFocus) LeftPan
 
 func makePanelWithChecks(checks []domain.PreviewCheckRow) LeftPanelModel {
 	return LeftPanelModel{
-		Files:   makeFiles("main.go"),
-		Checks:  checks,
-		Loading: false,
-		Focus:   FocusFiles,
-		theme:   theme.Default(),
+		Files:       makeFiles("main.go"),
+		Checks:      checks,
+		Loading:     false,
+		Focus:       FocusFiles,
+		theme:       theme.Default(),
 	}
 }
 
@@ -304,9 +304,9 @@ func TestLeftPanelFocusBorderColor(t *testing.T) {
 	t.Parallel()
 	th := theme.Default()
 	panel := LeftPanelModel{
-		Files:  makeFiles("main.go"),
-		Focus:  FocusFiles, // Files is focused
-		theme:  th,
+		Files: makeFiles("main.go"),
+		Focus: FocusFiles, // Files is focused
+		theme: th,
 	}
 	// Focused border should use the Primary color.
 	color := panel.borderColorFor(FocusFiles)
@@ -319,9 +319,9 @@ func TestLeftPanelNonFocusBorderColor(t *testing.T) {
 	t.Parallel()
 	th := theme.Default()
 	panel := LeftPanelModel{
-		Files:  makeFiles("main.go"),
-		Focus:  FocusFiles, // Files is focused
-		theme:  th,
+		Files: makeFiles("main.go"),
+		Focus: FocusFiles, // Files is focused
+		theme: th,
 	}
 	// Non-focused (CI) border should use the Border (muted) color.
 	color := panel.borderColorFor(FocusCI)
@@ -336,7 +336,7 @@ func TestLeftPanelSpinnerWhileLoading(t *testing.T) {
 	panel := LeftPanelModel{
 		Files:   files,
 		Loading: true, // diff is still loading
-		Focus:   FocusFiles,
+		Focus:       FocusFiles,
 	}
 	spinnerFrame := "⠋"
 	output := panel.View(20, spinnerFrame)
@@ -410,11 +410,11 @@ func TestJKeyMovesFileCursorDown(t *testing.T) {
 	files := makeFiles("a.go", "b.go", "c.go")
 	m := makePRDetail(100, 30, files, nil)
 	m.leftPanel.Focus = FocusFiles
-	m.leftPanel.FileIndex = 0
+	m.leftPanel.Cursor = 0
 
 	m = pressKey(m, "j")
-	if m.leftPanel.FileIndex != 1 {
-		t.Errorf("expected FileIndex 1 after j, got %d", m.leftPanel.FileIndex)
+	if m.leftPanel.Cursor != 1 {
+		t.Errorf("expected FileIndex 1 after j, got %d", m.leftPanel.Cursor)
 	}
 }
 
@@ -423,11 +423,11 @@ func TestKKeyMovesFileCursorUp(t *testing.T) {
 	files := makeFiles("a.go", "b.go", "c.go")
 	m := makePRDetail(100, 30, files, nil)
 	m.leftPanel.Focus = FocusFiles
-	m.leftPanel.FileIndex = 2
+	m.leftPanel.Cursor = 2
 
 	m = pressKey(m, "k")
-	if m.leftPanel.FileIndex != 1 {
-		t.Errorf("expected FileIndex 1 after k, got %d", m.leftPanel.FileIndex)
+	if m.leftPanel.Cursor != 1 {
+		t.Errorf("expected FileIndex 1 after k, got %d", m.leftPanel.Cursor)
 	}
 }
 
@@ -437,7 +437,7 @@ func TestJOnLastFileMovesToCI(t *testing.T) {
 	checks := makeChecks("build", "test")
 	m := makePRDetail(100, 30, files, checks)
 	m.leftPanel.Focus = FocusFiles
-	m.leftPanel.FileIndex = 1 // already on last file
+	m.leftPanel.Cursor = 1 // already on last file
 
 	m = pressKey(m, "j")
 	if m.leftPanel.Focus != FocusCI {
@@ -453,15 +453,15 @@ func TestJOnLastFileNoopWhenCIEmpty(t *testing.T) {
 	files := makeFiles("a.go", "b.go")
 	m := makePRDetail(100, 30, files, nil) // no CI checks
 	m.leftPanel.Focus = FocusFiles
-	m.leftPanel.FileIndex = 1 // last file
+	m.leftPanel.Cursor = 1 // last file
 
 	m = pressKey(m, "j")
 	// Focus should stay on Files; FileIndex should not exceed last.
 	if m.leftPanel.Focus != FocusFiles {
 		t.Errorf("expected focus to stay on FocusFiles (no CI), got %v", m.leftPanel.Focus)
 	}
-	if m.leftPanel.FileIndex != 1 {
-		t.Errorf("expected FileIndex to stay at 1, got %d", m.leftPanel.FileIndex)
+	if m.leftPanel.Cursor != 1 {
+		t.Errorf("expected FileIndex to stay at 1, got %d", m.leftPanel.Cursor)
 	}
 }
 
@@ -477,8 +477,8 @@ func TestKOnFirstCIMovesToFiles(t *testing.T) {
 	if m.leftPanel.Focus != FocusFiles {
 		t.Errorf("expected focus to move to FocusFiles after k on first CI item, got %v", m.leftPanel.Focus)
 	}
-	if m.leftPanel.FilesScroll != 0 {
-		t.Errorf("expected FilesScroll reset to 0, got %d", m.leftPanel.FilesScroll)
+	if m.leftPanel.Scroll != 0 {
+		t.Errorf("expected FilesScroll reset to 0, got %d", m.leftPanel.Scroll)
 	}
 }
 
@@ -488,15 +488,15 @@ func TestHLNoopOutsideFilesView(t *testing.T) {
 	checks := makeChecks("build")
 	m := makePRDetail(100, 30, files, checks)
 	m.leftPanel.Focus = FocusCI
-	m.leftPanel.FileIndex = 1
+	m.leftPanel.Cursor = 1
 
 	m = pressKey(m, "h")
-	if m.leftPanel.FileIndex != 1 {
-		t.Errorf("expected h to be no-op in FocusCI, FileIndex changed to %d", m.leftPanel.FileIndex)
+	if m.leftPanel.Cursor != 1 {
+		t.Errorf("expected h to be no-op in FocusCI, FileIndex changed to %d", m.leftPanel.Cursor)
 	}
 	m = pressKey(m, "l")
-	if m.leftPanel.FileIndex != 1 {
-		t.Errorf("expected l to be no-op in FocusCI, FileIndex changed to %d", m.leftPanel.FileIndex)
+	if m.leftPanel.Cursor != 1 {
+		t.Errorf("expected l to be no-op in FocusCI, FileIndex changed to %d", m.leftPanel.Cursor)
 	}
 }
 
@@ -505,17 +505,17 @@ func TestHLNoopWithOneFile(t *testing.T) {
 	files := makeFiles("only.go")
 	m := makePRDetail(100, 30, files, nil)
 	m.leftPanel.Focus = FocusFiles
-	m.leftPanel.FileIndex = 0
+	m.leftPanel.Cursor = 0
 	m.Width = 100 // wide enough for sidebar
 
 	// H and L navigate files (capital for file navigation)
 	m = pressKey(m, "H")
-	if m.leftPanel.FileIndex != 0 {
-		t.Errorf("expected H to clamp at 0 with 1 file, got %d", m.leftPanel.FileIndex)
+	if m.leftPanel.Cursor != 0 {
+		t.Errorf("expected H to clamp at 0 with 1 file, got %d", m.leftPanel.Cursor)
 	}
 	m = pressKey(m, "L")
-	if m.leftPanel.FileIndex != 0 {
-		t.Errorf("expected L to clamp at 0 with 1 file, got %d", m.leftPanel.FileIndex)
+	if m.leftPanel.Cursor != 0 {
+		t.Errorf("expected L to clamp at 0 with 1 file, got %d", m.leftPanel.Cursor)
 	}
 }
 
@@ -588,12 +588,12 @@ func TestFocusRoutingIndependence(t *testing.T) {
 	files := makeFiles("a.go", "b.go")
 	m := makePRDetail(100, 30, files, nil)
 	m.leftPanel.Focus = FocusContent
-	m.leftPanel.FileIndex = 0
+	m.leftPanel.Cursor = 0
 	m.ContentScroll = 0
 
 	m = pressKey(m, "j")
-	if m.leftPanel.FileIndex != 0 {
-		t.Errorf("expected FileIndex unchanged when Content is focused, got %d", m.leftPanel.FileIndex)
+	if m.leftPanel.Cursor != 0 {
+		t.Errorf("expected FileIndex unchanged when Content is focused, got %d", m.leftPanel.Cursor)
 	}
 	if m.ContentScroll == 0 {
 		// ContentScroll may stay 0 if there's no content, but FileIndex must not change.
@@ -727,7 +727,7 @@ func TestLKeyFromFilesToContent(t *testing.T) {
 	m := makePRDetail(100, 30, files, nil)
 	m.Diff = &diffModel
 	m.leftPanel.Focus = FocusFiles
-	m.leftPanel.FileIndex = 0
+	m.leftPanel.Cursor = 0
 	m.Width = 100 // wide enough for sidebar
 
 	m = pressKey(m, "l")
@@ -906,12 +906,12 @@ func TestCISelectionHighlight(t *testing.T) {
 		{Name: "test", State: "FAILURE"},
 	}
 	panel := LeftPanelModel{
-		Files:    makeFiles("a.go"),
-		Checks:   checks,
-		Loading:  false,
-		Focus:    FocusCI,
-		CICursor: 1,
-		theme:    theme.Default(),
+		Files:  makeFiles("a.go"),
+		Checks: checks,
+		Loading:     false,
+		Focus:       FocusCI,
+		CICursor:    1,
+		theme:       theme.Default(),
 	}
 	row := panel.renderCIRow(checks[1], 1)
 	// Selected row should have ANSI codes (ListSelected applies styling).

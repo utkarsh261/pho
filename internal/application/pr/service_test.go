@@ -22,6 +22,7 @@ type fakeGitHubClient struct {
 	FetchDashboardPRsFn func(ctx context.Context, repo domain.Repository) ([]domain.PullRequestSummary, int, bool, string, error)
 	FetchInvolvingPRsFn func(ctx context.Context, repo domain.Repository, viewer string) ([]domain.PullRequestSummary, int, bool, error)
 	FetchViewerFn       func(ctx context.Context, host string) (string, error)
+	FetchCommitsFn      func(ctx context.Context, repo domain.Repository, number int) ([]domain.Commit, error)
 }
 
 func (f *fakeGitHubClient) FetchViewer(ctx context.Context, host string) (string, error) {
@@ -73,6 +74,12 @@ func (f *fakeGitHubClient) CheckMergeable(_ context.Context, _ domain.Repository
 }
 func (f *fakeGitHubClient) ClosePullRequest(_ context.Context, _, _ string) error    { return nil }
 func (f *fakeGitHubClient) ReopenPullRequest(_ context.Context, _, _ string) error { return nil }
+func (f *fakeGitHubClient) FetchCommits(ctx context.Context, repo domain.Repository, number int) ([]domain.Commit, error) {
+	if f.FetchCommitsFn == nil {
+		return nil, fmt.Errorf("unexpected FetchCommits(%s,#%d)", repo.FullName, number)
+	}
+	return f.FetchCommitsFn(ctx, repo, number)
+}
 
 // frozenNow is the fixed time used for both service.Now and coord.Now in tests.
 // Entries seeded at this time with a 2-minute TTL are fresh; entries seeded
@@ -715,6 +722,78 @@ func TestMergePRInvalidatesPreviewCache(t *testing.T) {
 	_, found, _ = coord.L2.Get(context.Background(), key, &cached)
 	if found {
 		t.Fatal("expected preview cache to be deleted after merge")
+	}
+}
+
+func TestLoadPRCommitsCacheMissFetchesGraphQL(t *testing.T) {
+	t.Parallel()
+
+	expected := []domain.Commit{
+		{SHA: "sha1", MessageHeadline: "First commit", AuthorLogin: "alice"},
+		{SHA: "sha2", MessageHeadline: "Second commit", AuthorLogin: "bob"},
+	}
+
+	client := &fakeGitHubClient{
+		FetchCommitsFn: func(ctx context.Context, repo domain.Repository, number int) ([]domain.Commit, error) {
+			if number != 42 {
+				return nil, fmt.Errorf("expected number 42, got %d", number)
+			}
+			return expected, nil
+		},
+	}
+
+	coord := newTestCoordinator(t)
+	svc := &PRService{
+		Cache:  coord,
+		Client: client,
+		Host:   "github.com",
+		Now:    func() time.Time { return frozenNow },
+	}
+
+	commits, err := svc.LoadPRCommits(context.Background(), testRepo(), 42)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(commits) != 2 {
+		t.Fatalf("expected 2 commits, got %d", len(commits))
+	}
+	if commits[0].SHA != "sha1" {
+		t.Errorf("expected SHA=%q, got %q", "sha1", commits[0].SHA)
+	}
+}
+
+func TestLoadPRCommitsCacheHitBypassesTransport(t *testing.T) {
+	t.Parallel()
+
+	seeded := []domain.Commit{
+		{SHA: "seeded", MessageHeadline: "Seeded commit"},
+	}
+	coord := newTestCoordinator(t)
+	key := commitsCacheKey("github.com", "owner/repo", 42)
+	meta := commitsMeta(key, testRepo(), 42, frozenNow)
+	if err := coord.Write(context.Background(), key, seeded, meta); err != nil {
+		t.Fatalf("cache write: %v", err)
+	}
+
+	client := &fakeGitHubClient{
+		FetchCommitsFn: func(ctx context.Context, repo domain.Repository, number int) ([]domain.Commit, error) {
+			return nil, fmt.Errorf("should not be called")
+		},
+	}
+
+	svc := &PRService{
+		Cache:  coord,
+		Client: client,
+		Host:   "github.com",
+		Now:    func() time.Time { return frozenNow },
+	}
+
+	commits, err := svc.LoadPRCommits(context.Background(), testRepo(), 42)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(commits) != 1 || commits[0].SHA != "seeded" {
+		t.Errorf("expected seeded commit, got %+v", commits)
 	}
 }
 

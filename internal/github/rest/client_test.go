@@ -102,6 +102,60 @@ func TestFetchRawDiffURLBuilder(t *testing.T) {
 	}
 }
 
+func TestFetchCommitDiffSuccess(t *testing.T) {
+	t.Parallel()
+	expectedDiff := `diff --git a/file.go b/file.go
+--- a/file.go
++++ b/file.go
+@@ -1 +1 @@
+-old
++new
+`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Accept"); got != acceptDiffHeader {
+			t.Errorf("expected Accept=%q, got %q", acceptDiffHeader, got)
+		}
+		if r.URL.Path != "/repos/owner/repo/commits/abc1234" {
+			t.Errorf("expected path=/repos/owner/repo/commits/abc1234, got %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(expectedDiff))
+	}))
+	defer server.Close()
+
+	client := &Client{
+		BaseURL: server.URL,
+		Token:   "test-token",
+	}
+
+	diff, err := client.FetchCommitDiff(context.Background(), "owner", "repo", "abc1234")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if diff != expectedDiff {
+		t.Errorf("diff mismatch:\ngot:  %q\nwant: %q", diff, expectedDiff)
+	}
+}
+
+func TestFetchCommitDiffNotFound(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"message": "Not Found"}`))
+	}))
+	defer server.Close()
+
+	client := &Client{
+		BaseURL: server.URL,
+		Token:   "test-token",
+	}
+
+	_, err := client.FetchCommitDiff(context.Background(), "owner", "repo", "badsha")
+	if err == nil {
+		t.Fatal("expected error for 404 response")
+	}
+}
+
 func TestFetchRawDiffUserAgent(t *testing.T) {
 	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

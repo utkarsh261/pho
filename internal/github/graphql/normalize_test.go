@@ -239,3 +239,76 @@ func TestTimelineCommitAuthor(t *testing.T) {
 		})
 	}
 }
+
+func TestNormalizeCommitsResponse(t *testing.T) {
+	t.Parallel()
+
+	resp := model.CommitsData{
+		Repository: model.RepositoryNode{
+			PullRequest: &model.PullRequestNode{
+				Commits: model.CommitConnection{
+					Nodes: []model.CommitNode{
+						{
+							Commit: model.CommitData{
+								OID:             "sha1",
+								MessageHeadline: "First commit",
+								MessageBody:     "Body 1",
+								CommittedDate:   "2024-01-01T00:00:00Z",
+								Author: &model.CommitAuthor{
+									Name: "Alice",
+									User: &model.ActorNode{Login: "alice"},
+								},
+							},
+						},
+						{
+							Commit: model.CommitData{
+								OID:             "sha2",
+								MessageHeadline: "Second commit",
+								CommittedDate:   "2024-01-02T00:00:00Z",
+								Author: &model.CommitAuthor{
+									Name: "Bob",
+									User: nil,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	commits := normalizeCommitsResponse(resp)
+	if len(commits) != 2 {
+		t.Fatalf("expected 2 commits, got %d", len(commits))
+	}
+
+	// GraphQL returns oldest first; normalizeCommitsResponse reverses to newest first.
+	if commits[0].SHA != "sha2" {
+		t.Errorf("expected first commit SHA=sha2 (newest), got %q", commits[0].SHA)
+	}
+	if commits[0].MessageHeadline != "Second commit" {
+		t.Errorf("unexpected headline: %q", commits[0].MessageHeadline)
+	}
+	if commits[0].AuthorName != "Bob" {
+		t.Errorf("unexpected author name: %q", commits[0].AuthorName)
+	}
+	if commits[0].AuthorLogin != "" {
+		t.Errorf("expected empty login when user is nil, got %q", commits[0].AuthorLogin)
+	}
+
+	if commits[1].SHA != "sha1" {
+		t.Errorf("expected second commit SHA=sha1 (oldest), got %q", commits[1].SHA)
+	}
+	if commits[1].AuthorLogin != "alice" {
+		t.Errorf("unexpected author login: %q", commits[1].AuthorLogin)
+	}
+}
+
+func TestNormalizeCommitsResponseEmpty(t *testing.T) {
+	t.Parallel()
+	resp := model.CommitsData{}
+	commits := normalizeCommitsResponse(resp)
+	if len(commits) != 0 {
+		t.Errorf("expected 0 commits for nil PR, got %d", len(commits))
+	}
+}

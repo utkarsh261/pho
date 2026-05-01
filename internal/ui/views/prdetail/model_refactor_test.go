@@ -194,7 +194,7 @@ func TestEnterOnFileMovesFocusToContent(t *testing.T) {
 	m := makeInlineReviewModel(100, 40)
 	m.activeTab = TabDiff
 	m.leftPanel.Focus = FocusFiles
-	m.leftPanel.FileIndex = 0
+	m.leftPanel.Cursor = 0
 	m = pressKey(m, "enter")
 	if m.leftPanel.Focus != FocusContent {
 		t.Errorf("expected focus=FocusContent after enter on file, got %v", m.leftPanel.Focus)

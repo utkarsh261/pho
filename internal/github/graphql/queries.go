@@ -233,6 +233,32 @@ func pullRequestPreviewSelection(profile githubpkg.GitHubHostProfile) string {
 	return strings.Join(fields, "\n      ")
 }
 
+func buildCommitsQuery() string {
+	return `query CommitsQuery($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      commits(last: 100) {
+        nodes {
+          commit {
+            oid
+            messageHeadline
+            messageBody
+            committedDate
+            author {
+              name
+              email
+              user {
+                login
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}`
+}
+
 func rollupSelection(profile githubpkg.GitHubHostProfile, detailed bool) string {
 	rollupFields := []string{"state"}
 	if detailed {

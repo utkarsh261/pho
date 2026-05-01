@@ -13,6 +13,7 @@ type GitHubClient interface {
 	FetchDashboardPRs(ctx context.Context, repo domain.Repository) ([]domain.PullRequestSummary, int, bool, string, error)
 	FetchInvolvingPRs(ctx context.Context, repo domain.Repository, viewer string) ([]domain.PullRequestSummary, int, bool, error)
 	FetchPreview(ctx context.Context, repo domain.Repository, number int) (domain.PRPreviewSnapshot, error)
+	FetchCommits(ctx context.Context, repo domain.Repository, number int) ([]domain.Commit, error)
 	PostComment(ctx context.Context, host, pullRequestID, body string) error
 	PostReviewComment(ctx context.Context, host, pullRequestID, body string) error
 	ApprovePullRequest(ctx context.Context, host, pullRequestID, body string) error
