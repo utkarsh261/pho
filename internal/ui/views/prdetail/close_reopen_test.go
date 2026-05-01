@@ -268,10 +268,16 @@ func (s *closeReopenPRService) LoadPRCommits(_ context.Context, _ domain.Reposit
 func (s *closeReopenPRService) LoadCommitDiff(_ context.Context, _ domain.Repository, _ string, _ bool) (diffmodel.DiffModel, error) {
 	return diffmodel.DiffModel{}, nil
 }
-func (s *closeReopenPRService) PostComment(_ context.Context, _, _ string) error       { return nil }
-func (s *closeReopenPRService) PostReviewComment(_ context.Context, _, _ string) error { return nil }
-func (s *closeReopenPRService) ApprovePR(_ context.Context, _, _ string) error         { return nil }
-func (s *closeReopenPRService) SubmitReviewWithComments(_ context.Context, _, _, _ string, _ []domain.DraftInlineComment) error {
+func (s *closeReopenPRService) PostComment(_ context.Context, _ domain.Repository, _, _ string) error {
+	return nil
+}
+func (s *closeReopenPRService) PostReviewComment(_ context.Context, _ domain.Repository, _, _ string) error {
+	return nil
+}
+func (s *closeReopenPRService) ApprovePR(_ context.Context, _ domain.Repository, _, _ string) error {
+	return nil
+}
+func (s *closeReopenPRService) SubmitReviewWithComments(_ context.Context, _ domain.Repository, _, _, _ string, _ []domain.DraftInlineComment) error {
 	return nil
 }
 func (s *closeReopenPRService) SaveDraftComments(_ context.Context, _ domain.Repository, _ int, _ string, _ []domain.DraftInlineComment) error {

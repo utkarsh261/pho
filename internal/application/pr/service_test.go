@@ -138,7 +138,6 @@ func TestLoadDetailCacheMissFetchesGraphQL(t *testing.T) {
 	svc := &PRService{
 		Cache:  coord,
 		Client: client,
-		Host:   "github.com",
 		Owner:  "owner",
 		Repo:   "repo",
 		Now:    func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
@@ -186,7 +185,6 @@ func TestLoadDetailCacheHitBypassesTransport(t *testing.T) {
 	svc := &PRService{
 		Cache:  coord,
 		Client: client,
-		Host:   "github.com",
 		Now:    func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
 	}
 
@@ -228,7 +226,6 @@ func TestLoadDetailForceRefresh(t *testing.T) {
 	svc := &PRService{
 		Cache:  coord,
 		Client: client,
-		Host:   "github.com",
 		Now:    func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
 	}
 
@@ -257,7 +254,6 @@ func TestLoadDetailErrorWithNoStale(t *testing.T) {
 	svc := &PRService{
 		Cache:  coord,
 		Client: client,
-		Host:   "github.com",
 		Now:    func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
 	}
 
@@ -291,7 +287,6 @@ func TestLoadDetailReturnsStaleOnBackgroundRefresh(t *testing.T) {
 	svc := &PRService{
 		Cache:  coord,
 		Client: client,
-		Host:   "github.com",
 		Now:    func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
 		BackgroundFn: func(fn func()) {
 			backgroundScheduled <- struct{}{}
@@ -443,7 +438,6 @@ func newTestPRService(coord *cache.Coordinator, rawDiff string, restErr error) *
 	svc := &testablePRService{
 		PRService: PRService{
 			Cache: coord,
-			Host:  "github.com",
 			Now:   func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
 		},
 		rawDiff: rawDiff,
@@ -473,7 +467,7 @@ type testablePRService struct {
 }
 
 func (s *testablePRService) LoadDiff(ctx context.Context, repo domain.Repository, number int, headSHA string, force bool) (model.DiffModel, bool, error) {
-	key := diffCacheKey(s.Host, repoFullName(repo), number, headSHA)
+	key := diffCacheKey(repo.Host, repoFullName(repo), number, headSHA)
 
 	var cached model.DiffModel
 	found := false
@@ -531,7 +525,7 @@ func (s *testablePRService) LoadDiff(ctx context.Context, repo domain.Repository
 }
 
 func (s *testablePRService) LoadCommitDiff(ctx context.Context, repo domain.Repository, sha string, force bool) (model.DiffModel, error) {
-	key := commitDiffCacheKey(s.Host, repoFullName(repo), sha)
+	key := commitDiffCacheKey(repo.Host, repoFullName(repo), sha)
 
 	var cached model.DiffModel
 	found := false
@@ -590,7 +584,6 @@ func TestLoadDiffErrorWithNoStale(t *testing.T) {
 	svc := &testablePRService{
 		PRService: PRService{
 			Cache: coord,
-			Host:  "github.com",
 			Now:   func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
 		},
 		restErr: fmt.Errorf("network error"),
@@ -625,7 +618,6 @@ func TestLoadDiffReturnsStaleOnBackgroundRefresh(t *testing.T) {
 	svc := &testablePRService{
 		PRService: PRService{
 			Cache: coord,
-			Host:  "github.com",
 			Now:   func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
 			BackgroundFn: func(fn func()) {
 				backgroundScheduled <- struct{}{}
@@ -719,7 +711,6 @@ func TestLoadDetailSharedCacheKey(t *testing.T) {
 	svc := &PRService{
 		Cache:  coord,
 		Client: client,
-		Host:   "github.com",
 		Now:    func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
 	}
 
@@ -764,7 +755,6 @@ func TestMergePRInvalidatesPreviewCache(t *testing.T) {
 	svc := &PRService{
 		Cache:  coord,
 		Client: client,
-		Host:   repo.Host,
 		Now:    func() time.Time { return frozenNow },
 	}
 
@@ -800,7 +790,6 @@ func TestLoadPRCommitsCacheMissFetchesGraphQL(t *testing.T) {
 	svc := &PRService{
 		Cache:  coord,
 		Client: client,
-		Host:   "github.com",
 		Now:    func() time.Time { return frozenNow },
 	}
 
@@ -838,7 +827,6 @@ func TestLoadPRCommitsCacheHitBypassesTransport(t *testing.T) {
 	svc := &PRService{
 		Cache:  coord,
 		Client: client,
-		Host:   "github.com",
 		Now:    func() time.Time { return frozenNow },
 	}
 
@@ -875,7 +863,6 @@ func TestLoadPRCommitsForceRefresh(t *testing.T) {
 	svc := &PRService{
 		Cache:  coord,
 		Client: client,
-		Host:   "github.com",
 		Now:    func() time.Time { return frozenNow },
 	}
 
@@ -906,7 +893,6 @@ func TestLoadCommitDiffForceRefresh(t *testing.T) {
 	svc := &testablePRService{
 		PRService: PRService{
 			Cache: coord,
-			Host:  "github.com",
 			Now:   func() time.Time { return frozenNow },
 		},
 		FetchCommitDiffFn: func(ctx context.Context, owner, repo, sha string) (string, error) {

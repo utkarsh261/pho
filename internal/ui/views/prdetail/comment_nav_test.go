@@ -433,10 +433,16 @@ func (s *prServiceStub) LoadPRCommits(_ context.Context, _ domain.Repository, _ 
 func (s *prServiceStub) LoadCommitDiff(_ context.Context, _ domain.Repository, _ string, _ bool) (diffmodel.DiffModel, error) {
 	return diffmodel.DiffModel{}, nil
 }
-func (s *prServiceStub) PostComment(_ context.Context, _, _ string) error       { return nil }
-func (s *prServiceStub) PostReviewComment(_ context.Context, _, _ string) error { return nil }
-func (s *prServiceStub) ApprovePR(_ context.Context, _, _ string) error         { return nil }
-func (s *prServiceStub) SubmitReviewWithComments(_ context.Context, _, _, _ string, _ []domain.DraftInlineComment) error {
+func (s *prServiceStub) PostComment(_ context.Context, _ domain.Repository, _, _ string) error {
+	return nil
+}
+func (s *prServiceStub) PostReviewComment(_ context.Context, _ domain.Repository, _, _ string) error {
+	return nil
+}
+func (s *prServiceStub) ApprovePR(_ context.Context, _ domain.Repository, _, _ string) error {
+	return nil
+}
+func (s *prServiceStub) SubmitReviewWithComments(_ context.Context, _ domain.Repository, _, _, _ string, _ []domain.DraftInlineComment) error {
 	return nil
 }
 func (s *prServiceStub) SaveDraftComments(_ context.Context, _ domain.Repository, _ int, _ string, _ []domain.DraftInlineComment) error {

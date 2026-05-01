@@ -35,10 +35,10 @@ type PRService interface {
 	LoadDiff(ctx context.Context, repo domain.Repository, number int, headSHA string, force bool) (model.DiffModel, bool, error)
 	LoadPRCommits(ctx context.Context, repo domain.Repository, number int, force bool) ([]domain.Commit, error)
 	LoadCommitDiff(ctx context.Context, repo domain.Repository, sha string, force bool) (model.DiffModel, error)
-	PostComment(ctx context.Context, prID string, body string) error
-	PostReviewComment(ctx context.Context, prID string, body string) error
-	ApprovePR(ctx context.Context, prID string, body string) error
-	SubmitReviewWithComments(ctx context.Context, prID, body, event string, comments []domain.DraftInlineComment) error
+	PostComment(ctx context.Context, repo domain.Repository, prID string, body string) error
+	PostReviewComment(ctx context.Context, repo domain.Repository, prID string, body string) error
+	ApprovePR(ctx context.Context, repo domain.Repository, prID string, body string) error
+	SubmitReviewWithComments(ctx context.Context, repo domain.Repository, prID, body, event string, comments []domain.DraftInlineComment) error
 	SaveDraftComments(ctx context.Context, repo domain.Repository, number int, headSHA string, drafts []domain.DraftInlineComment) error
 	LoadDraftComments(ctx context.Context, repo domain.Repository, number int, headSHA string) ([]domain.DraftInlineComment, error)
 	DeleteDraftComments(ctx context.Context, repo domain.Repository, number int, headSHA string) error
@@ -259,36 +259,36 @@ func repoKey(repo domain.Repository) string {
 	return repo.Name
 }
 
-func PostReviewCommentCmd(svc PRService, prID, body string) tea.Cmd {
+func PostReviewCommentCmd(svc PRService, repo domain.Repository, prID, body string) tea.Cmd {
 	return func() tea.Msg {
-		if err := svc.PostReviewComment(context.Background(), prID, body); err != nil {
+		if err := svc.PostReviewComment(context.Background(), repo, prID, body); err != nil {
 			return CommentFailed{Err: err}
 		}
 		return CommentPosted{}
 	}
 }
 
-func PostCommentCmd(svc PRService, prID, body string) tea.Cmd {
+func PostCommentCmd(svc PRService, repo domain.Repository, prID, body string) tea.Cmd {
 	return func() tea.Msg {
-		if err := svc.PostComment(context.Background(), prID, body); err != nil {
+		if err := svc.PostComment(context.Background(), repo, prID, body); err != nil {
 			return CommentFailed{Err: err}
 		}
 		return CommentPosted{}
 	}
 }
 
-func ApprovePRCmd(svc PRService, prID, body string) tea.Cmd {
+func ApprovePRCmd(svc PRService, repo domain.Repository, prID, body string) tea.Cmd {
 	return func() tea.Msg {
-		if err := svc.ApprovePR(context.Background(), prID, body); err != nil {
+		if err := svc.ApprovePR(context.Background(), repo, prID, body); err != nil {
 			return ApprovalFailed{Err: err}
 		}
 		return ApprovalPosted{}
 	}
 }
 
-func SubmitReviewWithDraftsCmd(svc PRService, prID, body, event string, drafts []domain.DraftInlineComment) tea.Cmd {
+func SubmitReviewWithDraftsCmd(svc PRService, repo domain.Repository, prID, body, event string, drafts []domain.DraftInlineComment) tea.Cmd {
 	return func() tea.Msg {
-		if err := svc.SubmitReviewWithComments(context.Background(), prID, body, event, drafts); err != nil {
+		if err := svc.SubmitReviewWithComments(context.Background(), repo, prID, body, event, drafts); err != nil {
 			return ReviewFailed{Err: err}
 		}
 		return ReviewPosted{}

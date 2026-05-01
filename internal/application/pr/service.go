@@ -2,7 +2,6 @@ package pr
 
 import (
 	"context"
-	"encoding/gob"
 	"fmt"
 	"strings"
 	"time"
@@ -33,7 +32,6 @@ type PRService struct {
 	Client       githubclient.GitHubClient
 	REST         *rest.Client
 	Now          func() time.Time
-	Host         string // e.g. "github.com"
 	Owner        string // repo owner
 	Repo         string // repo name
 	Log          logger
@@ -94,9 +92,9 @@ func (s *PRService) LoadDetail(ctx context.Context, repo domain.Repository, numb
 }
 
 // PostComment posts a PR-level comment via the GitHub client.
-func (s *PRService) PostComment(ctx context.Context, prID string, body string) error {
-	s.logDebug("post comment", "prID", prID)
-	if err := s.Client.PostComment(ctx, s.Host, prID, body); err != nil {
+func (s *PRService) PostComment(ctx context.Context, repo domain.Repository, prID string, body string) error {
+	s.logDebug("post comment", "prID", prID, "host", repo.Host)
+	if err := s.Client.PostComment(ctx, repo.Host, prID, body); err != nil {
 		s.logWarn("post comment failed", "prID", prID, "err", err)
 		return err
 	}
@@ -104,9 +102,9 @@ func (s *PRService) PostComment(ctx context.Context, prID string, body string) e
 }
 
 // PostReviewComment submits a PR review with COMMENT decision via the GitHub client.
-func (s *PRService) PostReviewComment(ctx context.Context, prID string, body string) error {
-	s.logDebug("post review comment", "prID", prID)
-	if err := s.Client.PostReviewComment(ctx, s.Host, prID, body); err != nil {
+func (s *PRService) PostReviewComment(ctx context.Context, repo domain.Repository, prID string, body string) error {
+	s.logDebug("post review comment", "prID", prID, "host", repo.Host)
+	if err := s.Client.PostReviewComment(ctx, repo.Host, prID, body); err != nil {
 		s.logWarn("post review comment failed", "prID", prID, "err", err)
 		return err
 	}
@@ -114,9 +112,9 @@ func (s *PRService) PostReviewComment(ctx context.Context, prID string, body str
 }
 
 // ApprovePR submits a PR review with APPROVE decision via the GitHub client.
-func (s *PRService) ApprovePR(ctx context.Context, prID string, body string) error {
-	s.logDebug("approve pr", "prID", prID)
-	if err := s.Client.ApprovePullRequest(ctx, s.Host, prID, body); err != nil {
+func (s *PRService) ApprovePR(ctx context.Context, repo domain.Repository, prID string, body string) error {
+	s.logDebug("approve pr", "prID", prID, "host", repo.Host)
+	if err := s.Client.ApprovePullRequest(ctx, repo.Host, prID, body); err != nil {
 		s.logWarn("approve pr failed", "prID", prID, "err", err)
 		return err
 	}
@@ -124,9 +122,9 @@ func (s *PRService) ApprovePR(ctx context.Context, prID string, body string) err
 }
 
 // SubmitReviewWithComments submits a PR review with inline comments.
-func (s *PRService) SubmitReviewWithComments(ctx context.Context, prID, body, event string, comments []domain.DraftInlineComment) error {
-	s.logDebug("submit review with comments", "prID", prID, "event", event, "comments", len(comments))
-	if err := s.Client.SubmitReviewWithComments(ctx, s.Host, prID, body, event, comments); err != nil {
+func (s *PRService) SubmitReviewWithComments(ctx context.Context, repo domain.Repository, prID, body, event string, comments []domain.DraftInlineComment) error {
+	s.logDebug("submit review with comments", "prID", prID, "event", event, "comments", len(comments), "host", repo.Host)
+	if err := s.Client.SubmitReviewWithComments(ctx, repo.Host, prID, body, event, comments); err != nil {
 		s.logWarn("submit review with comments failed", "prID", prID, "err", err)
 		return err
 	}
@@ -483,7 +481,7 @@ func diffMeta(key string, repo domain.Repository, number int, fetchedAt time.Tim
 		PRNumber:  &number,
 		FetchedAt: fetchedAt,
 		ExpiresAt: farFuture,
-		Encoding:  "gob",
+		Encoding:  "json",
 	}
 }
 
@@ -520,7 +518,7 @@ func commitDiffMeta(key string, repo domain.Repository, sha string, fetchedAt ti
 		Repo:      repoFullName(repo),
 		FetchedAt: fetchedAt,
 		ExpiresAt: farFuture,
-		Encoding:  "gob",
+		Encoding:  "json",
 	}
 }
 
@@ -542,16 +540,4 @@ func draftInlineMeta(key string, repo domain.Repository, number int, headSHA str
 		ExpiresAt: farFuture,
 		Encoding:  "json",
 	}
-}
-
-func init() {
-	gob.Register(model.DiffModel{})
-	gob.Register(model.DiffFile{})
-	gob.Register(model.DiffHunk{})
-	gob.Register(model.DiffLine{})
-	gob.Register([]model.DiffFile{})
-	gob.Register([]model.DiffHunk{})
-	gob.Register([]model.DiffLine{})
-	gob.Register([]model.LineAnchor{})
-	gob.Register(model.LineAnchor{})
 }

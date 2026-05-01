@@ -274,14 +274,14 @@ func TestRebuildRepoIndexCmd(t *testing.T) {
 
 func TestPostCommentCmd(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		svc := &prService{postCommentFn: func(ctx context.Context, prID, body string) error {
+		svc := &prService{postCommentFn: func(ctx context.Context, repo domain.Repository, prID, body string) error {
 			if prID != "PR_abc123" || body != "hello" {
 				t.Fatalf("postComment args prID=%q body=%q", prID, body)
 			}
 			return nil
 		}}
 
-		msg := run(t, cmds.PostCommentCmd(svc, "PR_abc123", "hello"))
+		msg := run(t, cmds.PostCommentCmd(svc, domain.Repository{}, "PR_abc123", "hello"))
 		if _, ok := msg.(cmds.CommentPosted); !ok {
 			t.Fatalf("message type = %T, want cmds.CommentPosted", msg)
 		}
@@ -289,11 +289,11 @@ func TestPostCommentCmd(t *testing.T) {
 
 	t.Run("failure", func(t *testing.T) {
 		wantErr := errors.New("403 Forbidden")
-		svc := &prService{postCommentFn: func(ctx context.Context, prID, body string) error {
+		svc := &prService{postCommentFn: func(ctx context.Context, repo domain.Repository, prID, body string) error {
 			return wantErr
 		}}
 
-		msg := run(t, cmds.PostCommentCmd(svc, "PR_abc123", "hello"))
+		msg := run(t, cmds.PostCommentCmd(svc, domain.Repository{}, "PR_abc123", "hello"))
 		got, ok := msg.(cmds.CommentFailed)
 		if !ok {
 			t.Fatalf("message type = %T, want cmds.CommentFailed", msg)
@@ -435,7 +435,7 @@ func repo(full string) domain.Repository {
 }
 
 type prService struct {
-	postCommentFn func(ctx context.Context, prID, body string) error
+	postCommentFn func(ctx context.Context, repo domain.Repository, prID, body string) error
 }
 
 func (s *prService) LoadDetail(_ context.Context, _ domain.Repository, _ int, _ bool) (domain.PRPreviewSnapshot, bool, error) {
@@ -446,16 +446,18 @@ func (s *prService) LoadDiff(_ context.Context, _ domain.Repository, _ int, _ st
 	return diffmodel.DiffModel{}, false, nil
 }
 
-func (s *prService) PostComment(ctx context.Context, prID, body string) error {
+func (s *prService) PostComment(ctx context.Context, repo domain.Repository, prID, body string) error {
 	if s.postCommentFn == nil {
 		panic("prService.PostComment called but postCommentFn is nil")
 	}
-	return s.postCommentFn(ctx, prID, body)
+	return s.postCommentFn(ctx, repo, prID, body)
 }
 
-func (s *prService) PostReviewComment(_ context.Context, _, _ string) error { return nil }
-func (s *prService) ApprovePR(_ context.Context, _, _ string) error         { return nil }
-func (s *prService) SubmitReviewWithComments(_ context.Context, _, _, _ string, _ []domain.DraftInlineComment) error {
+func (s *prService) PostReviewComment(_ context.Context, _ domain.Repository, _, _ string) error {
+	return nil
+}
+func (s *prService) ApprovePR(_ context.Context, _ domain.Repository, _, _ string) error { return nil }
+func (s *prService) SubmitReviewWithComments(_ context.Context, _ domain.Repository, _, _, _ string, _ []domain.DraftInlineComment) error {
 	return nil
 }
 func (s *prService) SaveDraftComments(_ context.Context, _ domain.Repository, _ int, _ string, _ []domain.DraftInlineComment) error {

@@ -31,10 +31,16 @@ func (s *mergePRService) LoadPRCommits(_ context.Context, _ domain.Repository, _
 func (s *mergePRService) LoadCommitDiff(_ context.Context, _ domain.Repository, _ string, _ bool) (diffmodel.DiffModel, error) {
 	return diffmodel.DiffModel{}, nil
 }
-func (s *mergePRService) PostComment(_ context.Context, _, _ string) error       { return nil }
-func (s *mergePRService) PostReviewComment(_ context.Context, _, _ string) error { return nil }
-func (s *mergePRService) ApprovePR(_ context.Context, _, _ string) error         { return nil }
-func (s *mergePRService) SubmitReviewWithComments(_ context.Context, _, _, _ string, _ []domain.DraftInlineComment) error {
+func (s *mergePRService) PostComment(_ context.Context, _ domain.Repository, _, _ string) error {
+	return nil
+}
+func (s *mergePRService) PostReviewComment(_ context.Context, _ domain.Repository, _, _ string) error {
+	return nil
+}
+func (s *mergePRService) ApprovePR(_ context.Context, _ domain.Repository, _, _ string) error {
+	return nil
+}
+func (s *mergePRService) SubmitReviewWithComments(_ context.Context, _ domain.Repository, _, _, _ string, _ []domain.DraftInlineComment) error {
 	return nil
 }
 func (s *mergePRService) SaveDraftComments(_ context.Context, _ domain.Repository, _ int, _ string, _ []domain.DraftInlineComment) error {

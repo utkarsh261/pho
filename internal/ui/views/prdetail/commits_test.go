@@ -167,7 +167,10 @@ func TestCommitsTabHandlesCommitsLoaded(t *testing.T) {
 	}
 }
 
-type fakePRService struct{}
+type fakePRService struct {
+	postReviewCommentCalled        bool
+	submitReviewWithCommentsCalled bool
+}
 
 func (f *fakePRService) LoadDetail(ctx context.Context, repo domain.Repository, number int, force bool) (domain.PRPreviewSnapshot, bool, error) {
 	return domain.PRPreviewSnapshot{}, false, nil
@@ -181,12 +184,18 @@ func (f *fakePRService) LoadPRCommits(ctx context.Context, repo domain.Repositor
 func (f *fakePRService) LoadCommitDiff(ctx context.Context, repo domain.Repository, sha string, force bool) (diffmodel.DiffModel, error) {
 	return diffmodel.DiffModel{}, nil
 }
-func (f *fakePRService) PostComment(ctx context.Context, prID string, body string) error { return nil }
-func (f *fakePRService) PostReviewComment(ctx context.Context, prID string, body string) error {
+func (f *fakePRService) PostComment(ctx context.Context, repo domain.Repository, prID string, body string) error {
 	return nil
 }
-func (f *fakePRService) ApprovePR(ctx context.Context, prID string, body string) error { return nil }
-func (f *fakePRService) SubmitReviewWithComments(ctx context.Context, prID, body, event string, comments []domain.DraftInlineComment) error {
+func (f *fakePRService) PostReviewComment(ctx context.Context, repo domain.Repository, prID string, body string) error {
+	f.postReviewCommentCalled = true
+	return nil
+}
+func (f *fakePRService) ApprovePR(ctx context.Context, repo domain.Repository, prID string, body string) error {
+	return nil
+}
+func (f *fakePRService) SubmitReviewWithComments(ctx context.Context, repo domain.Repository, prID, body, event string, comments []domain.DraftInlineComment) error {
+	f.submitReviewWithCommentsCalled = true
 	return nil
 }
 func (f *fakePRService) SaveDraftComments(ctx context.Context, repo domain.Repository, number int, headSHA string, drafts []domain.DraftInlineComment) error {
