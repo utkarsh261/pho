@@ -1806,7 +1806,7 @@ func (m *PRDetailModel) scrollDown() {
 		if m.leftPanel.Cursor > last {
 			// If CI has checks, move focus there.
 			m.leftPanel.Cursor = last
-			if len(m.leftPanel.Checks) > 0 {
+			if !m.leftPanel.HideCI && len(m.leftPanel.Checks) > 0 {
 				m.leftPanel.CICursor = 0
 				m.leftPanel.CIScroll = 0
 				m.leftPanel.Focus = FocusCI
