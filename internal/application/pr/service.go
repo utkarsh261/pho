@@ -2,7 +2,6 @@ package pr
 
 import (
 	"context"
-	"encoding/gob"
 	"fmt"
 	"strings"
 	"time"
@@ -482,7 +481,7 @@ func diffMeta(key string, repo domain.Repository, number int, fetchedAt time.Tim
 		PRNumber:  &number,
 		FetchedAt: fetchedAt,
 		ExpiresAt: farFuture,
-		Encoding:  "gob",
+		Encoding:  "json",
 	}
 }
 
@@ -519,7 +518,7 @@ func commitDiffMeta(key string, repo domain.Repository, sha string, fetchedAt ti
 		Repo:      repoFullName(repo),
 		FetchedAt: fetchedAt,
 		ExpiresAt: farFuture,
-		Encoding:  "gob",
+		Encoding:  "json",
 	}
 }
 
@@ -543,14 +542,4 @@ func draftInlineMeta(key string, repo domain.Repository, number int, headSHA str
 	}
 }
 
-func init() {
-	gob.Register(model.DiffModel{})
-	gob.Register(model.DiffFile{})
-	gob.Register(model.DiffHunk{})
-	gob.Register(model.DiffLine{})
-	gob.Register([]model.DiffFile{})
-	gob.Register([]model.DiffHunk{})
-	gob.Register([]model.DiffLine{})
-	gob.Register([]model.LineAnchor{})
-	gob.Register(model.LineAnchor{})
-}
+
