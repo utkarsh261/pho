@@ -73,6 +73,7 @@ const (
 	TabDescription ContentTab = iota
 	TabDiff
 	TabComments
+	TabCommits
 )
 
 // visualModeState tracks the active visual-mode selection in the diff.
@@ -149,6 +150,13 @@ type PRDetailModel struct {
 	descScroll     int
 	diffScroll     int
 	commentsScroll int
+	commitsScroll  int
+
+	// Commits tab state
+	commits       []domain.Commit
+	commitsLoading bool
+	commitCursor  int
+	commitsLoaded bool
 
 	// Diff cursor (line-by-line navigation in Diff tab)
 	diffCursor diffCursorLine
@@ -185,6 +193,12 @@ type PRDetailModel struct {
 	closeStep   closeStep
 	closeTarget string // "CLOSE" or "REOPEN"
 	closeErr    string
+
+	// Commit mode: when true, this model shows a single commit diff instead of
+	// a full PR. Only the Diff tab is shown, no Desc/Comments/Commits tabs,
+	// no CI section, and the header shows commit info.
+	CommitMode bool
+	Commit     domain.Commit
 }
 
 // mergeStep tracks the PR merge workflow state.
@@ -236,6 +250,43 @@ func NewModel(summary domain.PullRequestSummary, repo domain.Repository, prServi
 	return m
 }
 
+// NewCommitModel creates a PRDetailModel configured for viewing a single commit's diff.
+// It starts on the Diff tab with no CI panel and skips loading PR detail/comments.
+func NewCommitModel(repo domain.Repository, commit domain.Commit, prService cmds.PRService) *PRDetailModel {
+	s := spinner.New(spinner.WithSpinner(spinner.Points))
+	s.Spinner.FPS = time.Millisecond * 100
+
+	summary := domain.PullRequestSummary{
+		Repo:   repo.FullName,
+		Number: 0,
+		Title:  commit.MessageHeadline,
+		Author: commit.AuthorLogin,
+	}
+
+	m := &PRDetailModel{
+		Summary:     summary,
+		PRService:   prService,
+		Repo:        repo,
+		DiffLoading: prService != nil,
+		spinner:     s,
+		diffCursor:  diffCursorLine{FileIdx: -1},
+		compose:     newComposeModel(nil),
+		activeTab:   TabDiff,
+		CommitMode:  true,
+		Commit:      commit,
+	}
+	m.leftPanel.Loading = prService != nil
+	m.leftPanel.HideCI = true
+	m.leftPanel.Focus = FocusContent
+	m.leftPanel.LastOpenedIndex = 0
+	return m
+}
+
+// SetDiffFiles sets the file list in the left panel sidebar (for commit mode setup).
+func (m *PRDetailModel) SetDiffFiles(files []model.DiffFile) {
+	m.leftPanel.Files = files
+}
+
 // SetTheme applies a theme to the PR detail model.
 func (m *PRDetailModel) SetTheme(th *theme.Theme) {
 	m.theme = th
@@ -251,11 +302,17 @@ func (m *PRDetailModel) Init() tea.Cmd {
 	var cmdsOut []tea.Cmd
 	cmdsOut = append(cmdsOut, m.spinner.Tick)
 	if m.PRService != nil {
-		headSHA := m.Summary.HeadRefOID
-		cmdsOut = append(cmdsOut,
-			cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, false),
-			cmds.LoadDiffCmd(m.PRService, m.Repo, m.Summary.Number, headSHA, false),
-		)
+		if m.CommitMode {
+			cmdsOut = append(cmdsOut,
+				cmds.LoadCommitDiffCmd(m.PRService, m.Repo, m.Commit.SHA, false),
+			)
+		} else {
+			headSHA := m.Summary.HeadRefOID
+			cmdsOut = append(cmdsOut,
+				cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, false),
+				cmds.LoadDiffCmd(m.PRService, m.Repo, m.Summary.Number, headSHA, false),
+			)
+		}
 	}
 	return tea.Batch(cmdsOut...)
 }
@@ -350,6 +407,33 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		m.leftPanel.Loading = false
 		// Load persisted drafts for this PR/SHA.
 		m.loadDrafts()
+		return m, tea.Batch(spinCmd, composeCmd)
+
+	case cmds.CommitsLoaded:
+		m.commitsLoading = false
+		if msg.Err != nil {
+			m.commits = nil
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		m.commitsLoaded = true
+		m.commits = msg.Commits
+		m.commitCursor = 0
+		return m, tea.Batch(spinCmd, composeCmd)
+
+	case cmds.CommitDiffLoaded:
+		m.DiffLoading = false
+		if msg.Err != nil {
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		m.Diff = &msg.Diff
+		m.buildNavigableIndex()
+		m.invalidateDiffCursor()
+		m.rebuildDiffIndices()
+		m.normalizeDiffRows()
+		m.searchIndex = nil
+		m.refreshSearchMatches()
+		m.leftPanel.Files = m.Diff.Files
+		m.leftPanel.Loading = false
 		return m, tea.Batch(spinCmd, composeCmd)
 
 	case submitComposeMsg:
@@ -603,6 +687,10 @@ func (m *PRDetailModel) View() string {
 }
 
 func (m *PRDetailModel) renderHeader() string {
+	if m.CommitMode {
+		return m.renderCommitHeader()
+	}
+
 	author := m.Summary.Author
 	if author == "" {
 		author = "unknown"
@@ -708,6 +796,56 @@ func (m *PRDetailModel) renderHeader() string {
 		Render(content)
 }
 
+func (m *PRDetailModel) renderCommitHeader() string {
+	sha := m.Commit.SHA
+	if len(sha) > 7 {
+		sha = sha[:7]
+	}
+
+	author := m.Commit.AuthorLogin
+	if author == "" {
+		author = m.Commit.AuthorName
+	}
+	relTime := relativeTime(m.Commit.CommittedAt)
+
+	th := m.theme
+	if th == nil {
+		th = theme.Default()
+	}
+
+	hints := "[o: Browser | Esc: Back]"
+	if m.Width < 80 {
+		hints = ""
+	}
+	hintsLen := lipgloss.Width(hints)
+
+	innerW := max(m.Width-2, 1)
+
+	title := fmt.Sprintf("Commit %s — %s", sha, m.Commit.MessageHeadline)
+	meta := fmt.Sprintf("%s · %s", author, relTime)
+	metaRendered := th.MutedTxt.Render(meta)
+
+	leftPart := title + "  " + metaRendered
+	leftWidth := lipgloss.Width(leftPart)
+
+	var finalHeader string
+	if hintsLen > 0 {
+		padWidth := max(innerW-leftWidth-hintsLen, 1)
+		finalHeader = leftPart + strings.Repeat(" ", padWidth) + hints
+	} else {
+		finalHeader = leftPart + strings.Repeat(" ", max(0, innerW-leftWidth))
+	}
+
+	var content string
+	content = th.Header.Width(innerW).Render(finalHeader)
+
+	return lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(th.Border).
+		Width(innerW).
+		Render(content)
+}
+
 func (m *PRDetailModel) renderRightViewport(width, height int) string {
 	innerH := max(height-4, 1)
 	innerW := max(width-2, 1)
@@ -725,6 +863,8 @@ func (m *PRDetailModel) renderRightViewport(width, height int) string {
 		lines = m.renderDiffTab(scroll, contentH, contentW)
 	case TabComments:
 		lines = m.renderCommentsTab(scroll, contentH, contentW)
+	case TabCommits:
+		lines = m.renderCommitsTab(scroll, contentH, innerW-1)
 	}
 
 	// Apply left-padding (1 space) to each content line.
@@ -776,6 +916,10 @@ func (m *PRDetailModel) renderSectionTabs() string {
 		th = theme.Default()
 	}
 
+	if m.CommitMode {
+		return th.TabActive.Render("● Diff")
+	}
+
 	type tabDef struct {
 		num  ContentTab
 		key  string
@@ -785,6 +929,7 @@ func (m *PRDetailModel) renderSectionTabs() string {
 		{TabDescription, "1", "Desc"},
 		{TabDiff, "2", "Diff"},
 		{TabComments, "3", "Comments"},
+		{TabCommits, "4", "Commits"},
 	}
 
 	parts := make([]string, len(tabs))
@@ -1206,7 +1351,7 @@ func (m *PRDetailModel) syncFilePanelToCursor() {
 		return
 	}
 	if m.diffCursor.FileIdx >= 0 && m.diffCursor.FileIdx < len(m.Diff.Files) {
-		m.leftPanel.FileIndex = m.diffCursor.FileIdx
+		m.leftPanel.Cursor = m.diffCursor.FileIdx
 		m.ensureFileVisible()
 	}
 }
@@ -1300,6 +1445,9 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		// Search navigation is only meaningful while searchActive=true.
 		return m, nil
 	case "esc":
+		if m.CommitMode {
+			return m, m.emitBackToPRDetail()
+		}
 		// Esc cycles: Content → Files → Dashboard
 		if m.leftPanel.Focus == FocusContent && m.Width >= MinWidthForSidebar {
 			m.leftPanel.Focus = FocusFiles
@@ -1310,27 +1458,48 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 			return m, m.emitBackToDashboard()
 		}
 	case "q":
+		if m.CommitMode {
+			return m, m.emitBackToPRDetail()
+		}
 		return m, m.emitBackToDashboard()
 	case "x":
+		if m.CommitMode {
+			return m, nil
+		}
 		return m, m.handleCloseStart()
 	case "R":
+		if m.CommitMode {
+			return m.handleCommitRefresh()
+		}
 		return m.handleRefresh()
 	case "C":
+		if m.CommitMode {
+			return m, nil
+		}
 		if m.PRService != nil {
 			m.compose.Open(composeModeNew, commentEntry{}, len(m.drafts))
 		}
 		return m, nil
 	case "a":
+		if m.CommitMode {
+			return m, nil
+		}
 		if m.PRService != nil {
 			m.compose.Open(composeModeApprove, commentEntry{}, len(m.drafts))
 		}
 		return m, nil
 	case "v":
+		if m.CommitMode {
+			return m, nil
+		}
 		if m.PRService != nil {
 			m.compose.Open(composeModeReviewComment, commentEntry{}, len(m.drafts))
 		}
 		return m, nil
 	case "r":
+		if m.CommitMode {
+			return m, nil
+		}
 		if m.PRService != nil && m.commentCursor >= 0 {
 			entries := m.commentEntries()
 			if m.commentCursor < len(entries) {
@@ -1346,17 +1515,36 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		}
 		return m, nil
 	case " ":
+		if m.CommitMode {
+			return m, nil
+		}
 		if m.isInDiffSection() {
 			m.enterVisualMode()
 		}
 		return m, nil
 	case "D":
+		if m.CommitMode {
+			return m, nil
+		}
 		if len(m.drafts) > 0 {
 			m.confirmDiscardAll = true
 		}
 		return m, nil
 	case "o":
+		if m.CommitMode {
+			return m, m.emitOpenBrowserCommit()
+		}
+		if m.leftPanel.Focus == FocusContent && m.activeTab == TabCommits {
+			return m, m.emitOpenBrowserCommit()
+		}
 		return m, m.emitOpenBrowser()
+	case "y":
+		if m.CommitMode && m.isInDiffSection() {
+			return m, m.emitCopyCommitPermalink()
+		}
+		if m.leftPanel.Focus == FocusContent && m.activeTab == TabCommits {
+			return m, m.emitCopyCommitSHA()
+		}
 	case "tab":
 		m.cycleForward()
 		m.resetCommentCursor()
@@ -1366,6 +1554,10 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 	case "j", "down":
 		if m.leftPanel.Focus == FocusContent && m.activeTab == TabComments {
 			m.moveCursorNextComment()
+			return m, nil
+		}
+		if m.leftPanel.Focus == FocusContent && m.activeTab == TabCommits {
+			m.moveCommitCursor(1)
 			return m, nil
 		}
 		if m.isInDiffSection() {
@@ -1380,6 +1572,10 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 			m.moveCursorPrevComment()
 			return m, nil
 		}
+		if m.leftPanel.Focus == FocusContent && m.activeTab == TabCommits {
+			m.moveCommitCursor(-1)
+			return m, nil
+		}
 		if m.isInDiffSection() {
 			m.ensureDiffCursor()
 			m.moveCursorUp()
@@ -1391,6 +1587,10 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 			m.resetCommentCursor()
 		}
 	case "J":
+		if m.leftPanel.Focus == FocusContent && m.activeTab == TabCommits {
+			m.moveCommitCursor(5)
+			return m, nil
+		}
 		if m.isInDiffSection() {
 			m.ensureDiffCursor()
 			m.moveCursorBy(5)
@@ -1398,6 +1598,10 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 			return m, nil
 		}
 	case "K":
+		if m.leftPanel.Focus == FocusContent && m.activeTab == TabCommits {
+			m.moveCommitCursor(-5)
+			return m, nil
+		}
 		if m.isInDiffSection() {
 			m.ensureDiffCursor()
 			m.moveCursorBy(-5)
@@ -1406,11 +1610,13 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		}
 	case "enter":
 		if m.leftPanel.Focus == FocusFiles {
-			m.jumpToFile(m.leftPanel.FileIndex)
+			m.jumpToFile(m.leftPanel.Cursor)
 		} else if m.leftPanel.Focus == FocusCI {
 			return m, m.emitOpenBrowserCI()
 		} else if m.leftPanel.Focus == FocusContent && m.activeTab == TabComments && m.commentCursor >= 0 {
 			m.jumpToCommentCode()
+		} else if m.leftPanel.Focus == FocusContent && m.activeTab == TabCommits {
+			return m, m.emitOpenCommitDetail()
 		}
 	case "h", "left":
 		m.jumpFileViewer()
@@ -1421,11 +1627,23 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 	case "shift+l":
 		m.jumpNextFile()
 	case "1":
-		m.switchTab(TabDescription)
+		if !m.CommitMode {
+			m.switchTab(TabDescription)
+		}
 	case "2":
 		m.switchTab(TabDiff)
 	case "3":
-		m.switchTab(TabComments)
+		if !m.CommitMode {
+			m.switchTab(TabComments)
+		}
+	case "4":
+		if !m.CommitMode {
+			needLoad := !m.commitsLoaded && !m.commitsLoading && m.PRService != nil
+			m.switchTab(TabCommits)
+			if needLoad {
+				return m, cmds.LoadPRCommitsCmd(m.PRService, m.Repo, m.Summary.Number, false)
+			}
+		}
 	case "g":
 		if m.LastKey == "g" {
 			if m.isInDiffSection() {
@@ -1440,6 +1658,9 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 					m.commentCursor = 0
 					m.scrollToCommentCursor()
 				}
+			} else if m.leftPanel.Focus == FocusContent && m.activeTab == TabCommits {
+				m.commitCursor = 0
+				m.ContentScroll = 0
 			} else {
 				m.scrollToTop()
 			}
@@ -1461,6 +1682,14 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 				m.commentCursor = len(entries) - 1
 				m.scrollToCommentCursor()
 			}
+		} else if m.leftPanel.Focus == FocusContent && m.activeTab == TabCommits {
+			m.commitCursor = max(0, len(m.commits)-1)
+			cursorRow := m.commitCursor * 3
+			vh := m.contentViewportHeight()
+			if cursorRow >= m.ContentScroll+vh {
+				m.ContentScroll = cursorRow - vh + 1
+			}
+			m.clampContentScroll()
 		} else {
 			m.scrollToBottom()
 		}
@@ -1531,7 +1760,7 @@ func (m *PRDetailModel) cycleForward() {
 	}
 	switch m.leftPanel.Focus {
 	case FocusFiles:
-		if len(m.leftPanel.Checks) > 0 {
+		if !m.leftPanel.HideCI && len(m.leftPanel.Checks) > 0 {
 			m.leftPanel.CICursor = 0
 			m.leftPanel.Focus = FocusCI
 		} else {
@@ -1555,7 +1784,7 @@ func (m *PRDetailModel) cycleBackward() {
 	case FocusCI:
 		m.leftPanel.Focus = FocusFiles
 	case FocusContent:
-		if len(m.leftPanel.Checks) > 0 {
+		if !m.leftPanel.HideCI && len(m.leftPanel.Checks) > 0 {
 			m.leftPanel.CICursor = 0
 			m.leftPanel.Focus = FocusCI
 		} else {
@@ -1572,12 +1801,12 @@ func (m *PRDetailModel) scrollDown() {
 		if len(m.leftPanel.Files) == 0 {
 			return
 		}
-		m.leftPanel.FileIndex++
+		m.leftPanel.Cursor++
 		last := len(m.leftPanel.Files) - 1
-		if m.leftPanel.FileIndex > last {
+		if m.leftPanel.Cursor > last {
 			// If CI has checks, move focus there.
-			m.leftPanel.FileIndex = last
-			if len(m.leftPanel.Checks) > 0 {
+			m.leftPanel.Cursor = last
+			if !m.leftPanel.HideCI && len(m.leftPanel.Checks) > 0 {
 				m.leftPanel.CICursor = 0
 				m.leftPanel.CIScroll = 0
 				m.leftPanel.Focus = FocusCI
@@ -1604,16 +1833,16 @@ func (m *PRDetailModel) scrollDown() {
 func (m *PRDetailModel) scrollUp() {
 	switch m.leftPanel.Focus {
 	case FocusFiles:
-		if m.leftPanel.FileIndex <= 0 {
+		if m.leftPanel.Cursor <= 0 {
 			return
 		}
-		m.leftPanel.FileIndex--
+		m.leftPanel.Cursor--
 		m.ensureFileVisible()
 	case FocusCI:
 		if m.leftPanel.CICursor <= 0 {
 			// move focus back to Files.
 			m.leftPanel.Focus = FocusFiles
-			m.leftPanel.FilesScroll = 0
+			m.leftPanel.Scroll = 0
 			return
 		}
 		m.leftPanel.CICursor--
@@ -1632,7 +1861,7 @@ func (m *PRDetailModel) jumpFileViewer() {
 
 func (m *PRDetailModel) jumpDiffViewer() {
 	if m.leftPanel.Focus == FocusFiles && m.Width >= MinWidthForSidebar {
-		m.jumpToFile(m.leftPanel.FileIndex)
+		m.jumpToFile(m.leftPanel.Cursor)
 	}
 }
 
@@ -1641,7 +1870,7 @@ func (m *PRDetailModel) jumpPrevFile() {
 	if m.leftPanel.Focus != FocusFiles {
 		return
 	}
-	m.leftPanel.FileIndex = clamp(m.leftPanel.FileIndex-1, 0, max(0, len(m.leftPanel.Files)-1))
+	m.leftPanel.Cursor = clamp(m.leftPanel.Cursor-1, 0, max(0, len(m.leftPanel.Files)-1))
 	m.ensureFileVisible()
 }
 
@@ -1650,15 +1879,15 @@ func (m *PRDetailModel) jumpNextFile() {
 	if m.leftPanel.Focus != FocusFiles {
 		return
 	}
-	m.leftPanel.FileIndex = clamp(m.leftPanel.FileIndex+1, 0, max(0, len(m.leftPanel.Files)-1))
+	m.leftPanel.Cursor = clamp(m.leftPanel.Cursor+1, 0, max(0, len(m.leftPanel.Files)-1))
 	m.ensureFileVisible()
 }
 
 func (m *PRDetailModel) scrollToTop() {
 	switch m.leftPanel.Focus {
 	case FocusFiles:
-		m.leftPanel.FileIndex = 0
-		m.leftPanel.FilesScroll = 0
+		m.leftPanel.Cursor = 0
+		m.leftPanel.Scroll = 0
 	case FocusCI:
 		m.leftPanel.CIScroll = 0
 	case FocusContent:
@@ -1670,7 +1899,7 @@ func (m *PRDetailModel) scrollToBottom() {
 	switch m.leftPanel.Focus {
 	case FocusFiles:
 		if len(m.leftPanel.Files) > 0 {
-			m.leftPanel.FileIndex = len(m.leftPanel.Files) - 1
+			m.leftPanel.Cursor = len(m.leftPanel.Files) - 1
 			m.ensureFileVisible()
 		}
 	case FocusCI:
@@ -1688,7 +1917,7 @@ func (m *PRDetailModel) scrollHalfPageDown() {
 		m.ContentScroll += half
 		m.clampContentScroll()
 	case FocusFiles:
-		m.leftPanel.FileIndex = clamp(m.leftPanel.FileIndex+half, 0, max(0, len(m.leftPanel.Files)-1))
+		m.leftPanel.Cursor = clamp(m.leftPanel.Cursor+half, 0, max(0, len(m.leftPanel.Files)-1))
 		m.ensureFileVisible()
 	case FocusCI:
 		visibleCI := m.ciVisibleRows()
@@ -1703,7 +1932,7 @@ func (m *PRDetailModel) scrollHalfPageUp() {
 		m.ContentScroll -= half
 		m.clampContentScroll()
 	case FocusFiles:
-		m.leftPanel.FileIndex = clamp(m.leftPanel.FileIndex-half, 0, max(0, len(m.leftPanel.Files)-1))
+		m.leftPanel.Cursor = clamp(m.leftPanel.Cursor-half, 0, max(0, len(m.leftPanel.Files)-1))
 		m.ensureFileVisible()
 	case FocusCI:
 		m.leftPanel.CIScroll = max(0, m.leftPanel.CIScroll-half)
@@ -1736,6 +1965,8 @@ func (m *PRDetailModel) switchTab(tab ContentTab) {
 		m.diffScroll = m.ContentScroll
 	case TabComments:
 		m.commentsScroll = m.ContentScroll
+	case TabCommits:
+		m.commitsScroll = m.ContentScroll
 	}
 	// Load new scroll.
 	switch tab {
@@ -1745,6 +1976,8 @@ func (m *PRDetailModel) switchTab(tab ContentTab) {
 		m.ContentScroll = m.diffScroll
 	case TabComments:
 		m.ContentScroll = m.commentsScroll
+	case TabCommits:
+		m.ContentScroll = m.commitsScroll
 	}
 	m.activeTab = tab
 	m.leftPanel.Focus = FocusContent
@@ -1756,6 +1989,9 @@ func (m *PRDetailModel) switchTab(tab ContentTab) {
 	if tab == TabDiff {
 		m.ensureDiffCursor()
 		m.scrollToCursor(scrollPadding)
+	}
+	if tab == TabCommits && !m.commitsLoaded && !m.commitsLoading && m.PRService != nil {
+		m.commitsLoading = true
 	}
 	m.clampContentScroll()
 }
@@ -1772,6 +2008,8 @@ func (m *PRDetailModel) maxContentScroll() int {
 	case TabComments:
 		cLines := m.commentLines(cw, m.commentCursor)
 		return max(0, len(cLines)-vh)
+	case TabCommits:
+		return max(0, m.commitsSectionRowCount()-vh)
 	}
 	return 0
 }
@@ -1787,10 +2025,10 @@ func (m *PRDetailModel) ensureFileVisible() {
 	innerH := max(1, filesH-2)
 	contentH := max(1, innerH-2)
 
-	if m.leftPanel.FileIndex < m.leftPanel.FilesScroll {
-		m.leftPanel.FilesScroll = m.leftPanel.FileIndex
-	} else if m.leftPanel.FileIndex >= m.leftPanel.FilesScroll+contentH {
-		m.leftPanel.FilesScroll = m.leftPanel.FileIndex - contentH + 1
+	if m.leftPanel.Cursor < m.leftPanel.Scroll {
+		m.leftPanel.Scroll = m.leftPanel.Cursor
+	} else if m.leftPanel.Cursor >= m.leftPanel.Scroll+contentH {
+		m.leftPanel.Scroll = m.leftPanel.Cursor - contentH + 1
 	}
 }
 
@@ -1817,13 +2055,33 @@ func (m *PRDetailModel) handleRefresh() (*PRDetailModel, tea.Cmd) {
 	m.DetailLoading = true
 	m.DiffLoading = true
 	m.leftPanel.Loading = true
+	m.commits = nil
+	m.commitsLoaded = false
+	m.commitsLoading = false
 	m.searchIndex = nil
 	m.refreshSearchMatches()
 	headSHA := m.Summary.HeadRefOID
-	return m, tea.Batch(
+	cmds_ := []tea.Cmd{
 		cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true),
 		cmds.LoadDiffCmd(m.PRService, m.Repo, m.Summary.Number, headSHA, true),
-	)
+	}
+	if m.activeTab == TabCommits || m.CommitMode {
+		m.commitsLoading = true
+		cmds_ = append(cmds_, cmds.LoadPRCommitsCmd(m.PRService, m.Repo, m.Summary.Number, true))
+	}
+	return m, tea.Batch(cmds_...)
+}
+
+func (m *PRDetailModel) handleCommitRefresh() (*PRDetailModel, tea.Cmd) {
+	if m.PRService == nil {
+		return m, nil
+	}
+	m.Diff = nil
+	m.DiffLoading = true
+	m.leftPanel.Loading = true
+	m.searchIndex = nil
+	m.refreshSearchMatches()
+	return m, cmds.LoadCommitDiffCmd(m.PRService, m.Repo, m.Commit.SHA, true)
 }
 
 // ── Visual mode & draft helpers ───────────────────────────────────────────────
@@ -2282,9 +2540,18 @@ func (m *PRDetailModel) StatusHint() string {
 	if m.closeErr != "" {
 		return m.closeErr
 	}
-	hint := "Tab: Switch | Space: Visual | 1/2/3: Tabs | R: Refresh | /: Search | ?"
+	if m.CommitMode {
+		if m.searchActive {
+			return fmt.Sprintf("Search: %s  (%d/%d)  | Enter: commit  | Esc: clear", m.searchQuery, m.searchCursor+1, len(m.searchMatches))
+		}
+		if m.leftPanel.Focus == FocusFiles {
+			return "j/k: Move | Enter: Jump | l: Focus diff | ?: Keymap"
+		}
+		return "j/k: Scroll | h: Focus files | o: Open browser | y: Copy SHA | q: Back | ?: Keymap"
+	}
+	hint := "Tab: Switch | Space: Visual | 1/2/3/4: Tabs | R: Refresh | /: Search | ?"
 	if len(m.drafts) > 0 {
-		hint = "Tab: Switch | Space: Visual | 1/2/3: Tabs | R: Refresh | /: Search | D: Discard drafts | ?"
+		hint = "Tab: Switch | Space: Visual | 1/2/3/4: Tabs | R: Refresh | /: Search | D: Discard drafts | ?"
 	}
 	return hint
 }
@@ -2445,6 +2712,54 @@ func (m *PRDetailModel) emitBackToDashboard() tea.Cmd {
 	return func() tea.Msg { return BackToDashboard{} }
 }
 
+func (m *PRDetailModel) emitBackToPRDetail() tea.Cmd {
+	return func() tea.Msg { return BackToPRDetail{} }
+}
+
+func (m *PRDetailModel) emitOpenBrowserCommit() tea.Cmd {
+	if m.CommitMode {
+		return func() tea.Msg {
+			return OpenBrowserCommit{Repo: m.Repo, SHA: m.Commit.SHA}
+		}
+	}
+	// Commits tab in PR detail mode
+	if m.commitCursor >= 0 && m.commitCursor < len(m.commits) {
+		c := m.commits[m.commitCursor]
+		return func() tea.Msg {
+			return OpenBrowserCommit{Repo: m.Repo, SHA: c.SHA}
+		}
+	}
+	return nil
+}
+
+func (m *PRDetailModel) emitCopyCommitPermalink() tea.Cmd {
+	if !m.validDiffCursor() {
+		return nil
+	}
+	fi, hi, li := m.diffCursor.FileIdx, m.diffCursor.HunkIdx, m.diffCursor.LineIdx
+	if m.Diff == nil || fi >= len(m.Diff.Files) {
+		return nil
+	}
+	f := &m.Diff.Files[fi]
+	if hi >= len(f.Hunks) {
+		return nil
+	}
+	h := &f.Hunks[hi]
+	if li >= len(h.Lines) {
+		return nil
+	}
+	dl := &h.Lines[li]
+	if len(dl.Anchors) == 0 {
+		return nil
+	}
+	anchor := dl.Anchors[0]
+	url := fmt.Sprintf("https://%s/%s/blob/%s/%s#L%d",
+		m.Repo.Host, m.Repo.FullName, m.Commit.SHA, anchor.Path, *anchor.Line)
+	return func() tea.Msg {
+		return CopyCommitPermalink{URL: url}
+	}
+}
+
 func (m *PRDetailModel) emitOpenBrowser() tea.Cmd {
 	return func() tea.Msg {
 		return OpenBrowserPR{Repo: m.Summary.Repo, Number: m.Summary.Number}
@@ -2467,6 +2782,25 @@ func (m *PRDetailModel) emitOpenBrowserCI() tea.Cmd {
 // BackToDashboard is emitted when the user presses q (or Esc while search is inactive) in PR detail.
 type BackToDashboard struct{}
 
+// BackToPRDetail is emitted when the user presses q/Esc in commit mode.
+type BackToPRDetail struct{}
+
+// OpenBrowserCommit is emitted when the user presses 'o' in commit mode.
+type OpenBrowserCommit struct {
+	Repo domain.Repository
+	SHA  string
+}
+
+// CopyCommitPermalink is emitted when the user presses 'y' with a diff cursor in commit mode.
+type CopyCommitPermalink struct {
+	URL string
+}
+
+// CopyCommitSHA is emitted when the user presses 'y' on a commit in the Commits tab.
+type CopyCommitSHA struct {
+	SHA string
+}
+
 // OpenBrowserPR is emitted when the user presses 'o' in PR detail.
 type OpenBrowserPR struct {
 	Repo   string
@@ -2476,4 +2810,10 @@ type OpenBrowserPR struct {
 // OpenBrowserCI is emitted when the user presses Enter on a CI check row.
 type OpenBrowserCI struct {
 	URL string
+}
+
+// OpenCommitDetail is emitted when the user presses Enter on a commit in the Commits tab.
+type OpenCommitDetail struct {
+	Repo   domain.Repository
+	Commit domain.Commit
 }

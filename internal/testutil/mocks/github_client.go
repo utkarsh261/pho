@@ -18,6 +18,7 @@ type MockGitHubClient struct {
 	FetchDashboardPRsFn   func(ctx context.Context, repo domain.Repository) ([]domain.PullRequestSummary, int, bool, string, error)
 	FetchInvolvingPRsFn   func(ctx context.Context, repo domain.Repository, viewer string) ([]domain.PullRequestSummary, int, bool, error)
 	FetchPreviewFn        func(ctx context.Context, repo domain.Repository, number int) (domain.PRPreviewSnapshot, error)
+	FetchCommitsFn        func(ctx context.Context, repo domain.Repository, number int) ([]domain.Commit, error)
 	PostCommentFn          func(ctx context.Context, host, pullRequestID, body string) error
 	PostReviewCommentFn    func(ctx context.Context, host, pullRequestID, body string) error
 	ApprovePullRequestFn   func(ctx context.Context, host, pullRequestID, body string) error
@@ -31,6 +32,7 @@ type MockGitHubClient struct {
 	// Call counters — incremented on each call.
 	FetchDashboardPRsCalls  int
 	FetchPreviewCalls       int
+	FetchCommitsCalls       int
 	PostCommentCalls        int
 	ApprovePullRequestCalls int
 	SubmitReviewWithCommentsCalls int
@@ -68,6 +70,14 @@ func (m *MockGitHubClient) FetchPreview(ctx context.Context, repo domain.Reposit
 	}
 	m.FetchPreviewCalls++
 	return m.FetchPreviewFn(ctx, repo, number)
+}
+
+func (m *MockGitHubClient) FetchCommits(ctx context.Context, repo domain.Repository, number int) ([]domain.Commit, error) {
+	if m.FetchCommitsFn == nil {
+		panic("MockGitHubClient.FetchCommits called but FetchCommitsFn is nil")
+	}
+	m.FetchCommitsCalls++
+	return m.FetchCommitsFn(ctx, repo, number)
 }
 
 func (m *MockGitHubClient) PostComment(ctx context.Context, host, pullRequestID, body string) error {

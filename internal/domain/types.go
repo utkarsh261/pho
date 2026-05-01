@@ -397,8 +397,9 @@ type AppState struct {
 type PrimaryView string
 
 const (
-	PrimaryViewDashboard PrimaryView = "dashboard"
-	PrimaryViewPRDetail  PrimaryView = "pr_detail"
+	PrimaryViewDashboard     PrimaryView = "dashboard"
+	PrimaryViewPRDetail      PrimaryView = "pr_detail"
+	PrimaryViewCommitDetail  PrimaryView = "commit_detail"
 )
 
 type OverlayView string
@@ -417,6 +418,16 @@ const (
 )
 
 // PR Detail domain types
+
+// Commit represents a single commit in a pull request.
+type Commit struct {
+	SHA             string
+	MessageHeadline string
+	MessageBody     string
+	AuthorName      string
+	AuthorLogin     string // empty if GitHub user is unknown
+	CommittedAt     time.Time
+}
 
 // PRChecks represents the CI/checks status for a PR.
 type PRChecks struct {

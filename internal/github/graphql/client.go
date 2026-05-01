@@ -257,6 +257,22 @@ func (c *Client) FetchAllPRs(ctx context.Context, repo domain.Repository, cursor
 	return summaries, hasMore, nextCursor, nil
 }
 
+// FetchCommits loads the last 100 commits for a PR, newest first.
+func (c *Client) FetchCommits(ctx context.Context, repo domain.Repository, number int) ([]domain.Commit, error) {
+	c.log.Debug("fetch commits", "repo", repo.FullName, "host", repo.Host, "number", number)
+	resp, err := queryGraphQL[model.CommitsData](c, ctx, repo.Host, func(_ githubpkg.GitHubHostProfile) string {
+		return buildCommitsQuery()
+	}, map[string]any{
+		"owner":  repoOwner(repo),
+		"name":   repoName(repo),
+		"number": number,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return normalizeCommitsResponse(resp.Data), nil
+}
+
 // FetchPreview loads the richer PR preview snapshot.
 func (c *Client) FetchPreview(ctx context.Context, repo domain.Repository, number int) (domain.PRPreviewSnapshot, error) {
 	c.log.Debug("fetch preview", "repo", repo.FullName, "host", repo.Host, "number", number)

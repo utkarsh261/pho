@@ -22,6 +22,7 @@ type fakeGitHubClient struct {
 	FetchDashboardPRsFn func(ctx context.Context, repo domain.Repository) ([]domain.PullRequestSummary, int, bool, string, error)
 	FetchInvolvingPRsFn func(ctx context.Context, repo domain.Repository, viewer string) ([]domain.PullRequestSummary, int, bool, error)
 	FetchViewerFn       func(ctx context.Context, host string) (string, error)
+	FetchCommitsFn      func(ctx context.Context, repo domain.Repository, number int) ([]domain.Commit, error)
 }
 
 func (f *fakeGitHubClient) FetchViewer(ctx context.Context, host string) (string, error) {
@@ -73,6 +74,12 @@ func (f *fakeGitHubClient) CheckMergeable(_ context.Context, _ domain.Repository
 }
 func (f *fakeGitHubClient) ClosePullRequest(_ context.Context, _, _ string) error    { return nil }
 func (f *fakeGitHubClient) ReopenPullRequest(_ context.Context, _, _ string) error { return nil }
+func (f *fakeGitHubClient) FetchCommits(ctx context.Context, repo domain.Repository, number int) ([]domain.Commit, error) {
+	if f.FetchCommitsFn == nil {
+		return nil, fmt.Errorf("unexpected FetchCommits(%s,#%d)", repo.FullName, number)
+	}
+	return f.FetchCommitsFn(ctx, repo, number)
+}
 
 // frozenNow is the fixed time used for both service.Now and coord.Now in tests.
 // Entries seeded at this time with a 2-minute TTL are fresh; entries seeded
@@ -459,9 +466,10 @@ func newTestPRService(coord *cache.Coordinator, rawDiff string, restErr error) *
 // testablePRService embeds PRService but allows overriding REST fetch.
 type testablePRService struct {
 	PRService
-	rawDiff     string
-	restErr     error
-	RESTFetchFn func(ctx context.Context, owner, repo string, number int) (string, error)
+	rawDiff           string
+	restErr           error
+	RESTFetchFn       func(ctx context.Context, owner, repo string, number int) (string, error)
+	FetchCommitDiffFn func(ctx context.Context, owner, repo, sha string) (string, error)
 }
 
 func (s *testablePRService) LoadDiff(ctx context.Context, repo domain.Repository, number int, headSHA string, force bool) (model.DiffModel, bool, error) {
@@ -520,6 +528,59 @@ func (s *testablePRService) LoadDiff(ctx context.Context, repo domain.Repository
 	}
 
 	return *dm, false, nil
+}
+
+func (s *testablePRService) LoadCommitDiff(ctx context.Context, repo domain.Repository, sha string, force bool) (model.DiffModel, error) {
+	key := commitDiffCacheKey(s.Host, repoFullName(repo), sha)
+
+	var cached model.DiffModel
+	found := false
+	if !force {
+		_, _, found, _ = s.Cache.StaleWhileRevalidate(ctx, key, &cached, nil)
+		if found {
+			return cached, nil
+		}
+	}
+
+	var rawDiff string
+	var err error
+	if s.FetchCommitDiffFn != nil {
+		rawDiff, err = s.FetchCommitDiffFn(ctx, s.PRService.Owner, repo.Name, sha)
+	} else if s.RESTFetchFn != nil {
+		rawDiff, err = s.RESTFetchFn(ctx, s.PRService.Owner, repo.Name, 0)
+	} else {
+		err = fmt.Errorf("no fetch function configured")
+	}
+	if err != nil {
+		if found {
+			return cached, fmt.Errorf("fetch commit diff %s: %w", repo.FullName, err)
+		}
+		return model.DiffModel{}, fmt.Errorf("fetch commit diff: %w", err)
+	}
+
+	dm, err := parse.Parse(rawDiff)
+	if err != nil {
+		if found {
+			return cached, fmt.Errorf("parse commit diff: %w", err)
+		}
+		return model.DiffModel{}, fmt.Errorf("parse commit diff: %w", err)
+	}
+
+	dm.HeadSHA = sha
+	dm.Repo = repoFullName(repo)
+
+	anchor.Generate(dm, sha)
+
+	cumulative := 0
+	for i := range dm.Files {
+		dm.Files[i].StartRow = cumulative
+		cumulative += dm.Files[i].DisplayRows
+	}
+
+	meta := commitDiffMeta(key, repo, sha, s.Now().UTC())
+	_ = s.Cache.Write(ctx, key, *dm, meta)
+
+	return *dm, nil
 }
 
 func TestLoadDiffErrorWithNoStale(t *testing.T) {
@@ -715,6 +776,154 @@ func TestMergePRInvalidatesPreviewCache(t *testing.T) {
 	_, found, _ = coord.L2.Get(context.Background(), key, &cached)
 	if found {
 		t.Fatal("expected preview cache to be deleted after merge")
+	}
+}
+
+func TestLoadPRCommitsCacheMissFetchesGraphQL(t *testing.T) {
+	t.Parallel()
+
+	expected := []domain.Commit{
+		{SHA: "sha1", MessageHeadline: "First commit", AuthorLogin: "alice"},
+		{SHA: "sha2", MessageHeadline: "Second commit", AuthorLogin: "bob"},
+	}
+
+	client := &fakeGitHubClient{
+		FetchCommitsFn: func(ctx context.Context, repo domain.Repository, number int) ([]domain.Commit, error) {
+			if number != 42 {
+				return nil, fmt.Errorf("expected number 42, got %d", number)
+			}
+			return expected, nil
+		},
+	}
+
+	coord := newTestCoordinator(t)
+	svc := &PRService{
+		Cache:  coord,
+		Client: client,
+		Host:   "github.com",
+		Now:    func() time.Time { return frozenNow },
+	}
+
+	commits, err := svc.LoadPRCommits(context.Background(), testRepo(), 42, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(commits) != 2 {
+		t.Fatalf("expected 2 commits, got %d", len(commits))
+	}
+	if commits[0].SHA != "sha1" {
+		t.Errorf("expected SHA=%q, got %q", "sha1", commits[0].SHA)
+	}
+}
+
+func TestLoadPRCommitsCacheHitBypassesTransport(t *testing.T) {
+	t.Parallel()
+
+	seeded := []domain.Commit{
+		{SHA: "seeded", MessageHeadline: "Seeded commit"},
+	}
+	coord := newTestCoordinator(t)
+	key := commitsCacheKey("github.com", "owner/repo", 42)
+	meta := commitsMeta(key, testRepo(), 42, frozenNow)
+	if err := coord.Write(context.Background(), key, seeded, meta); err != nil {
+		t.Fatalf("cache write: %v", err)
+	}
+
+	client := &fakeGitHubClient{
+		FetchCommitsFn: func(ctx context.Context, repo domain.Repository, number int) ([]domain.Commit, error) {
+			return nil, fmt.Errorf("should not be called")
+		},
+	}
+
+	svc := &PRService{
+		Cache:  coord,
+		Client: client,
+		Host:   "github.com",
+		Now:    func() time.Time { return frozenNow },
+	}
+
+	commits, err := svc.LoadPRCommits(context.Background(), testRepo(), 42, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(commits) != 1 || commits[0].SHA != "seeded" {
+		t.Errorf("expected seeded commit, got %+v", commits)
+	}
+}
+
+func TestLoadPRCommitsForceRefresh(t *testing.T) {
+	t.Parallel()
+
+	seeded := []domain.Commit{
+		{SHA: "seeded", MessageHeadline: "Seeded commit"},
+	}
+	coord := newTestCoordinator(t)
+	key := commitsCacheKey("github.com", "owner/repo", 42)
+	meta := commitsMeta(key, testRepo(), 42, frozenNow)
+	if err := coord.Write(context.Background(), key, seeded, meta); err != nil {
+		t.Fatalf("cache write: %v", err)
+	}
+
+	callCount := 0
+	client := &fakeGitHubClient{
+		FetchCommitsFn: func(ctx context.Context, repo domain.Repository, number int) ([]domain.Commit, error) {
+			callCount++
+			return []domain.Commit{{SHA: "new-sha", MessageHeadline: "New commit"}}, nil
+		},
+	}
+
+	svc := &PRService{
+		Cache:  coord,
+		Client: client,
+		Host:   "github.com",
+		Now:    func() time.Time { return frozenNow },
+	}
+
+	commits, err := svc.LoadPRCommits(context.Background(), testRepo(), 42, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if callCount != 1 {
+		t.Errorf("expected 1 transport call on force=true, got %d", callCount)
+	}
+	if len(commits) != 1 || commits[0].SHA != "new-sha" {
+		t.Errorf("expected new commit after force refresh, got %+v", commits)
+	}
+}
+
+func TestLoadCommitDiffForceRefresh(t *testing.T) {
+	t.Parallel()
+
+	seeded := model.DiffModel{HeadSHA: "seeded-sha"}
+	coord := newTestCoordinator(t)
+	key := commitDiffCacheKey("github.com", "owner/repo", "abc1234")
+	meta := commitDiffMeta(key, testRepo(), "abc1234", frozenNow)
+	if err := coord.Write(context.Background(), key, seeded, meta); err != nil {
+		t.Fatalf("cache write: %v", err)
+	}
+
+	callCount := 0
+	svc := &testablePRService{
+		PRService: PRService{
+			Cache: coord,
+			Host:  "github.com",
+			Now:   func() time.Time { return frozenNow },
+		},
+		FetchCommitDiffFn: func(ctx context.Context, owner, repo, sha string) (string, error) {
+			callCount++
+			return "diff --git a/f.txt b/f.txt\nnew file mode 100644\nindex 0000000..e69de29\n--- /dev/null\n+++ b/f.txt\n@@ -0,0 +1 @@\n+hello\n", nil
+		},
+	}
+
+	diff, err := svc.LoadCommitDiff(context.Background(), testRepo(), "abc1234", true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if callCount != 1 {
+		t.Errorf("expected 1 REST call on force=true, got %d", callCount)
+	}
+	if diff.HeadSHA != "abc1234" {
+		t.Errorf("expected HeadSHA=abc1234 after force refresh, got %q", diff.HeadSHA)
 	}
 }
 

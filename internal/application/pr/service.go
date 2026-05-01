@@ -310,6 +310,93 @@ func (s *PRService) loadDiffInner(ctx context.Context, repo domain.Repository, n
 	return *dm, false, nil
 }
 
+// LoadPRCommits loads the commit list for a PR via GraphQL.
+func (s *PRService) LoadPRCommits(ctx context.Context, repo domain.Repository, number int, force bool) ([]domain.Commit, error) {
+	key := commitsCacheKey(repo.Host, repoFullName(repo), number)
+
+	var cached []domain.Commit
+	found := false
+	if !force {
+		_, _, found, _ = s.Cache.StaleWhileRevalidate(ctx, key, &cached, nil)
+		if found {
+			s.logDebug("commits cache hit", "key", key, "number", number)
+			return cached, nil
+		}
+	}
+
+	s.logDebug("commits cache miss, fetching", "key", key, "number", number)
+
+	commits, err := s.Client.FetchCommits(ctx, repo, number)
+	if err != nil {
+		if found {
+			s.logWarn("commits fetch failed, returning stale", "key", key, "number", number, "err", err)
+			return cached, fmt.Errorf("fetch commits %s: %w", repo.FullName, err)
+		}
+		return nil, fmt.Errorf("fetch commits: %w", err)
+	}
+
+	meta := commitsMeta(key, repo, number, s.Now().UTC())
+	if err := s.Cache.Write(ctx, key, commits, meta); err != nil {
+		s.logWarn("commits cache write error", "key", key, "err", err)
+	}
+
+	return commits, nil
+}
+
+// LoadCommitDiff loads the raw diff for a single commit via REST.
+func (s *PRService) LoadCommitDiff(ctx context.Context, repo domain.Repository, sha string, force bool) (model.DiffModel, error) {
+	key := commitDiffCacheKey(repo.Host, repoFullName(repo), sha)
+
+	var cached model.DiffModel
+	found := false
+	if !force {
+		_, _, found, _ = s.Cache.StaleWhileRevalidate(ctx, key, &cached, nil)
+		if found {
+			s.logDebug("commit diff cache hit", "key", key, "sha", sha)
+			return cached, nil
+		}
+	}
+
+	s.logDebug("commit diff cache miss, fetching", "key", key, "sha", sha)
+
+	rawDiff, err := s.REST.FetchCommitDiff(ctx, s.ownerName(repo), s.RepoName(repo), sha)
+	if err != nil {
+		if found {
+			s.logWarn("commit diff fetch failed, returning stale", "key", key, "sha", sha, "err", err)
+			return cached, fmt.Errorf("fetch commit diff %s: %w", repo.FullName, err)
+		}
+		return model.DiffModel{}, fmt.Errorf("fetch commit diff: %w", err)
+	}
+
+	dm, err := parse.Parse(rawDiff)
+	if err != nil {
+		if found {
+			s.logWarn("commit diff parse failed, returning stale", "key", key, "sha", sha, "err", err)
+			return cached, fmt.Errorf("parse commit diff: %w", err)
+		}
+		return model.DiffModel{}, fmt.Errorf("parse commit diff: %w", err)
+	}
+
+	dm.HeadSHA = sha
+	dm.Repo = repoFullName(repo)
+
+	anchor.Generate(dm, sha)
+
+	// Precompute StartRow for file-level virtualization.
+	cumulative := 0
+	for i := range dm.Files {
+		dm.Files[i].StartRow = cumulative
+		cumulative += dm.Files[i].DisplayRows
+	}
+
+	meta := commitDiffMeta(key, repo, sha, s.Now().UTC())
+	if err := s.Cache.Write(ctx, key, *dm, meta); err != nil {
+		s.logWarn("commit diff cache write error", "key", key, "err", err)
+	}
+
+	return *dm, nil
+}
+
 func (s *PRService) RepoName(repo domain.Repository) string {
 	if repo.Name != "" {
 		return repo.Name
@@ -394,6 +481,43 @@ func diffMeta(key string, repo domain.Repository, number int, fetchedAt time.Tim
 		Host:      repo.Host,
 		Repo:      repoFullName(repo),
 		PRNumber:  &number,
+		FetchedAt: fetchedAt,
+		ExpiresAt: farFuture,
+		Encoding:  "gob",
+	}
+}
+
+func commitsCacheKey(host, repo string, number int) string {
+	return fmt.Sprintf("commits:v1:host=%s:repo=%s:pr=%d", host, repo, number)
+}
+
+func commitDiffCacheKey(host, repo, sha string) string {
+	return fmt.Sprintf("commitdiff:v1:host=%s:repo=%s:sha=%s", host, repo, sha)
+}
+
+func commitsMeta(key string, repo domain.Repository, number int, fetchedAt time.Time) domain.CacheMeta {
+	return domain.CacheMeta{
+		Key:       key,
+		Kind:      "commits",
+		Version:   cacheVersion,
+		Host:      repo.Host,
+		Repo:      repoFullName(repo),
+		PRNumber:  &number,
+		FetchedAt: fetchedAt,
+		ExpiresAt: fetchedAt.Add(cacheTTL),
+		Encoding:  "json",
+	}
+}
+
+func commitDiffMeta(key string, repo domain.Repository, sha string, fetchedAt time.Time) domain.CacheMeta {
+	// Commit diff cache is immutable — no expiry.
+	farFuture := fetchedAt.Add(365 * 24 * time.Hour)
+	return domain.CacheMeta{
+		Key:       key,
+		Kind:      cacheKindDiff,
+		Version:   cacheVersion,
+		Host:      repo.Host,
+		Repo:      repoFullName(repo),
 		FetchedAt: fetchedAt,
 		ExpiresAt: farFuture,
 		Encoding:  "gob",

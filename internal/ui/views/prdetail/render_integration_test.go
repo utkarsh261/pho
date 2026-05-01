@@ -534,7 +534,7 @@ func TestEnterOnFileFirstFileScrollsToDiffStart(t *testing.T) {
 	m.Detail = makeDetailWithBody("") // no description
 	m.Diff = makeDiff(files)
 	m.leftPanel.Focus = FocusFiles
-	m.leftPanel.FileIndex = 0
+	m.leftPanel.Cursor = 0
 
 	m = pressKey(m, "enter")
 
@@ -561,7 +561,7 @@ func TestEnterOnFileSecondFileScrollsPastFirstFile(t *testing.T) {
 	m.Detail = makeDetailWithBody("")
 	m.Diff = makeDiff(files)
 	m.leftPanel.Focus = FocusFiles
-	m.leftPanel.FileIndex = 1
+	m.leftPanel.Cursor = 1
 
 	m = pressKey(m, "enter")
 
@@ -587,7 +587,7 @@ func TestEnterOnFileWithDescriptionAccountsForDescRows(t *testing.T) {
 	m.Detail = makeDetailWithBody("some description that adds a few rows above the diff")
 	m.Diff = makeDiff(files)
 	m.leftPanel.Focus = FocusFiles
-	m.leftPanel.FileIndex = 0
+	m.leftPanel.Cursor = 0
 
 	m = pressKey(m, "enter")
 
@@ -609,7 +609,7 @@ func TestEnterOnFileNoDiffIsNoop(t *testing.T) {
 	m.Detail = makeDetailWithBody("")
 	m.Diff = nil
 	m.leftPanel.Focus = FocusFiles
-	m.leftPanel.FileIndex = 0
+	m.leftPanel.Cursor = 0
 	m.ContentScroll = 0
 
 	m = pressKey(m, "enter")

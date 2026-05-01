@@ -322,13 +322,13 @@ func TestFilesFocusJKStillMovesFiles(t *testing.T) {
 	t.Parallel()
 	m := makeDiffCursorModel(100, 40)
 	m.leftPanel.Focus = FocusFiles
-	if m.leftPanel.FileIndex != 0 {
-		t.Fatalf("expected FileIndex 0, got %d", m.leftPanel.FileIndex)
+	if m.leftPanel.Cursor != 0 {
+		t.Fatalf("expected FileIndex 0, got %d", m.leftPanel.Cursor)
 	}
 	m = pressKey(m, "j")
 	// j with focus on Files should advance FileIndex.
-	if m.leftPanel.FileIndex != 1 {
-		t.Errorf("expected j to advance FileIndex to 1, got %d", m.leftPanel.FileIndex)
+	if m.leftPanel.Cursor != 1 {
+		t.Errorf("expected j to advance FileIndex to 1, got %d", m.leftPanel.Cursor)
 	}
 }
 
@@ -362,8 +362,8 @@ func TestDiffCursorSyncsFilePanel(t *testing.T) {
 	t.Parallel()
 	m := makeDiffCursorModel(100, 40)
 	m.ensureDiffCursor()
-	if m.leftPanel.FileIndex != 0 {
-		t.Errorf("expected FileIndex 0, got %d", m.leftPanel.FileIndex)
+	if m.leftPanel.Cursor != 0 {
+		t.Errorf("expected FileIndex 0, got %d", m.leftPanel.Cursor)
 	}
 	// Move to file 1 (b.go).
 	for i := 0; i < 5; i++ {
@@ -372,8 +372,8 @@ func TestDiffCursorSyncsFilePanel(t *testing.T) {
 	if m.diffCursor.FileIdx != 1 {
 		t.Errorf("expected cursor on file 1, got file %d", m.diffCursor.FileIdx)
 	}
-	if m.leftPanel.FileIndex != 1 {
-		t.Errorf("expected FileIndex to sync to 1, got %d", m.leftPanel.FileIndex)
+	if m.leftPanel.Cursor != 1 {
+		t.Errorf("expected FileIndex to sync to 1, got %d", m.leftPanel.Cursor)
 	}
 }
 
@@ -383,7 +383,7 @@ func TestJumpToFileSetsCursor(t *testing.T) {
 	t.Parallel()
 	m := makeDiffCursorModel(100, 40)
 	m.leftPanel.Focus = FocusFiles
-	m.leftPanel.FileIndex = 1
+	m.leftPanel.Cursor = 1
 	m = pressKey(m, "l") // jumpDiffViewer → jumpToFile(1)
 	if !m.validDiffCursor() {
 		t.Error("expected jumpToFile to set a valid cursor")

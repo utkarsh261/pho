@@ -10,7 +10,8 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea 	"github.com/charmbracelet/bubbletea"
+	"github.com/atotto/clipboard"
 
 	"github.com/utkarsh261/pho/internal/application/cmds"
 	achdashboard "github.com/utkarsh261/pho/internal/application/dashboard"
@@ -21,6 +22,7 @@ import (
 	"github.com/utkarsh261/pho/internal/ui/keymap"
 	"github.com/utkarsh261/pho/internal/ui/layout"
 	"github.com/utkarsh261/pho/internal/ui/theme"
+	"github.com/utkarsh261/pho/internal/ui/views/commitdetail"
 	"github.com/utkarsh261/pho/internal/ui/views/dashboard"
 	"github.com/utkarsh261/pho/internal/ui/views/prdetail"
 )
@@ -66,6 +68,9 @@ type Model struct {
 
 	// prDetail holds the PR detail sub-model when the top view is PR detail.
 	prDetail *prdetail.PRDetailModel
+
+	// commitDetail holds the commit detail sub-model when the top view is commit detail.
+	commitDetail *commitdetail.Model
 
 	layout layout.LayoutState
 
@@ -209,10 +214,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.applyWindowSize(msg)
-		// Also forward window size to PR detail if active.
+		// Also forward window size to active detail view.
 		if m.currentView() == domain.PrimaryViewPRDetail && m.prDetail != nil {
 			m.prDetail.Width = m.layout.Current.Width
 			m.prDetail.Height = m.layout.Current.Height - 2
+		}
+		if m.currentView() == domain.PrimaryViewCommitDetail && m.commitDetail != nil {
+			_, _ = m.commitDetail.Update(tea.WindowSizeMsg{Width: m.layout.Current.Width, Height: m.layout.Current.Height - 2})
 		}
 		return m, nil
 	case tea.KeyMsg:
@@ -225,6 +233,32 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, func() tea.Msg {
 			if err := openURL(msg.URL); err != nil {
 				return browserOpenFailed{URL: msg.URL, Err: err}
+			}
+			return nil
+		}
+	case prdetail.OpenCommitDetail:
+		return m, m.handleOpenCommitDetail(msg)
+	case prdetail.BackToPRDetail:
+		return m, m.handleBackToPRDetail()
+	case prdetail.OpenBrowserCommit:
+		return m, func() tea.Msg {
+			url := fmt.Sprintf("https://%s/%s/commit/%s", msg.Repo.Host, msg.Repo.FullName, msg.SHA)
+			if err := openURL(url); err != nil {
+				return browserOpenFailed{URL: url, Err: err}
+			}
+			return nil
+		}
+	case prdetail.CopyCommitPermalink:
+		return m, func() tea.Msg {
+			if err := clipboard.WriteAll(msg.URL); err != nil {
+				m.log.Error("clipboard write failed", "err", err)
+			}
+			return nil
+		}
+	case prdetail.CopyCommitSHA:
+		return m, func() tea.Msg {
+			if err := clipboard.WriteAll(msg.SHA); err != nil {
+				m.log.Error("clipboard write failed", "err", err)
 			}
 			return nil
 		}
@@ -244,6 +278,22 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.prDetail != nil {
 			next, cmd := m.prDetail.Update(msg)
 			m.prDetail = next
+			m.syncStatus()
+			return m, cmd
+		}
+		return m, nil
+	case cmds.CommitsLoaded:
+		if m.prDetail != nil {
+			next, cmd := m.prDetail.Update(msg)
+			m.prDetail = next
+			m.syncStatus()
+			return m, cmd
+		}
+		return m, nil
+	case cmds.CommitDiffLoaded:
+		if m.commitDetail != nil {
+			next, cmd := m.commitDetail.Update(msg)
+			m.commitDetail = next
 			m.syncStatus()
 			return m, cmd
 		}
@@ -294,6 +344,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.syncStatus()
 			outCmds = append(outCmds, cmd)
 		}
+		if m.commitDetail != nil && m.currentView() == domain.PrimaryViewCommitDetail {
+			next, cmd := m.commitDetail.Update(msg)
+			m.commitDetail = next
+			m.syncStatus()
+			outCmds = append(outCmds, cmd)
+		}
 		outCmds = append(outCmds, m.applyMessage(msg))
 		return m, tea.Batch(outCmds...)
 	}
@@ -312,6 +368,20 @@ func (m *Model) View() string {
 			// The "- 2" leaves exactly 2 rows for the shared status bar at the bottom.
 			// This matches composeBody's contentH = height - 2.
 			body := m.prDetail.View()
+			status := m.status.View()
+			if strings.TrimSpace(body) == "" {
+				bg = status
+			} else if strings.TrimSpace(status) == "" {
+				bg = body
+			} else {
+				bg = body + "\n" + status
+			}
+		} else {
+			bg = m.renderDashboard()
+		}
+	case domain.PrimaryViewCommitDetail:
+		if m.commitDetail != nil {
+			body := m.commitDetail.View()
 			status := m.status.View()
 			if strings.TrimSpace(body) == "" {
 				bg = status
@@ -412,6 +482,12 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.forwardKey(msg)
 	}
+	if m.currentView() == domain.PrimaryViewCommitDetail {
+		if msg.String() == "?" {
+			return m, m.toggleKeymapOverlay()
+		}
+		return m, m.forwardKey(msg)
+	}
 
 	result := keymap.Dispatch(m.focus, msg)
 	if isRootAction(result.Action) {
@@ -474,6 +550,15 @@ func (m *Model) forwardKey(msg tea.KeyMsg) tea.Cmd {
 		if m.prDetail != nil {
 			next, cmd := m.prDetail.Update(msg)
 			m.prDetail = next
+			m.syncStatus()
+			return cmd
+		}
+		return nil
+	}
+	if m.currentView() == domain.PrimaryViewCommitDetail {
+		if m.commitDetail != nil {
+			next, cmd := m.commitDetail.Update(msg)
+			m.commitDetail = next
 			m.syncStatus()
 			return cmd
 		}
@@ -1114,6 +1199,8 @@ func (m *Model) syncStatus() {
 	}
 	if m.currentView() == domain.PrimaryViewPRDetail && m.prDetail != nil {
 		m.status.HintOverride = m.prDetail.StatusHint()
+	} else if m.currentView() == domain.PrimaryViewCommitDetail && m.commitDetail != nil {
+		m.status.HintOverride = m.commitDetail.StatusHint()
 	} else {
 		m.status.HintOverride = ""
 	}
@@ -1684,6 +1771,23 @@ func (m *Model) handleBackToDashboard() tea.Cmd {
 	m.focus = domain.FocusPRListPanel
 	m.previousFocus = domain.FocusPreviewPanel
 	m.rebuildDashboardTabs()
+	m.syncStatus()
+	return nil
+}
+
+func (m *Model) handleOpenCommitDetail(msg prdetail.OpenCommitDetail) tea.Cmd {
+	m.commitDetail = commitdetail.NewModel(msg.Repo, msg.Commit, m.deps.PR)
+	m.commitDetail.SetTheme(m.theme)
+	if m.layout.Current.Width > 0 {
+		_, _ = m.commitDetail.Update(tea.WindowSizeMsg{Width: m.layout.Current.Width, Height: m.layout.Current.Height - 2})
+	}
+	m.pushView(domain.PrimaryViewCommitDetail)
+	m.syncStatus()
+	return m.commitDetail.Init()
+}
+
+func (m *Model) handleBackToPRDetail() tea.Cmd {
+	m.popView()
 	m.syncStatus()
 	return nil
 }

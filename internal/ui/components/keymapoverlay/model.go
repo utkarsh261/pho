@@ -268,6 +268,8 @@ func BuildBindings(ctx Context) []Group {
 	switch ctx.View {
 	case domain.PrimaryViewPRDetail:
 		return buildPRDetailBindings(ctx)
+	case domain.PrimaryViewCommitDetail:
+		return buildCommitDetailBindings()
 	default:
 		return buildDashboardBindings(ctx)
 	}
@@ -335,6 +337,30 @@ func buildDashboardBindings(ctx Context) []Group {
 	return groups
 }
 
+func buildCommitDetailBindings() []Group {
+	return []Group{
+		{
+			Name: "Navigation",
+			Bindings: []Binding{
+				{Key: "j/k", Description: "Scroll / Move cursor"},
+				{Key: "tab", Description: "Cycle panel"},
+				{Key: "h/l", Description: "Focus files / content"},
+				{Key: "gg/G", Description: "Jump top/bottom"},
+				{Key: "shift+H/shift+L", Description: "Prev/next file"},
+			},
+		},
+		{
+			Name: "Actions",
+			Bindings: []Binding{
+				{Key: "o", Description: "Open in browser"},
+				{Key: "y", Description: "Copy SHA"},
+				{Key: "R", Description: "Refresh"},
+				{Key: "esc / q", Description: "Back to PR detail"},
+			},
+		},
+	}
+}
+
 func buildPRDetailBindings(ctx Context) []Group {
 	groups := []Group{
 		{
@@ -349,9 +375,10 @@ func buildPRDetailBindings(ctx Context) []Group {
 		{
 			Name: "Tabs",
 			Bindings: []Binding{
-				{Key: "1", Description: "Description"},
-				{Key: "2", Description: "Diff"},
-				{Key: "3", Description: "Comments"},
+			{Key: "1", Description: "Description"},
+			{Key: "2", Description: "Diff"},
+			{Key: "3", Description: "Comments"},
+			{Key: "4", Description: "Commits"},
 			},
 		},
 		{

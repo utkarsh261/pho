@@ -258,10 +258,21 @@ type CommitNode struct {
 	Commit CommitData `json:"commit"`
 }
 
-// CommitData is the commit object embedded in summary and preview queries.
+// CommitData is the commit object embedded in summary, preview, and commits queries.
 type CommitData struct {
 	OID               string             `json:"oid,omitempty"`
+	MessageHeadline   string             `json:"messageHeadline,omitempty"`
+	MessageBody       string             `json:"messageBody,omitempty"`
+	CommittedDate     string             `json:"committedDate,omitempty"`
+	Author            *CommitAuthor      `json:"author,omitempty"`
 	StatusCheckRollup *StatusCheckRollup `json:"statusCheckRollup,omitempty"`
+}
+
+// CommitAuthor matches the commit author shape used in the commits query.
+type CommitAuthor struct {
+	Name  string     `json:"name"`
+	Email string     `json:"email"`
+	User  *ActorNode `json:"user,omitempty"`
 }
 
 // StatusCheckRollup captures coarse and detailed CI state.
@@ -359,4 +370,26 @@ type TimelineCommit struct {
 	MessageHeadline string          `json:"messageHeadline,omitempty"`
 	CommittedDate   string          `json:"committedDate,omitempty"`
 	Author          *TimelineAuthor `json:"author,omitempty"`
+}
+
+// CommitsResponse is the raw GraphQL payload for the PR commits query.
+type CommitsResponse struct {
+	Data CommitsData `json:"data"`
+}
+
+// CommitsData is the inner data object for PR commits queries.
+type CommitsData struct {
+	Repository RepositoryNode `json:"repository"`
+}
+
+// CommitDetailResponse is the raw GraphQL payload for a single commit query.
+type CommitDetailResponse struct {
+	Data CommitDetailData `json:"data"`
+}
+
+// CommitDetailData is the inner data object for single commit queries.
+type CommitDetailData struct {
+	Repository struct {
+		Object CommitNode `json:"object"`
+	} `json:"repository"`
 }

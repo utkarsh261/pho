@@ -25,6 +25,12 @@ func (s *mergePRService) LoadDetail(_ context.Context, _ domain.Repository, _ in
 func (s *mergePRService) LoadDiff(_ context.Context, _ domain.Repository, _ int, _ string, _ bool) (diffmodel.DiffModel, bool, error) {
 	return diffmodel.DiffModel{}, false, nil
 }
+func (s *mergePRService) LoadPRCommits(_ context.Context, _ domain.Repository, _ int, _ bool) ([]domain.Commit, error) {
+	return nil, nil
+}
+func (s *mergePRService) LoadCommitDiff(_ context.Context, _ domain.Repository, _ string, _ bool) (diffmodel.DiffModel, error) {
+	return diffmodel.DiffModel{}, nil
+}
 func (s *mergePRService) PostComment(_ context.Context, _, _ string) error       { return nil }
 func (s *mergePRService) PostReviewComment(_ context.Context, _, _ string) error { return nil }
 func (s *mergePRService) ApprovePR(_ context.Context, _, _ string) error         { return nil }
