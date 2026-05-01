@@ -91,7 +91,7 @@ func (m *PRDetailModel) renderCommitsTab(scroll, contentH, availW int) []string 
 
 		if isSelected {
 			line1 := shortSHA + gap + c.MessageHeadline
-			line1 = truncateString(line1, cw)
+			line1 = truncateText(line1, cw)
 
 			line2 := author
 			padding := cw - lipgloss.Width(line2) - lipgloss.Width(relTime)
@@ -120,7 +120,7 @@ func (m *PRDetailModel) renderCommitsTab(scroll, contentH, availW int) []string 
 			globalRow1 := rowStart - localStart
 			if globalRow1 >= 0 && globalRow1 < contentH {
 				headlineMax := cw - shaW - gapW
-				out[globalRow1] = shaStyled + gap + truncateString(c.MessageHeadline, headlineMax)
+				out[globalRow1] = shaStyled + gap + truncateText(c.MessageHeadline, headlineMax)
 			}
 			globalRow2 := rowStart + 1 - localStart
 			if globalRow2 >= 0 && globalRow2 < contentH {
@@ -186,18 +186,4 @@ func (m *PRDetailModel) emitCopyCommitSHA() tea.Cmd {
 	return func() tea.Msg {
 		return CopyCommitSHA{SHA: sha}
 	}
-}
-
-func truncateString(s string, maxLen int) string {
-	if maxLen <= 0 {
-		return ""
-	}
-	w := lipgloss.Width(s)
-	if w <= maxLen {
-		return s
-	}
-	if maxLen <= 3 {
-		return s[:maxLen]
-	}
-	return s[:maxLen-3] + "..."
 }

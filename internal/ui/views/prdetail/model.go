@@ -1638,8 +1638,9 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		}
 	case "4":
 		if !m.CommitMode {
+			needLoad := !m.commitsLoaded && !m.commitsLoading && m.PRService != nil
 			m.switchTab(TabCommits)
-			if m.commitsLoading && m.PRService != nil {
+			if needLoad {
 				return m, cmds.LoadPRCommitsCmd(m.PRService, m.Repo, m.Summary.Number)
 			}
 		}
@@ -1683,6 +1684,11 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 			}
 		} else if m.leftPanel.Focus == FocusContent && m.activeTab == TabCommits {
 			m.commitCursor = max(0, len(m.commits)-1)
+			cursorRow := m.commitCursor * 3
+			vh := m.contentViewportHeight()
+			if cursorRow >= m.ContentScroll+vh {
+				m.ContentScroll = cursorRow - vh + 1
+			}
 			m.clampContentScroll()
 		} else {
 			m.scrollToBottom()
@@ -1984,7 +1990,7 @@ func (m *PRDetailModel) switchTab(tab ContentTab) {
 		m.ensureDiffCursor()
 		m.scrollToCursor(scrollPadding)
 	}
-	if tab == TabCommits && !m.commitsLoaded && m.PRService != nil {
+	if tab == TabCommits && !m.commitsLoaded && !m.commitsLoading && m.PRService != nil {
 		m.commitsLoading = true
 	}
 	m.clampContentScroll()
@@ -2535,9 +2541,9 @@ func (m *PRDetailModel) StatusHint() string {
 		}
 		return "j/k: Scroll | h: Focus files | o: Open browser | y: Copy SHA | q: Back | ?: Keymap"
 	}
-	hint := "Tab: Switch | Space: Visual | 1/2/3: Tabs | R: Refresh | /: Search | ?"
+	hint := "Tab: Switch | Space: Visual | 1/2/3/4: Tabs | R: Refresh | /: Search | ?"
 	if len(m.drafts) > 0 {
-		hint = "Tab: Switch | Space: Visual | 1/2/3: Tabs | R: Refresh | /: Search | D: Discard drafts | ?"
+		hint = "Tab: Switch | Space: Visual | 1/2/3/4: Tabs | R: Refresh | /: Search | D: Discard drafts | ?"
 	}
 	return hint
 }
