@@ -1,5 +1,14 @@
 # pho
 
+```
+█████╗  ██╗  ██╗  █████╗
+██╔══██╗██║  ██║ ██╔══██╗
+█████╔╝ ███████║ ██║  ██║
+██╔══╝  ██╔══██║ ██║  ██║
+██║     ██║  ██║ ╚█████╔╝
+╚═╝     ╚═╝  ╚═╝  ╚════╝
+```
+
 A terminal UI for GitHub pull requests.
 
 ## Install
@@ -15,6 +24,11 @@ Or pin a specific version:
 ```
 go install github.com/utkarsh261/pho/cmd/pho@v0.1.0
 ```
+
+Add it to the `$PATH`:
+```
+echo 'export PATH="$(go env GOPATH)/bin:$PATH"' >> ~/.zshrc
+````
 
 ## Usage
 

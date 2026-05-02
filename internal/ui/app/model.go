@@ -1160,7 +1160,7 @@ func (m *Model) syncCurrentSelectionForce(force bool) tea.Cmd {
 func (m *Model) applyWindowSize(msg tea.WindowSizeMsg) {
 	m.layout = m.layout.Update(msg)
 	bodyH := m.bodyHeight()
-	m.repoPanel.SetRect(m.layout.Current.Repo, bodyH)
+	m.repoPanel.SetRect(m.layout.Current.Repo, bodyH-repoLogoPanelHeight(m.layout.Current.Repo, bodyH))
 	m.prList.SetRect(m.layout.Current.PR, bodyH)
 	m.preview.SetRect(m.layout.Current.Preview, bodyH-2)
 	m.status.SetRect(m.layout.Current.Width)

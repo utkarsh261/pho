@@ -191,6 +191,30 @@ func TestAppRenderFullUIRender(t *testing.T) {
 	}
 }
 
+func TestDashboardRepoColumnRendersSeparateLogoPanel(t *testing.T) {
+	t.Parallel()
+
+	repo := testutil.Repo("acme/alpha")
+	snap := dashboardSnapshot(repo, pr(repo.FullName, 1, "Fix login"))
+	m := newTestModel([]domain.Repository{repo}, map[string]domain.DashboardSnapshot{
+		repo.FullName: snap,
+	})
+	_, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	_, _ = m.Update(cmdsReposDiscovered([]domain.Repository{repo}))
+	_, _ = m.Update(cmdsDashboardLoaded(repo.FullName, snap, false, nil))
+
+	body := m.renderDashboard()
+	if !strings.Contains(body, "█████╗") {
+		t.Fatalf("expected separate pho logo panel, got:\n%s", body)
+	}
+	if !strings.Contains(body, "█████╔╝") {
+		t.Fatalf("expected approved block logo treatment, got:\n%s", body)
+	}
+	if !strings.Contains(body, "▸ REPOSITORIES") {
+		t.Fatalf("expected repo list panel below logo panel, got:\n%s", body)
+	}
+}
+
 func TestFocusBorderUsesPrimaryColor(t *testing.T) {
 	t.Parallel()
 

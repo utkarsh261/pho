@@ -32,7 +32,7 @@ func (m *Model) composeBody(height int) string {
 	}
 	columns := make([]panelCol, 0, 3)
 	if w := m.layout.Current.Repo; w > 0 {
-		columns = append(columns, panelCol{contentW: w, view: m.repoPanel.View(), focus: domain.FocusRepoPanel})
+		columns = append(columns, panelCol{contentW: w, view: m.repoColumnView(height), focus: domain.FocusRepoPanel})
 	}
 	if w := m.layout.Current.PR; w > 0 {
 		columns = append(columns, panelCol{contentW: w, view: m.prList.View(), focus: domain.FocusPRListPanel})
@@ -47,6 +47,10 @@ func (m *Model) composeBody(height int) string {
 	// Build boxed panels. Each box = content + 2 borders + 1 gap.
 	boxed := make([]string, len(columns))
 	for i, col := range columns {
+		if col.focus == domain.FocusRepoPanel {
+			boxed[i] = col.view
+			continue
+		}
 		boxed[i] = buildBox(col.view, col.contentW, height, col.focus == m.focus)
 	}
 
@@ -55,6 +59,93 @@ func (m *Model) composeBody(height int) string {
 		return boxed[0]
 	}
 	return joinStrings(boxed, height)
+}
+
+func (m *Model) repoColumnView(height int) string {
+	logoH := repoLogoPanelHeight(m.layout.Current.Repo, height)
+	if logoH == 0 {
+		return buildBox(m.repoPanel.View(), m.layout.Current.Repo, height, m.focus == domain.FocusRepoPanel)
+	}
+	repoH := height - logoH
+	logo := buildBox(m.repoLogoView(m.layout.Current.Repo, logoH-2), m.layout.Current.Repo, logoH, false)
+	repos := buildBox(m.repoPanel.View(), m.layout.Current.Repo, repoH, m.focus == domain.FocusRepoPanel)
+	return logo + "\n" + repos
+}
+
+func repoLogoPanelHeight(width, height int) int {
+	if width < 16 || height < 18 {
+		return 0
+	}
+	logoH := height / 4
+	if logoH < 8 {
+		logoH = 8
+	}
+	if logoH > 10 {
+		logoH = 10
+	}
+	if height-logoH < 8 {
+		return 0
+	}
+	return logoH
+}
+
+func (m *Model) repoLogoView(width, height int) string {
+	if width <= 0 || height <= 0 {
+		return ""
+	}
+	lines := []string{
+		"█████╗  ██╗  ██╗  █████╗",
+		"██╔══██╗██║  ██║ ██╔══██╗",
+		"█████╔╝ ███████║ ██║  ██║",
+		"██╔══╝  ██╔══██║ ██║  ██║",
+		"██║     ██║  ██║ ╚█████╔╝",
+		"╚═╝     ╚═╝  ╚═╝  ╚════╝",
+	}
+	if width < 27 {
+		lines = []string{
+			"█████╗ ██╗ ██╗ ███╗",
+			"██╔██╗ ██║ ██║██╔██╗",
+			"████╔╝ █████║██║ ██║",
+			"██╔═╝  ██╔██║██║ ██║",
+			"██║    ██║ ██║╚███╔╝",
+			"╚═╝    ╚═╝ ╚═╝ ╚══╝",
+		}
+	}
+	logoWidth := maxLineWidth(lines)
+	leftPad := 0
+	if logoWidth < width {
+		leftPad = (width - logoWidth) / 2
+	}
+
+	topPad := (height - len(lines)) / 2
+	if topPad < 0 {
+		topPad = 0
+	}
+	out := make([]string, 0, height)
+	for len(out) < topPad {
+		out = append(out, padLine("", width))
+	}
+	for _, line := range lines {
+		rendered := strings.Repeat(" ", leftPad) + line
+		if m.theme != nil {
+			rendered = m.theme.PrimaryTxt.Render(rendered)
+		}
+		out = append(out, padLine(rendered, width))
+	}
+	for len(out) < height {
+		out = append(out, padLine("", width))
+	}
+	return strings.Join(out, "\n")
+}
+
+func maxLineWidth(lines []string) int {
+	maxWidth := 0
+	for _, line := range lines {
+		if width := lipgloss.Width(line); width > maxWidth {
+			maxWidth = width
+		}
+	}
+	return maxWidth
 }
 
 // buildBox wraps content in a 4-sided border box.
