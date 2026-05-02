@@ -289,14 +289,15 @@ func (m Model) dispatchSelection() tea.Cmd {
 			messages = append(messages, SelectRepo{Repo: selected.Repo})
 		}
 		summary := domain.PullRequestSummary{
-			ID:          selected.ID,
-			Repo:        selected.Repo,
-			Number:      selected.Number,
-			Title:       selected.Title,
-			Author:      selected.Author,
-			State:       selected.State,
-			IsDraft:     selected.IsDraft,
-			HeadRefName: selected.Branch,
+			ID:                selected.ID,
+			Repo:              selected.Repo,
+			Number:            selected.Number,
+			Title:             selected.Title,
+			Author:            selected.Author,
+			State:             selected.State,
+			IsDraft:           selected.IsDraft,
+			HeadRefName:       selected.Branch,
+			IsCrossRepository: selected.IsCrossRepository,
 		}
 		messages = append(messages, OpenPR{Repo: selected.Repo, Number: selected.Number, Summary: summary})
 		return func() tea.Msg {

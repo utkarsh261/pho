@@ -387,6 +387,7 @@ func buildPRDetailBindings(ctx Context) []Group {
 				b := []Binding{
 					{Key: "o", Description: "Open in browser"},
 					{Key: "R", Description: "Refresh"},
+					{Key: "b", Description: "Checkout branch"},
 					{Key: "C", Description: "Comment"},
 					{Key: "a", Description: "Approve"},
 					{Key: "v", Description: "Review"},

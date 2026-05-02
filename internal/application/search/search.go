@@ -43,16 +43,17 @@ type prIndex struct {
 }
 
 type prEntry struct {
-	id        string
-	repo      string
-	number    int
-	title     string
-	branch    string
-	author    string
-	state     domain.PRState
-	isDraft   bool
-	updatedAt time.Time
-	tabs      map[domain.DashboardTab]bool
+	id                string
+	repo              string
+	number            int
+	title             string
+	branch            string
+	author            string
+	state             domain.PRState
+	isDraft           bool
+	isCrossRepository bool
+	updatedAt         time.Time
+	tabs              map[domain.DashboardTab]bool
 }
 
 type repoEntry struct {
@@ -164,16 +165,17 @@ func (s *Service) BuildPRIndex(repo domain.Repository, snap domain.DashboardSnap
 
 	for _, pr := range snap.PRs {
 		entry := prEntry{
-			id:        pr.ID,
-			repo:      repoKey(effectiveRepo),
-			number:    pr.Number,
-			title:     pr.Title,
-			branch:    pr.HeadRefName,
-			author:    pr.Author,
-			state:     pr.State,
-			isDraft:   pr.IsDraft,
-			updatedAt: pr.UpdatedAt,
-			tabs:      defaultTabFlags(pr),
+			id:                pr.ID,
+			repo:              repoKey(effectiveRepo),
+			number:            pr.Number,
+			title:             pr.Title,
+			branch:            pr.HeadRefName,
+			author:            pr.Author,
+			state:             pr.State,
+			isDraft:           pr.IsDraft,
+			isCrossRepository: pr.IsCrossRepository,
+			updatedAt:         pr.UpdatedAt,
+			tabs:              defaultTabFlags(pr),
 		}
 		if len(prevTabs[pr.Number]) > 0 {
 			if entry.tabs == nil {
@@ -246,16 +248,17 @@ func (s *Service) SearchPRs(query string, limit int) []domain.SearchResult {
 			}
 			results = append(results, scoredPR{
 				result: domain.SearchResult{
-					Kind:    domain.SearchResultPR,
-					ID:      entry.id,
-					Repo:    entry.repo,
-					Number:  entry.number,
-					Title:   entry.title,
-					Branch:  entry.branch,
-					Author:  entry.author,
-					Score:   score,
-					State:   entry.state,
-					IsDraft: entry.isDraft,
+					Kind:              domain.SearchResultPR,
+					ID:                entry.id,
+					Repo:              entry.repo,
+					Number:            entry.number,
+					Title:             entry.title,
+					Branch:            entry.branch,
+					Author:            entry.author,
+					Score:             score,
+					State:             entry.state,
+					IsDraft:           entry.isDraft,
+					IsCrossRepository: entry.isCrossRepository,
 				},
 				updated: entry.updatedAt,
 			})
@@ -357,15 +360,16 @@ func (s *Service) AppendJumpPRs(repo string, prs []domain.PullRequestSummary) {
 			continue
 		}
 		entry := prEntry{
-			id:        pr.ID,
-			repo:      repo,
-			number:    pr.Number,
-			title:     pr.Title,
-			branch:    pr.HeadRefName,
-			author:    pr.Author,
-			state:     pr.State,
-			isDraft:   pr.IsDraft,
-			updatedAt: pr.UpdatedAt,
+			id:                pr.ID,
+			repo:              repo,
+			number:            pr.Number,
+			title:             pr.Title,
+			branch:            pr.HeadRefName,
+			author:            pr.Author,
+			state:             pr.State,
+			isDraft:           pr.IsDraft,
+			isCrossRepository: pr.IsCrossRepository,
+			updatedAt:         pr.UpdatedAt,
 		}
 		idx.entries = append(idx.entries, entry)
 		idx.entryByNumber[pr.Number] = struct{}{}
@@ -399,16 +403,17 @@ func (s *Service) SearchPRsForRepo(query, repo string, limit int) []domain.Searc
 		score := scorePRForRepo(entry, q, currentTab, now)
 		results = append(results, scoredPR{
 			result: domain.SearchResult{
-				Kind:    domain.SearchResultPR,
-				ID:      entry.id,
-				Repo:    entry.repo,
-				Number:  entry.number,
-				Title:   entry.title,
-				Branch:  entry.branch,
-				Author:  entry.author,
-				Score:   score,
-				State:   entry.state,
-				IsDraft: entry.isDraft,
+				Kind:              domain.SearchResultPR,
+				ID:                entry.id,
+				Repo:              entry.repo,
+				Number:            entry.number,
+				Title:             entry.title,
+				Branch:            entry.branch,
+				Author:            entry.author,
+				Score:             score,
+				State:             entry.state,
+				IsDraft:           entry.isDraft,
+				IsCrossRepository: entry.isCrossRepository,
 			},
 			updated: entry.updatedAt,
 		})

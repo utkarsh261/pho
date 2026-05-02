@@ -113,6 +113,7 @@ type PullRequestSummary struct {
 	HeadRefName       string
 	HeadRefOID        string
 	BaseRefName       string
+	IsCrossRepository bool
 	CommentCount      int
 	ReviewThreadCount int
 	UnresolvedCount   int
@@ -317,16 +318,17 @@ type DashboardState struct {
 }
 
 type SearchResult struct {
-	Kind    SearchResultKind
-	ID      string
-	Repo    string
-	Number  int
-	Title   string
-	Branch  string
-	Author  string
-	Score   float64
-	State   PRState
-	IsDraft bool
+	Kind              SearchResultKind
+	ID                string
+	Repo              string
+	Number            int
+	Title             string
+	Branch            string
+	Author            string
+	Score             float64
+	State             PRState
+	IsDraft           bool
+	IsCrossRepository bool
 }
 
 type SearchResultKind string

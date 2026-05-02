@@ -25,16 +25,21 @@ import (
 	"github.com/utkarsh261/pho/internal/ui/theme"
 )
 
-// composeSuccessDismissMsg is fired 1.5s after a comment is posted to close the compose pane.
 type composeSuccessDismissMsg struct{}
 
-// editorDoneMsg is fired when the external $EDITOR process exits.
 type editorDoneMsg struct {
 	path string
 	err  error
 }
 
-// rightPanelWidth returns the outer width of the right panel given the current terminal width.
+type checkoutResultMsg struct {
+	branch  string
+	stashed bool
+	err     error
+}
+
+type checkoutClearMsg struct{}
+
 func (m *PRDetailModel) rightPanelWidth() int {
 	if m.Width >= MinWidthForSidebar {
 		return max(m.Width-LeftPanelWidth-2, 10)
@@ -195,6 +200,11 @@ type PRDetailModel struct {
 	closeStep   closeStep
 	closeTarget string // "CLOSE" or "REOPEN"
 	closeErr    string
+
+	// Checkout state
+	checkoutInFlight bool
+	checkoutStatus   string
+	checkoutErr      string
 
 	// Commit mode: when true, this model shows a single commit diff instead of
 	// a full PR. Only the Diff tab is shown, no Desc/Comments/Commits tabs,
@@ -362,7 +372,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 			if len(startRows) > 0 {
 				lastIdx := len(startRows) - 1
 				entryTop := startRows[lastIdx]
-				entryH := m.entryRowCount(entries[lastIdx], cw) + 2 // +2 for border
+				entryH := m.entryRowCount(entries[lastIdx], cw) + 2
 				endRow := entryTop + entryH
 				vh := m.contentViewportHeight()
 				target := max(endRow-vh+1, 0)
@@ -633,6 +643,32 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 	case composeClosedMsg:
 		// Compose closed itself (e.g. Esc). No action needed here; the same-cycle
 		// guard in tea.KeyMsg below prevents the consumed key from reaching handleKey.
+		return m, tea.Batch(spinCmd, composeCmd)
+
+	case cmds.CheckoutResult:
+		return m, tea.Batch(spinCmd, composeCmd, func() tea.Msg {
+			return checkoutResultMsg{branch: msg.Branch, stashed: msg.Stashed, err: msg.Err}
+		})
+
+	case checkoutResultMsg:
+		m.checkoutInFlight = false
+		if msg.err != nil {
+			m.checkoutErr = msg.err.Error()
+			return m, tea.Batch(spinCmd, composeCmd, tea.Tick(3*time.Second, func(time.Time) tea.Msg {
+				return checkoutClearMsg{}
+			}))
+		}
+		m.checkoutStatus = "Checked out " + msg.branch
+		if msg.stashed {
+			m.checkoutStatus += " (changes stashed — git stash pop to restore)"
+		}
+		return m, tea.Batch(spinCmd, composeCmd, tea.Tick(2*time.Second, func(time.Time) tea.Msg {
+			return checkoutClearMsg{}
+		}))
+
+	case checkoutClearMsg:
+		m.checkoutStatus = ""
+		m.checkoutErr = ""
 		return m, tea.Batch(spinCmd, composeCmd)
 
 	case tea.KeyMsg:
@@ -1482,6 +1518,11 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 			m.compose.Open(composeModeApprove, commentEntry{}, len(m.drafts))
 		}
 		return m, nil
+	case "b":
+		if m.CommitMode {
+			return m, nil
+		}
+		return m, m.handleCheckout()
 	case "v":
 		if m.CommitMode {
 			return m, nil
@@ -2532,6 +2573,15 @@ func (m *PRDetailModel) StatusHint() string {
 	if m.closeErr != "" {
 		return m.closeErr
 	}
+	if m.checkoutInFlight {
+		return "Checking out " + m.Summary.HeadRefName + "..."
+	}
+	if m.checkoutErr != "" {
+		return m.checkoutErr
+	}
+	if m.checkoutStatus != "" {
+		return m.checkoutStatus
+	}
 	if m.CommitMode {
 		if m.searchActive {
 			return fmt.Sprintf("Search: %s  (%d/%d)  | Enter: commit  | Esc: clear", m.searchQuery, m.searchCursor+1, len(m.searchMatches))
@@ -2769,6 +2819,21 @@ func (m *PRDetailModel) emitOpenBrowserCI() tea.Cmd {
 	return func() tea.Msg {
 		return OpenBrowserCI{URL: url}
 	}
+}
+
+// handleCheckout initiates the async checkout of the PR branch.
+func (m *PRDetailModel) handleCheckout() tea.Cmd {
+	if m.checkoutInFlight {
+		return nil
+	}
+	if m.Repo.LocalPath == "" {
+		m.checkoutErr = "Not a local repo"
+		return tea.Tick(3*time.Second, func(time.Time) tea.Msg {
+			return checkoutClearMsg{}
+		})
+	}
+	m.checkoutInFlight = true
+	return cmds.CheckoutBranchCmd(m.Repo, m.Summary.Number, m.Summary.HeadRefName, m.Summary.IsCrossRepository)
 }
 
 // BackToDashboard is emitted when the user presses q (or Esc while search is inactive) in PR detail.

@@ -2,6 +2,10 @@ package cmds
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"os/exec"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -126,25 +130,18 @@ type AllPRsPageLoaded struct {
 	Err        error
 }
 
-// CommentPosted is emitted when a PR comment has been successfully posted.
 type CommentPosted struct{}
 
-// CommentFailed is emitted when posting a PR comment fails.
 type CommentFailed struct{ Err error }
 
-// ApprovalPosted is emitted when a PR review approval has been successfully submitted.
 type ApprovalPosted struct{}
 
-// ApprovalFailed is emitted when submitting a PR review approval fails.
 type ApprovalFailed struct{ Err error }
 
-// ReviewPosted is emitted when a PR review with inline comments has been successfully submitted.
 type ReviewPosted struct{}
 
-// ReviewFailed is emitted when submitting a PR review with inline comments fails.
 type ReviewFailed struct{ Err error }
 
-// MergeableChecked is emitted when the pre-merge check completes.
 type MergeableChecked struct {
 	Repo   string
 	Number int
@@ -152,7 +149,6 @@ type MergeableChecked struct {
 	Err    error
 }
 
-// MergePRMsg is emitted when the merge mutation completes.
 type MergePRMsg struct {
 	Repo   string
 	Number int
@@ -160,7 +156,6 @@ type MergePRMsg struct {
 	Err    error
 }
 
-// PRStateChangedMsg is emitted when a close or reopen mutation completes.
 type PRStateChangedMsg struct {
 	Repo     string
 	Number   int
@@ -382,4 +377,123 @@ func ReopenPRCmd(svc PRService, repo domain.Repository, number int, prID string)
 		}
 		return PRStateChangedMsg{Repo: repoKey(repo), Number: number, NewState: domain.PRStateOpen}
 	}
+}
+
+// CheckoutResult is emitted when the local git checkout command completes.
+type CheckoutResult struct {
+	Branch  string
+	Stashed bool
+	Err     error
+}
+
+// CheckoutBranchCmd runs git fetch + checkout for a PR branch asynchronously.
+// If the working tree is dirty, changes are stashed before checkout.
+// For cross-repository PRs it fetches refs/pull/<number>/head and creates a
+// local branch named pr-<number> (with suffixes if necessary).
+func CheckoutBranchCmd(repo domain.Repository, prNumber int, branch string, isCrossRepo bool) tea.Cmd {
+	return func() tea.Msg {
+		if repo.LocalPath == "" {
+			return CheckoutResult{Err: errors.New("not a local repo")}
+		}
+		if _, err := execGit(repo.LocalPath, "rev-parse", "--git-dir"); err != nil {
+			return CheckoutResult{Err: fmt.Errorf("not a git repo: %w", err)}
+		}
+
+		stashed := false
+		if out, err := execGit(repo.LocalPath, "status", "--porcelain"); err == nil && out != "" {
+			if _, err := execGit(repo.LocalPath, "stash", "push", "--include-untracked", "-m", fmt.Sprintf("pho: checkout PR #%d", prNumber)); err != nil {
+				return CheckoutResult{Err: fmt.Errorf("stash failed: %w", err)}
+			}
+			stashed = true
+		}
+
+		name, args, localBranch, err := checkoutCommand(repo.LocalPath, prNumber, branch, isCrossRepo)
+		if err != nil {
+			if stashed {
+				_, _ = execGit(repo.LocalPath, "stash", "pop")
+			}
+			return CheckoutResult{Err: err}
+		}
+		out, err := exec.Command(name, args...).CombinedOutput()
+		if err != nil {
+			if !isCrossRepo && strings.Contains(string(out), "couldn't find remote ref") {
+				name, args, localBranch, err = checkoutCommand(repo.LocalPath, prNumber, branch, true)
+				if err != nil {
+					if stashed {
+						_, _ = execGit(repo.LocalPath, "stash", "pop")
+					}
+					return CheckoutResult{Err: err}
+				}
+				out, err = exec.Command(name, args...).CombinedOutput()
+			}
+			if err != nil {
+				if stashed {
+					_, _ = execGit(repo.LocalPath, "stash", "pop")
+				}
+				return CheckoutResult{Err: parseGitError(string(out))}
+			}
+		}
+		return CheckoutResult{Branch: localBranch, Stashed: stashed}
+	}
+}
+
+// checkoutCommand builds the git command for checking out a PR branch.
+// Returns the command name, args, the local branch name that will be checked out, and any error.
+func checkoutCommand(localPath string, prNumber int, branch string, isCrossRepo bool) (string, []string, string, error) {
+	if isCrossRepo {
+		localBranch, err := findUnusedBranch(localPath, prNumber)
+		if err != nil {
+			return "", nil, "", err
+		}
+		script := fmt.Sprintf("git -C %s fetch origin refs/pull/%d/head && git -C %s checkout -b %s FETCH_HEAD",
+			shellQuote(localPath), prNumber, shellQuote(localPath), shellQuote(localBranch))
+		return "sh", []string{"-c", script}, localBranch, nil
+	}
+	script := fmt.Sprintf("git -C %s fetch origin %s && git -C %s checkout %s",
+		shellQuote(localPath), shellQuote(branch), shellQuote(localPath), shellQuote(branch))
+	return "sh", []string{"-c", script}, branch, nil
+}
+
+func findUnusedBranch(localPath string, prNumber int) (string, error) {
+	base := fmt.Sprintf("pr-%d", prNumber)
+	for _, suffix := range []string{"", "-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "-9", "-10"} {
+		name := base + suffix
+		if _, err := execGit(localPath, "rev-parse", "--verify", "--quiet", "refs/heads/"+name); err != nil {
+			return name, nil
+		}
+	}
+	return "", fmt.Errorf("local branches %s through %s-10 already exist", base, base)
+}
+
+func execGit(localPath string, args ...string) (string, error) {
+	cmdArgs := append([]string{"-C", localPath}, args...)
+	out, err := exec.Command("git", cmdArgs...).CombinedOutput()
+	return strings.TrimSpace(string(out)), err
+}
+
+func parseGitError(stderr string) error {
+	s := strings.ToLower(stderr)
+	switch {
+	case strings.Contains(s, "couldn't find remote ref"):
+		return errors.New("branch not found on origin")
+	case strings.Contains(s, "your local changes") || strings.Contains(s, "would be overwritten"):
+		return errors.New("working tree dirty — stash or commit first")
+	case strings.Contains(s, "authentication failed") || strings.Contains(s, "could not resolve host"):
+		return errors.New("network/auth error")
+	}
+	msg := strings.TrimSpace(stderr)
+	if len(msg) > 100 {
+		r := []rune(msg)
+		if len(r) > 100 {
+			msg = string(r[:100]) + "…"
+		}
+	}
+	return errors.New("git error: " + msg)
+}
+
+func shellQuote(s string) string {
+	if strings.ContainsAny(s, "' \t\n\r&|;<>()$`\"*?[]#~=") {
+		return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
+	}
+	return s
 }

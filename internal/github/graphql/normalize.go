@@ -99,6 +99,7 @@ func normalizePullRequestSummary(repo domain.Repository, node model.PullRequestN
 		HeadRefName:       node.HeadRefName,
 		HeadRefOID:        node.HeadRefOid,
 		BaseRefName:       node.BaseRefName,
+		IsCrossRepository: repoIdentity(repo, node.Repository) != repo.FullName,
 		CommentCount:      node.Comments.TotalCount,
 		ReviewThreadCount: node.ReviewThreads.TotalCount,
 		Additions:         node.Additions,
