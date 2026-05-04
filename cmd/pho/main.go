@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -47,6 +48,14 @@ import (
 )
 
 var version = "dev"
+
+func init() {
+	if version == "dev" {
+		if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "(devel)" {
+			version = info.Main.Version
+		}
+	}
+}
 
 func clearCaches() error {
 	cacheDir := xdgDir("XDG_CACHE_HOME", ".cache")
