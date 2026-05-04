@@ -58,6 +58,7 @@ type ComposeModel struct {
 func newComposeModel(th *theme.Theme) ComposeModel {
 	ti := textinput.New()
 	ti.CharLimit = 0 // unlimited
+	ti.SetCursorMode(textinput.CursorStatic)
 	return ComposeModel{
 		input: ti,
 		theme: th,
