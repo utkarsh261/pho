@@ -236,6 +236,10 @@ const (
 // hunkLineKey identifies a specific line within a hunk for draft highlighting.
 type hunkLineKey struct{ fileIdx, hunkIdx, lineIdx int }
 
+func (m *PRDetailModel) isLoading() bool {
+	return m.DetailLoading || m.DiffLoading || m.commitsLoading || m.leftPanel.Loading
+}
+
 // NewModel creates a new PRDetailModel for the given PR.
 func NewModel(summary domain.PullRequestSummary, repo domain.Repository, prService cmds.PRService) *PRDetailModel {
 	loading := prService != nil
@@ -312,7 +316,9 @@ func (m *PRDetailModel) SetTheme(th *theme.Theme) {
 // Init fires the parallel load commands for PR detail and diff.
 func (m *PRDetailModel) Init() tea.Cmd {
 	var cmdsOut []tea.Cmd
-	cmdsOut = append(cmdsOut, m.spinner.Tick)
+	if m.isLoading() {
+		cmdsOut = append(cmdsOut, m.spinner.Tick)
+	}
 	if m.PRService != nil {
 		if m.CommitMode {
 			cmdsOut = append(cmdsOut,
@@ -332,7 +338,9 @@ func (m *PRDetailModel) Init() tea.Cmd {
 // Update handles messages and key events within the PR detail view.
 func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 	var spinCmd tea.Cmd
-	m.spinner, spinCmd = m.spinner.Update(msg)
+	if m.isLoading() {
+		m.spinner, spinCmd = m.spinner.Update(msg)
+	}
 
 	// Forward all messages to compose so textinput receives tick events for cursor blink.
 	var composeCmd tea.Cmd
