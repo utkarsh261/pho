@@ -95,9 +95,31 @@ func main() {
 	flag.BoolVar(&showVersion, "version", false, "print version and exit")
 	flag.BoolVar(&debug, "debug", false, "enable debug logging (also set by PHO_DEBUG=1)")
 	flag.BoolVar(&reset, "reset", false, "clear all caches (SQLite + discovery) and exit")
-	flag.StringVar(&configPath, "config", "", "path to config file (default: XDG config dir)")
 	flag.StringVar(&rootDir, "root", ".", "root directory to scan for git repos")
+
+	hiddenFlags := map[string]bool{}
+	hideVar := func(name, value, usage string) *string {
+		hiddenFlags[name] = true
+		return flag.String(name, value, usage)
+	}
+	pconfig := hideVar("config", "", "path to config file (default: XDG config dir)")
+
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "pho — terminal UI for GitHub pull requests\n\nUsage:\n  pho [flags]\n\nFlags:\n")
+		flag.VisitAll(func(f *flag.Flag) {
+			if hiddenFlags[f.Name] {
+				return
+			}
+			if f.DefValue == "" || f.DefValue == "false" || f.DefValue == "0" {
+				fmt.Fprintf(os.Stderr, "  -%s\n\t%s\n", f.Name, f.Usage)
+			} else {
+				fmt.Fprintf(os.Stderr, "  -%s\n\t%s (default %s)\n", f.Name, f.Usage, f.DefValue)
+			}
+		})
+	}
+
 	flag.Parse()
+	configPath = *pconfig
 
 	if showVersion {
 		fmt.Println("pho", version)
