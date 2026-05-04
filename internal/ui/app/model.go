@@ -240,6 +240,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.handleOpenCommitDetail(msg)
 	case prdetail.BackToPRDetail:
 		return m, m.handleBackToPRDetail()
+	case prdetail.ToggleKeymapOverlayMsg:
+		return m, m.toggleKeymapOverlay()
 	case prdetail.OpenBrowserCommit:
 		return m, func() tea.Msg {
 			url := fmt.Sprintf("https://%s/%s/commit/%s", msg.Repo.Host, msg.Repo.FullName, msg.SHA)
@@ -476,15 +478,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// handling, so the right move is to forward directly and skip the
 	// dashboard dispatcher altogether.
 	if m.currentView() == domain.PrimaryViewPRDetail {
-		if msg.String() == "?" {
-			return m, m.toggleKeymapOverlay()
-		}
 		return m, m.forwardKey(msg)
 	}
 	if m.currentView() == domain.PrimaryViewCommitDetail {
-		if msg.String() == "?" {
-			return m, m.toggleKeymapOverlay()
-		}
 		return m, m.forwardKey(msg)
 	}
 

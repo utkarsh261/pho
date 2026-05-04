@@ -1476,6 +1476,8 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 	}
 
 	switch msg.String() {
+	case "?":
+		return m, func() tea.Msg { return ToggleKeymapOverlayMsg{} }
 	case "/":
 		m.activateSearch()
 		return m, nil
@@ -2849,6 +2851,9 @@ type BackToDashboard struct{}
 
 // BackToPRDetail is emitted when the user presses q/Esc in commit mode.
 type BackToPRDetail struct{}
+
+// ToggleKeymapOverlayMsg is emitted when the user presses ? (while not composing) in PR detail.
+type ToggleKeymapOverlayMsg struct{}
 
 // OpenBrowserCommit is emitted when the user presses 'o' in commit mode.
 type OpenBrowserCommit struct {
