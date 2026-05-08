@@ -64,6 +64,16 @@ func buildReopenPullRequestMutation() string {
 }`
 }
 
+func buildUpdatePullRequestMutation() string {
+	return `mutation UpdatePullRequest($pullRequestId: ID!, $title: String, $body: String) {
+  updatePullRequest(input: {pullRequestId: $pullRequestId, title: $title, body: $body}) {
+    pullRequest {
+      id
+    }
+  }
+}`
+}
+
 func buildCheckMergeableQuery() string {
 	return `query CheckMergeable($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {

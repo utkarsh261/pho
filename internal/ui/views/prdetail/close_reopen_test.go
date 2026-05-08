@@ -302,6 +302,10 @@ func (s *closeReopenPRService) ReopenPR(_ context.Context, _ domain.Repository, 
 	return nil
 }
 
+func (s *closeReopenPRService) UpdatePR(_ context.Context, _ domain.Repository, _ int, _ string, _ string, _ string) error {
+	return nil
+}
+
 func makeCloseReopenModel(state domain.PRState) *PRDetailModel {
 	m := NewModel(domain.PullRequestSummary{
 		Repo:   "org/repo",

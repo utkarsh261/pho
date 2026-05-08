@@ -27,6 +27,8 @@ type GitHubClient interface {
 	CheckMergeable(ctx context.Context, repo domain.Repository, number int) (domain.MergeableState, error)
 	// ClosePullRequest closes a PR.
 	ClosePullRequest(ctx context.Context, host, pullRequestID string) error
+	// UpdatePullRequest updates the title and/or body of a PR.
+	UpdatePullRequest(ctx context.Context, host, pullRequestID, title, body string) error
 	// ReopenPullRequest reopens a closed PR.
 	ReopenPullRequest(ctx context.Context, host, pullRequestID string) error
 }

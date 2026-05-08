@@ -72,6 +72,14 @@ type PullRequestStateData struct {
 	} `json:"reopenPullRequest"`
 }
 
+type UpdatePullRequestData struct {
+	UpdatePullRequest struct {
+		PullRequest struct {
+			ID string `json:"id"`
+		} `json:"pullRequest"`
+	} `json:"updatePullRequest"`
+}
+
 type CheckMergeableData struct {
 	Repository struct {
 		PullRequest struct {

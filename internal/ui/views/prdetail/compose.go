@@ -19,6 +19,8 @@ const (
 	composeModeApprove                          // approve the PR with an optional comment
 	composeModeReviewComment                    // submit a review with COMMENT decision
 	composeModeDraftInline                      // draft inline comment on selected diff lines
+	composeModeEditTitle                        // edit PR title
+	composeModeEditBody                         // edit PR body
 )
 
 type composeStatus int
@@ -136,6 +138,10 @@ func (c ComposeModel) Update(msg tea.Msg) (ComposeModel, tea.Cmd) {
 			c.status = composeStatusPosting
 			return c, func() tea.Msg { return submitComposeMsg{body: body} }
 		}
+		if c.mode == composeModeEditTitle || c.mode == composeModeEditBody {
+			c.status = composeStatusPosting
+			return c, func() tea.Msg { return submitComposeMsg{body: body} }
+		}
 		if body == "" {
 			return c, nil // silent no-op
 		}
@@ -196,6 +202,10 @@ func (c *ComposeModel) View(width int) string {
 			row1 = th.CISuccess.Render("✓ Approved")
 		case composeModeReviewComment:
 			row1 = th.CISuccess.Render("✓ Review posted")
+		case composeModeEditTitle:
+			row1 = th.CISuccess.Render("✓ Title updated")
+		case composeModeEditBody:
+			row1 = th.CISuccess.Render("✓ Body updated")
 		default:
 			row1 = th.CISuccess.Render("✓ Comment posted")
 		}
@@ -232,6 +242,12 @@ func (c *ComposeModel) View(width int) string {
 			}
 		case composeModeDraftInline:
 			prefix = "Draft inline comment ▸ "
+			hint = "Enter: Save   Ctrl+E: $EDITOR   Esc: Cancel"
+		case composeModeEditTitle:
+			prefix = "Edit title ▸ "
+			hint = "Enter: Save   Ctrl+E: $EDITOR   Esc: Cancel"
+		case composeModeEditBody:
+			prefix = "Edit body ▸ "
 			hint = "Enter: Save   Ctrl+E: $EDITOR   Esc: Cancel"
 		default:
 			prefix = "New comment ▸ "

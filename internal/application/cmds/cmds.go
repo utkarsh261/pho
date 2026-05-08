@@ -50,6 +50,7 @@ type PRService interface {
 	CheckMergeable(ctx context.Context, repo domain.Repository, number int) (domain.MergeableState, error)
 	ClosePR(ctx context.Context, repo domain.Repository, number int, prID string) error
 	ReopenPR(ctx context.Context, repo domain.Repository, number int, prID string) error
+	UpdatePR(ctx context.Context, repo domain.Repository, number int, prID string, title string, body string) error
 }
 
 type PRDetailLoaded struct {
@@ -161,6 +162,14 @@ type PRStateChangedMsg struct {
 	Number   int
 	NewState domain.PRState
 	Err      error
+}
+
+type PRUpdated struct {
+	Repo   string
+	Number int
+	Title  string
+	Body   string
+	Err    error
 }
 
 type RefreshStarted struct {
@@ -463,6 +472,15 @@ func findUnusedBranch(localPath string, prNumber int) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("local branches %s through %s-10 already exist", base, base)
+}
+
+func UpdatePRCmd(svc PRService, repo domain.Repository, number int, prID string, title string, body string) tea.Cmd {
+	return func() tea.Msg {
+		if err := svc.UpdatePR(context.Background(), repo, number, prID, title, body); err != nil {
+			return PRUpdated{Repo: repoKey(repo), Number: number, Title: title, Body: body, Err: err}
+		}
+		return PRUpdated{Repo: repoKey(repo), Number: number, Title: title, Body: body}
+	}
 }
 
 func execGit(localPath string, args ...string) (string, error) {

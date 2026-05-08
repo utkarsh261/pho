@@ -65,6 +65,8 @@ func (f *fakeGitHubClient) FetchCommits(_ context.Context, _ domain.Repository, 
 	return nil, nil
 }
 
+func (f *fakeGitHubClient) UpdatePullRequest(_ context.Context, _, _, _, _ string) error { return nil }
+
 func newTestCoordinator(t *testing.T) *cache.Coordinator {
 	t.Helper()
 

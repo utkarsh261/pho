@@ -206,6 +206,11 @@ type PRDetailModel struct {
 	checkoutStatus   string
 	checkoutErr      string
 
+	// Edit title/body state
+	editPrompt  string // "Edit: [t]itle or [b]ody?" when waiting for choice
+	editPosting bool
+	editErr     string
+
 	// Commit mode: when true, this model shows a single commit diff instead of
 	// a full PR. Only the Diff tab is shown, no Desc/Comments/Commits tabs,
 	// no CI section, and the header shows commit info.
@@ -469,6 +474,20 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 			m.exitVisualMode()
 			return m, tea.Batch(spinCmd, composeCmd)
 		}
+		if m.compose.mode == composeModeEditTitle {
+			title := strings.TrimSpace(msg.body)
+			if title == "" {
+				m.compose.status = composeStatusError
+				m.compose.errMsg = "Title cannot be empty"
+				return m, tea.Batch(spinCmd, composeCmd)
+			}
+			m.editPosting = true
+			return m, tea.Batch(spinCmd, composeCmd, cmds.UpdatePRCmd(m.PRService, m.Repo, m.Summary.Number, m.Summary.ID, title, m.Detail.BodyExcerpt))
+		}
+		if m.compose.mode == composeModeEditBody {
+			m.editPosting = true
+			return m, tea.Batch(spinCmd, composeCmd, cmds.UpdatePRCmd(m.PRService, m.Repo, m.Summary.Number, m.Summary.ID, m.Summary.Title, msg.body))
+		}
 		if m.compose.mode == composeModeReply && m.commentCursor >= 0 {
 			entries := m.commentEntries()
 			if m.commentCursor < len(entries) {
@@ -537,7 +556,11 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 	case editorDoneMsg:
 		if msg.err == nil {
 			if content, err := os.ReadFile(msg.path); err == nil {
-				m.compose.SetText(strings.TrimSpace(string(content)))
+				if m.compose.mode == composeModeEditBody {
+					m.compose.SetText(string(content))
+				} else {
+					m.compose.SetText(strings.TrimSpace(string(content)))
+				}
 			}
 		}
 		os.Remove(msg.path)
@@ -640,9 +663,41 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		}
 		return m, tea.Batch(spinCmd, composeCmd, refreshCmd)
 
+	case cmds.PRUpdated:
+		m.editPosting = false
+		if msg.Err != nil {
+			m.editErr = "Failed to update PR: " + msg.Err.Error()
+			if m.compose.active && (m.compose.mode == composeModeEditTitle || m.compose.mode == composeModeEditBody) {
+				m.compose.status = composeStatusError
+				m.compose.errMsg = msg.Err.Error()
+			}
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		m.editErr = ""
+		m.Summary.Title = msg.Title
+		if m.Detail != nil {
+			m.Detail.Title = msg.Title
+			m.Detail.BodyExcerpt = msg.Body
+		}
+		if m.compose.active && (m.compose.mode == composeModeEditTitle || m.compose.mode == composeModeEditBody) {
+			m.compose.status = composeStatusSuccess
+		}
+		var refreshCmd tea.Cmd
+		if m.PRService != nil {
+			refreshCmd = cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true)
+		}
+		return m, tea.Batch(spinCmd, composeCmd, refreshCmd, tea.Tick(1500*time.Millisecond, func(time.Time) tea.Msg {
+			return composeSuccessDismissMsg{}
+		}))
+
 	case composeSuccessDismissMsg:
-		m.postedComment = true
+		wasEdit := m.compose.mode == composeModeEditTitle || m.compose.mode == composeModeEditBody
 		m.compose.Close()
+		if wasEdit {
+			// Edit modes don't trigger comment auto-scroll.
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		m.postedComment = true
 		if m.PRService != nil {
 			return m, tea.Batch(spinCmd, composeCmd, cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true))
 		}
@@ -1475,6 +1530,24 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		return m, cmd
 	}
 
+	// Edit prompt state — waiting for t/b/esc.
+	if m.editPrompt != "" {
+		switch msg.String() {
+		case "t":
+			m.editPrompt = ""
+			m.compose.Open(composeModeEditTitle, commentEntry{}, len(m.drafts))
+			m.compose.SetText(m.Summary.Title)
+		case "b":
+			m.editPrompt = ""
+			m.compose.Open(composeModeEditBody, commentEntry{}, len(m.drafts))
+			m.compose.SetText(m.Detail.BodyExcerpt)
+		case "esc":
+			m.editPrompt = ""
+		}
+		m.LastKey = ""
+		return m, nil
+	}
+
 	switch msg.String() {
 	case "?":
 		return m, func() tea.Msg { return ToggleKeymapOverlayMsg{} }
@@ -1507,6 +1580,14 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 			return m, nil
 		}
 		return m, m.handleCloseStart()
+	case "e":
+		if m.CommitMode {
+			return m, nil
+		}
+		if m.PRService != nil && m.Detail != nil && !m.isAnyActionInProgress() {
+			m.editPrompt = "Edit: [t]itle or [b]ody?"
+		}
+		return m, nil
 	case "R":
 		if m.CommitMode {
 			return m.handleCommitRefresh()
@@ -2592,6 +2673,15 @@ func (m *PRDetailModel) StatusHint() string {
 	if m.checkoutStatus != "" {
 		return m.checkoutStatus
 	}
+	if m.editPrompt != "" {
+		return m.editPrompt
+	}
+	if m.editPosting {
+		return "Updating PR..."
+	}
+	if m.editErr != "" {
+		return m.editErr
+	}
 	if m.CommitMode {
 		if m.searchActive {
 			return fmt.Sprintf("Search: %s  (%d/%d)  | Enter: commit  | Esc: clear", m.searchQuery, m.searchCursor+1, len(m.searchMatches))
@@ -2655,6 +2745,9 @@ func (m *PRDetailModel) handleMergeKey(msg tea.KeyMsg) tea.Cmd {
 				// Still loading; silently ignore.
 				return func() tea.Msg { return nil }
 			}
+			if m.isAnyActionInProgress() {
+				return func() tea.Msg { return nil }
+			}
 			if m.Detail.Mergeable != "MERGEABLE" {
 				m.mergeErr = "PR is not mergeable (" + humanizeMergeState(m.Detail.MergeState) + ")"
 				return func() tea.Msg { return nil }
@@ -2679,12 +2772,25 @@ func (m *PRDetailModel) resetMergeFlow() {
 	m.mergeErr = ""
 }
 
+// isAnyActionInProgress reports whether a transient action is active.
+func (m *PRDetailModel) isAnyActionInProgress() bool {
+	return m.mergeStep != mergeStepNone ||
+		m.closeStep != closeStepNone ||
+		m.checkoutInFlight ||
+		m.editPosting ||
+		m.editPrompt != "" ||
+		m.confirmDiscardAll
+}
+
 // handleCloseStart initiates the close/reopen flow when x is pressed.
 func (m *PRDetailModel) handleCloseStart() tea.Cmd {
 	if m.PRService == nil {
 		return nil
 	}
 	if m.Detail == nil {
+		return nil
+	}
+	if m.isAnyActionInProgress() {
 		return nil
 	}
 	state := m.Detail.State
@@ -2834,6 +2940,9 @@ func (m *PRDetailModel) emitOpenBrowserCI() tea.Cmd {
 // handleCheckout initiates the async checkout of the PR branch.
 func (m *PRDetailModel) handleCheckout() tea.Cmd {
 	if m.checkoutInFlight {
+		return nil
+	}
+	if m.isAnyActionInProgress() {
 		return nil
 	}
 	if m.Repo.LocalPath == "" {

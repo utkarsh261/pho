@@ -391,6 +391,7 @@ func buildPRDetailBindings(ctx Context) []Group {
 					{Key: "C", Description: "Comment"},
 					{Key: "a", Description: "Approve"},
 					{Key: "v", Description: "Review"},
+					{Key: "e", Description: "Edit title/body"},
 					{Key: "m", Description: "Merge"},
 				}
 				if ctx.PRState == domain.PRStateOpen {

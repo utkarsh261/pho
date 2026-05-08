@@ -28,6 +28,7 @@ type MockGitHubClient struct {
 	CheckMergeableFn           func(ctx context.Context, repo domain.Repository, number int) (domain.MergeableState, error)
 	ClosePullRequestFn         func(ctx context.Context, host, pullRequestID string) error
 	ReopenPullRequestFn        func(ctx context.Context, host, pullRequestID string) error
+	UpdatePullRequestFn        func(ctx context.Context, host, pullRequestID, title, body string) error
 
 	// Call counters — incremented on each call.
 	FetchDashboardPRsCalls        int
@@ -148,4 +149,11 @@ func (m *MockGitHubClient) ReopenPullRequest(ctx context.Context, host, pullRequ
 	}
 	m.ReopenPullRequestCalls++
 	return m.ReopenPullRequestFn(ctx, host, pullRequestID)
+}
+
+func (m *MockGitHubClient) UpdatePullRequest(ctx context.Context, host, pullRequestID, title, body string) error {
+	if m.UpdatePullRequestFn == nil {
+		panic("MockGitHubClient.UpdatePullRequest called but UpdatePullRequestFn is nil")
+	}
+	return m.UpdatePullRequestFn(ctx, host, pullRequestID, title, body)
 }

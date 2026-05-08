@@ -481,6 +481,10 @@ func (s *prService) ClosePR(_ context.Context, _ domain.Repository, _ int, _ str
 func (s *prService) ReopenPR(_ context.Context, _ domain.Repository, _ int, _ string) error {
 	return nil
 }
+
+func (s *prService) UpdatePR(_ context.Context, _ domain.Repository, _ int, _ string, _ string, _ string) error {
+	return nil
+}
 func (s *prService) LoadPRCommits(_ context.Context, _ domain.Repository, _ int, _ bool) ([]domain.Commit, error) {
 	return nil, nil
 }

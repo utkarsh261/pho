@@ -308,7 +308,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		return m, nil
-	case cmds.MergeableChecked, cmds.MergePRMsg, cmds.PRStateChangedMsg:
+	case cmds.MergeableChecked, cmds.MergePRMsg, cmds.PRStateChangedMsg, cmds.PRUpdated:
 		if m.prDetail != nil {
 			next, cmd := m.prDetail.Update(msg)
 			m.prDetail = next
@@ -321,6 +321,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			case cmds.PRStateChangedMsg:
+				if stateMsg.Err == nil {
+					if repo, ok := m.findRepoByFullName(stateMsg.Repo); ok && m.deps.Dashboard != nil {
+						_ = m.deps.Dashboard.InvalidateRepo(context.Background(), repo)
+					}
+				}
+			case cmds.PRUpdated:
 				if stateMsg.Err == nil {
 					if repo, ok := m.findRepoByFullName(stateMsg.Repo); ok && m.deps.Dashboard != nil {
 						_ = m.deps.Dashboard.InvalidateRepo(context.Background(), repo)

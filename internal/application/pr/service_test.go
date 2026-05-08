@@ -81,6 +81,8 @@ func (f *fakeGitHubClient) FetchCommits(ctx context.Context, repo domain.Reposit
 	return f.FetchCommitsFn(ctx, repo, number)
 }
 
+func (f *fakeGitHubClient) UpdatePullRequest(_ context.Context, _, _, _, _ string) error { return nil }
+
 // frozenNow is the fixed time used for both service.Now and coord.Now in tests.
 // Entries seeded at this time with a 2-minute TTL are fresh; entries seeded
 // at 2020 are still stale, so stale-path tests remain valid.

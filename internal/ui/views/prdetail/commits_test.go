@@ -220,6 +220,10 @@ func (f *fakePRService) ReopenPR(ctx context.Context, repo domain.Repository, nu
 	return nil
 }
 
+func (f *fakePRService) UpdatePR(_ context.Context, _ domain.Repository, _ int, _ string, _ string, _ string) error {
+	return nil
+}
+
 func strContains(s, substr string) bool {
 	return strings.Contains(s, substr)
 }

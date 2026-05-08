@@ -192,6 +192,19 @@ func (c *Client) ReopenPullRequest(ctx context.Context, host, pullRequestID stri
 	return err
 }
 
+// UpdatePullRequest updates the title and/or body of a PR.
+func (c *Client) UpdatePullRequest(ctx context.Context, host, pullRequestID, title, body string) error {
+	vars := map[string]any{
+		"pullRequestId": pullRequestID,
+		"title":         title,
+		"body":          body,
+	}
+	_, err := queryGraphQL[model.UpdatePullRequestData](c, ctx, host, func(_ githubpkg.GitHubHostProfile) string {
+		return buildUpdatePullRequestMutation()
+	}, vars)
+	return err
+}
+
 // FetchViewer resolves the current viewer login for a host.
 func (c *Client) FetchViewer(ctx context.Context, host string) (string, error) {
 	c.log.Debug("fetch viewer", "host", host)

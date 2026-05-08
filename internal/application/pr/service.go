@@ -190,6 +190,21 @@ func (s *PRService) ReopenPR(ctx context.Context, repo domain.Repository, number
 	return nil
 }
 
+// UpdatePR updates the title and/or body of a PR and invalidates the preview cache.
+func (s *PRService) UpdatePR(ctx context.Context, repo domain.Repository, number int, prID string, title string, body string) error {
+	defer s.logTimer("pr update", pholog.FieldRepo, repo.FullName, pholog.FieldPRNumber, number)()
+	s.logDebug("update pr", "repo", repo.FullName, "number", number)
+	if err := s.Client.UpdatePullRequest(ctx, repo.Host, prID, title, body); err != nil {
+		s.logWarn("update pr failed", "repo", repo.FullName, "number", number, "err", err)
+		return err
+	}
+	previewKey := previewCacheKey(repo.Host, repoFullName(repo), number)
+	if delErr := s.Cache.Delete(ctx, previewKey); delErr != nil {
+		s.logWarn("update pr cache delete failed", "key", previewKey, "err", delErr)
+	}
+	return nil
+}
+
 // SaveDraftComments persists draft inline comments for a PR.
 func (s *PRService) SaveDraftComments(ctx context.Context, repo domain.Repository, number int, headSHA string, drafts []domain.DraftInlineComment) error {
 	defer s.logTimer("pr save drafts", pholog.FieldRepo, repo.FullName, pholog.FieldPRNumber, number)()
