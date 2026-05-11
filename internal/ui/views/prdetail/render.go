@@ -311,4 +311,3 @@ func (m *PRDetailModel) renderNarrowBody(width, height int) string {
 	body := m.renderRightViewport(width, height-1)
 	return top + "\n" + body
 }
-

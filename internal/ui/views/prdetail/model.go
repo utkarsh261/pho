@@ -743,12 +743,6 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 	}
 }
 
-
-
-
-
-
-
 // BackToDashboard is emitted when the user presses q (or Esc while search is inactive) in PR detail.
 type BackToDashboard struct{}
 

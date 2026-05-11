@@ -65,6 +65,7 @@ func lastDiffCursor(dm *model.DiffModel) (fileIdx, hunkIdx, lineIdx int) {
 	return 0, 0, 0
 }
 
+// anchorForLine returns the path, line number, and side for a diff line.
 // It uses the generated anchor if present, otherwise it infers path, line
 // number and side from the line kind and surrounding file so that inline
 // comments can be created even when anchors were not populated (e.g. empty

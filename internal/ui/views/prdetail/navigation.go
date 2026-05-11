@@ -122,6 +122,7 @@ func (m *PRDetailModel) moveCommentCursorBy(delta int) {
 	m.commentCursor = best
 	m.scrollToCommentCursor()
 }
+
 // jumpToFile switches to the Diff tab and scrolls so that file at index idx is at
 // the top. No-op when diff is absent or idx is out of range.
 func (m *PRDetailModel) jumpToFile(idx int) {
