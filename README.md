@@ -104,3 +104,6 @@ just vet
 ```
 tail -f ~/.local/state/pho/debug.log
 ```
+
+## Why
+So that i can build it exactly how i want a tool which i use on a regular basis to be. 
