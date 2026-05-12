@@ -9,6 +9,18 @@
 <img width="1468" height="889" alt="image" src="https://github.com/user-attachments/assets/f83b174f-afd9-4602-bc98-7355b698cb71" />
 
 
+## Features
+
+- **Dashboard** - Auto-discovers repos, lists PRs across *My PRs*, *Needs Review*, *Involving*, and *Recent* tabs with a live preview pane.
+- **Jump to repo/PR** - `Ctrl+P` to fuzzy-find and jump to any PR.
+- **PR detail** - Browse description, diff, comments, and commits. Sidebar for files and CI checks.
+- **Diff navigation** - Line-by-line cursor, `gg`/`G`, `Ctrl+d`/`Ctrl+u`, visual mode for selecting ranges.
+- **Inline reviews** - Draft inline comments on diff lines, edit, discard, and batch-submit with a review event. Just like Github web UI.
+- **Comments & approvals** - Post top-level comments, review comments, or approve directly.
+- **PR actions** - Edit title/body, merge (with method selection), close/reopen, and checkout the branch locally.
+- **Commit view** - Inspect individual commits and their diffs.
+- **Search** - `/` to search within diffs and descriptions; `n`/`N` to jump between matches.
+
 ## Install
 
 ```
