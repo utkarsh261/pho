@@ -1,13 +1,13 @@
-```
-█████╗  ██╗  ██╗  █████╗
-██╔══██╗██║  ██║ ██╔══██╗
-█████╔╝ ███████║ ██║  ██║
-██╔══╝  ██╔══██║ ██║  ██║
-██║     ██║  ██║ ╚█████╔╝
-╚═╝     ╚═╝  ╚═╝  ╚════╝
-```
+<p align="center">
+  <img width="225" height="115" alt="image" src="https://github.com/user-attachments/assets/a29b5502-f081-4b06-ae8e-0ef97fbf9028" />
+</p>
 
-A terminal UI for GitHub pull requests.
+<p align="center">
+  A TUI for GitHub pull requests.
+</p>
+
+<img width="1468" height="889" alt="image" src="https://github.com/user-attachments/assets/f83b174f-afd9-4602-bc98-7355b698cb71" />
+
 
 ## Install
 
@@ -34,6 +34,11 @@ Right now, pho looks at only the `cwd` and its direct children directories (if t
 
 ```
 $(go env GOPATH)/bin/pho ~/path/to/dir/containing/all/cloned/repositories
+```
+or simply start it in the current directory
+
+```
+pho
 ```
 
 ## Requirements
