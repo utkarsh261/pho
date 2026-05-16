@@ -1,6 +1,7 @@
 package markdown
 
 import (
+	"regexp"
 	"strings"
 	"sync"
 
@@ -11,6 +12,24 @@ import (
 
 // zeroUint is a shared pointer to 0 used when zeroing style margins.
 var zeroUint = func() *uint { u := uint(0); return &u }()
+
+// Regex to rewrite image syntax into plain links before glamour sees them.
+// Handles both markdown ![alt](url) and HTML <img src="…" alt="…"> tags.
+var (
+	reMarkdownImage = regexp.MustCompile(`!\[([^\]]*)\]\(([^)]+)\)`)
+
+	// <img src="…" alt="…"> and <img src="…" alt="…" />
+	reImgSrcAlt = regexp.MustCompile(`<img\s+[^>]*?src=["']([^"']+)["'][^>]*?alt=["']([^"]*)["'][^>]*>`)
+	// <img alt="…" src="…"> and <img alt="…" src="…" />
+	reImgAltSrc = regexp.MustCompile(`<img\s+[^>]*?alt=["']([^"]*)["'][^>]*?src=["']([^"']+)["'][^>]*>`)
+)
+
+func preprocessImages(src string) string {
+	src = reImgSrcAlt.ReplaceAllString(src, "[$2]($1)")
+	src = reImgAltSrc.ReplaceAllString(src, "[$1]($2)")
+	src = reMarkdownImage.ReplaceAllString(src, "[$1]($2)")
+	return src
+}
 
 // tokyoNightNoMargin is the tokyo-night StyleConfig with Document and CodeBlock
 // margins zeroed so output sits flush with the surrounding UI elements.
@@ -80,6 +99,7 @@ func (r *Renderer) Render(src string, width int) []string {
 	if inner == nil {
 		return []string{src}
 	}
+	src = preprocessImages(src)
 	out, err := inner.Render(src)
 	if err != nil {
 		return []string{src}

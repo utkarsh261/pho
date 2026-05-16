@@ -32,6 +32,7 @@ var fixtures = []string{
 	"lists",
 	"blockquotes",
 	"links",
+	"images",
 	"mixed",
 }
 
