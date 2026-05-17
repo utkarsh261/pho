@@ -13,6 +13,7 @@ import (
 	achdashboard "github.com/utkarsh261/pho/internal/application/dashboard"
 	"github.com/utkarsh261/pho/internal/domain"
 	pholog "github.com/utkarsh261/pho/internal/log"
+	"github.com/utkarsh261/pho/internal/ui/components/createpr"
 	"github.com/utkarsh261/pho/internal/ui/components/keymapoverlay"
 	"github.com/utkarsh261/pho/internal/ui/components/overlay"
 	"github.com/utkarsh261/pho/internal/ui/keymap"
@@ -76,6 +77,7 @@ type Model struct {
 	status        *dashboard.StatusBarModel
 	palette       overlay.Model
 	keymapOverlay keymapoverlay.Model
+	createPR      *createpr.Model
 
 	focus         domain.FocusTarget
 	previousFocus domain.FocusTarget
@@ -131,6 +133,7 @@ func NewModel(deps Dependencies) *Model {
 		status:            dashboard.NewStatusBarModel(),
 		palette:           overlay.NewModel(deps.Search),
 		keymapOverlay:     keymapoverlay.NewModel(),
+		createPR:          createpr.NewModel(),
 		focus:             domain.FocusRepoPanel,
 		previousFocus:     domain.FocusRepoPanel,
 		state: domain.AppState{
@@ -173,6 +176,7 @@ func (m *Model) SetTheme(th *theme.Theme) {
 	m.status.SetTheme(th)
 	m.palette.SetTheme(th)
 	m.keymapOverlay.SetTheme(th)
+	m.createPR.SetTheme(th)
 }
 
 // SetFocus changes the focused panel.
@@ -332,6 +336,42 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		return m, nil
+	case cmds.CreatePRFormData:
+		if m.createPR != nil && m.createPR.Active() {
+			m.createPR.SetFormData(msg)
+		}
+		return m, nil
+	case createpr.SubmitMsg:
+		if m.createPR != nil && m.createPR.Active() {
+			params, err := m.createPR.Submit()
+			if err != nil {
+				m.createPR.SetError(err)
+				return m, nil
+			}
+			m.createPR.SetSubmitting()
+			return m, cmds.CreatePRCmd(m.deps.PR, params)
+		}
+		return m, nil
+	case cmds.PRCreated:
+		if m.createPR != nil && m.createPR.Active() {
+			if msg.Err != nil {
+				m.createPR.SetError(msg.Err)
+				return m, nil
+			}
+			m.createPR.Close()
+			// Open the newly created PR in detail view.
+			repo, _ := m.selectedRepo()
+			if repo.FullName == "" {
+				repo = domain.Repository{Host: m.selectedHost(), FullName: msg.Repo}
+			}
+			return m, m.openPRDetailForSummary(msg.Summary, repo)
+		}
+		return m, nil
+	case createpr.CancelMsg:
+		if m.createPR != nil {
+			m.createPR.Close()
+		}
+		return m, nil
 	default:
 		// Always route unknown messages through applyMessage so dashboard state
 		// (preview debounce, background loads) continues updating regardless of
@@ -402,6 +442,9 @@ func (m *Model) View() string {
 		bg = m.renderDashboard()
 	}
 
+	if m.createPR != nil && m.createPR.Active() {
+		return m.createPR.ViewOver(bg)
+	}
 	if m.keymapOverlay.Visible {
 		return m.keymapOverlay.ViewOver(bg)
 	}
@@ -464,6 +507,12 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Create PR overlay takes priority when active.
+	if m.createPR != nil && m.createPR.Active() {
+		cmd := m.createPR.Update(msg)
+		return m, cmd
+	}
+
 	// keymap.Dispatch is a dashboard-scoped concern. It understands the four
 	// dashboard focus targets (repo panel, PR list, preview, command palette)
 	// and maps keys to typed Actions that the root model then executes.
@@ -516,6 +565,8 @@ func (m *Model) handleRootAction(action keymap.Action) tea.Cmd {
 		return nil
 	case keymap.ToggleKeymapOverlay:
 		return m.toggleKeymapOverlay()
+	case keymap.CreatePR:
+		return m.openCreatePROverlay()
 	default:
 		return nil
 	}
@@ -1548,6 +1599,39 @@ func (m *Model) handleAllPRsPage(msg cmds.AllPRsPageLoaded) tea.Cmd {
 		m.palette.RefreshResults()
 	}
 	return nil
+}
+
+func (m *Model) openCreatePROverlay() tea.Cmd {
+	repo, ok := m.selectedRepo()
+	if !ok {
+		return nil
+	}
+	if m.createPR == nil {
+		m.createPR = createpr.NewModel()
+		m.createPR.SetTheme(m.theme)
+	}
+	m.createPR.SetSize(m.layout.Current.Width, m.layout.Current.Height)
+	m.createPR.Open(repo)
+	return cmds.LoadCreatePRFormDataCmd(repo, m.deps.PR)
+}
+
+func (m *Model) openPRDetailForSummary(summary domain.PullRequestSummary, repo domain.Repository) tea.Cmd {
+	if m.prDetail != nil && m.prDetail.Summary.Repo == summary.Repo && m.prDetail.Summary.Number == summary.Number {
+		m.recordPRViewed(summary, repo, m.now())
+		m.pushView(domain.PrimaryViewPRDetail)
+		m.syncStatus()
+		return nil
+	}
+
+	m.recordPRViewed(summary, repo, m.now())
+	m.prDetail = prdetail.NewModel(summary, repo, m.deps.PR)
+	m.prDetail.Log = m.log
+	m.prDetail.SetTheme(m.theme)
+	m.prDetail.Width = m.layout.Current.Width
+	m.prDetail.Height = m.layout.Current.Height - 2
+	m.pushView(domain.PrimaryViewPRDetail)
+	m.syncStatus()
+	return m.prDetail.Init()
 }
 
 func (m *Model) openPRDetailForJump(summary domain.PullRequestSummary) tea.Cmd {

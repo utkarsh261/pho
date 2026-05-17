@@ -51,6 +51,8 @@ type PRService interface {
 	ClosePR(ctx context.Context, repo domain.Repository, number int, prID string) error
 	ReopenPR(ctx context.Context, repo domain.Repository, number int, prID string) error
 	UpdatePR(ctx context.Context, repo domain.Repository, number int, prID string, title string, body string) error
+	CreatePR(ctx context.Context, params domain.CreatePRParams) (domain.PullRequestSummary, error)
+	FetchRepoInfo(ctx context.Context, repo domain.Repository) (domain.RepoInfo, error)
 }
 
 type PRDetailLoaded struct {
@@ -170,6 +172,28 @@ type PRUpdated struct {
 	Title  string
 	Body   string
 	Err    error
+}
+
+// PRCreated is emitted when a new PR is successfully created.
+type PRCreated struct {
+	Repo    string
+	Number  int
+	Summary domain.PullRequestSummary
+	Err     error
+}
+
+// CreatePRFormData carries the preflight information for the create-PR form.
+type CreatePRFormData struct {
+	Repo            domain.Repository
+	CurrentBranch   string
+	DefaultBase     string
+	LastCommitMsg   string
+	IsPushed        bool
+	IsFork          bool
+	ParentFullName  string // empty if not a fork
+	LocalBranches   []string
+	RemoteBranches  []string
+	Err             error
 }
 
 type RefreshStarted struct {
@@ -480,6 +504,92 @@ func UpdatePRCmd(svc PRService, repo domain.Repository, number int, prID string,
 			return PRUpdated{Repo: repoKey(repo), Number: number, Title: title, Body: body, Err: err}
 		}
 		return PRUpdated{Repo: repoKey(repo), Number: number, Title: title, Body: body}
+	}
+}
+
+// CreatePRCmd fires the REST API call to create a pull request.
+func CreatePRCmd(svc PRService, params domain.CreatePRParams) tea.Cmd {
+	return func() tea.Msg {
+		summary, err := svc.CreatePR(context.Background(), params)
+		return PRCreated{
+			Repo:    repoKey(params.Repo),
+			Number:  summary.Number,
+			Summary: summary,
+			Err:     err,
+		}
+	}
+}
+
+// LoadCreatePRFormDataCmd gathers local git state and remote repo metadata
+// needed to pre-populate the create-PR form.
+func LoadCreatePRFormDataCmd(repo domain.Repository, svc PRService) tea.Cmd {
+	return func() tea.Msg {
+		data := CreatePRFormData{Repo: repo}
+
+		if repo.LocalPath == "" {
+			data.Err = errors.New("no local path for repo")
+			return data
+		}
+
+		// Current branch
+		branch, err := execGit(repo.LocalPath, "branch", "--show-current")
+		if err != nil {
+			data.Err = fmt.Errorf("git branch: %w", err)
+			return data
+		}
+		data.CurrentBranch = branch
+
+		// Default base branch
+		if base, err := execGit(repo.LocalPath, "rev-parse", "--abbrev-ref", "origin/HEAD"); err == nil && strings.HasPrefix(base, "origin/") {
+			data.DefaultBase = strings.TrimPrefix(base, "origin/")
+		}
+		if data.DefaultBase == "" {
+			data.DefaultBase = "main"
+		}
+
+		// Last commit message
+		if msg, err := execGit(repo.LocalPath, "log", "-1", "--pretty=%B"); err == nil {
+			data.LastCommitMsg = strings.TrimSpace(msg)
+		}
+
+		// Is branch pushed?
+		if _, err := execGit(repo.LocalPath, "rev-parse", "--verify", "--quiet", branch+"@{u}"); err == nil {
+			data.IsPushed = true
+		}
+
+		// Local branches
+		if out, err := execGit(repo.LocalPath, "branch", "--format=%(refname:short)"); err == nil {
+			for _, b := range strings.Split(out, "\n") {
+				b = strings.TrimSpace(b)
+				if b != "" {
+					data.LocalBranches = append(data.LocalBranches, b)
+				}
+			}
+		}
+
+		// Remote branches
+		if out, err := execGit(repo.LocalPath, "branch", "-r", "--format=%(refname:short)"); err == nil {
+			for _, b := range strings.Split(out, "\n") {
+				b = strings.TrimSpace(b)
+				if b != "" && !strings.Contains(b, "HEAD ->") {
+					data.RemoteBranches = append(data.RemoteBranches, b)
+				}
+			}
+		}
+
+		// Remote repo metadata
+		info, err := svc.FetchRepoInfo(context.Background(), repo)
+		if err == nil {
+			data.IsFork = info.Fork
+			if info.ParentFullName != "" {
+				data.ParentFullName = info.ParentFullName
+			}
+			if info.DefaultBranch != "" {
+				data.DefaultBase = info.DefaultBranch
+			}
+		}
+
+		return data
 	}
 }
 

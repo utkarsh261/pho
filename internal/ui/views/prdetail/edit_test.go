@@ -69,6 +69,12 @@ func (s *editPRService) UpdatePR(ctx context.Context, repo domain.Repository, nu
 	}
 	return nil
 }
+func (s *editPRService) CreatePR(_ context.Context, _ domain.CreatePRParams) (domain.PullRequestSummary, error) {
+	return domain.PullRequestSummary{}, nil
+}
+func (s *editPRService) FetchRepoInfo(_ context.Context, _ domain.Repository) (domain.RepoInfo, error) {
+	return domain.RepoInfo{}, nil
+}
 
 func newEditModel() *PRDetailModel {
 	repo := testutil.Repo("acme/api")

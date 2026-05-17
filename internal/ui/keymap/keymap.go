@@ -74,6 +74,8 @@ func dispatchGlobal(msg tea.KeyMsg) Result {
 			return Result{Action: TriggerRefresh{}}
 		case '?':
 			return Result{Action: ToggleKeymapOverlay{}}
+		case 'n':
+			return Result{Action: CreatePR{}}
 		}
 	}
 	return Result{}
@@ -106,6 +108,8 @@ func dispatchRepoPanel(msg tea.KeyMsg) Result {
 			return Result{Action: TriggerRefresh{}}
 		case '?':
 			return Result{Action: ToggleKeymapOverlay{}}
+		case 'n':
+			return Result{Action: CreatePR{}}
 		}
 	}
 	return dispatchGlobal(msg)
@@ -144,6 +148,8 @@ func dispatchPRListPanel(msg tea.KeyMsg) Result {
 			return Result{Action: TriggerRefresh{}}
 		case '?':
 			return Result{Action: ToggleKeymapOverlay{}}
+		case 'n':
+			return Result{Action: CreatePR{}}
 		}
 	}
 	return dispatchGlobal(msg)
@@ -178,6 +184,8 @@ func dispatchPreviewPanel(msg tea.KeyMsg) Result {
 			return Result{Action: TriggerRefresh{}}
 		case '?':
 			return Result{Action: ToggleKeymapOverlay{}}
+		case 'n':
+			return Result{Action: CreatePR{}}
 		}
 	}
 	return dispatchGlobal(msg)
@@ -303,3 +311,8 @@ func (Quit) isAction() {}
 type ToggleKeymapOverlay struct{}
 
 func (ToggleKeymapOverlay) isAction() {}
+
+// CreatePR is emitted when the user presses 'n' to open the create-PR overlay.
+type CreatePR struct{}
+
+func (CreatePR) isAction() {}

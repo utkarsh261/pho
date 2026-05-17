@@ -235,6 +235,12 @@ func (f *fakePRService) ReopenPR(ctx context.Context, repo domain.Repository, nu
 func (f *fakePRService) UpdatePR(_ context.Context, _ domain.Repository, _ int, _ string, _ string, _ string) error {
 	return nil
 }
+func (f *fakePRService) CreatePR(_ context.Context, _ domain.CreatePRParams) (domain.PullRequestSummary, error) {
+	return domain.PullRequestSummary{}, nil
+}
+func (f *fakePRService) FetchRepoInfo(_ context.Context, _ domain.Repository) (domain.RepoInfo, error) {
+	return domain.RepoInfo{}, nil
+}
 
 func TestCommitDetailGoldenLoading(t *testing.T) {
 	t.Parallel()

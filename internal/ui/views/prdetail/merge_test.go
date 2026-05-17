@@ -74,6 +74,12 @@ func (s *mergePRService) ReopenPR(_ context.Context, _ domain.Repository, _ int,
 func (s *mergePRService) UpdatePR(_ context.Context, _ domain.Repository, _ int, _ string, _ string, _ string) error {
 	return nil
 }
+func (s *mergePRService) CreatePR(_ context.Context, _ domain.CreatePRParams) (domain.PullRequestSummary, error) {
+	return domain.PullRequestSummary{}, nil
+}
+func (s *mergePRService) FetchRepoInfo(_ context.Context, _ domain.Repository) (domain.RepoInfo, error) {
+	return domain.RepoInfo{}, nil
+}
 
 func newMergeModel(mergeable, mergeState string) *PRDetailModel {
 	repo := testutil.Repo("acme/api")

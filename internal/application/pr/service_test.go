@@ -3,6 +3,8 @@ package pr
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"testing"
 	"time"
@@ -14,7 +16,9 @@ import (
 	"github.com/utkarsh261/pho/internal/diff/model"
 	"github.com/utkarsh261/pho/internal/diff/parse"
 	"github.com/utkarsh261/pho/internal/domain"
+	"github.com/utkarsh261/pho/internal/github/rest"
 	"github.com/utkarsh261/pho/internal/testutil"
+	pholog "github.com/utkarsh261/pho/internal/log"
 )
 
 type fakeGitHubClient struct {
@@ -916,3 +920,280 @@ func TestLoadCommitDiffForceRefresh(t *testing.T) {
 
 // Ensure testutil import is used.
 var _ = testutil.Repo("")
+
+func TestFetchRepoInfoSuccess(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{
+			"default_branch": "main",
+			"fork": false
+		}`))
+	}))
+	defer server.Close()
+
+	coord := newTestCoordinator(t)
+	restClient := &rest.Client{
+		BaseURL: server.URL,
+		Token:   "test-token",
+	}
+	svc := &PRService{
+		Cache: coord,
+		REST:  restClient,
+		Owner: "owner",
+		Repo:  "repo",
+		Log:   pholog.NewNop(),
+	}
+
+	info, err := svc.FetchRepoInfo(context.Background(), testRepo())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if info.DefaultBranch != "main" {
+		t.Errorf("expected default_branch=main, got %q", info.DefaultBranch)
+	}
+	if info.Fork {
+		t.Error("expected fork=false")
+	}
+	if info.ParentFullName != "" {
+		t.Errorf("expected empty parent, got %q", info.ParentFullName)
+	}
+}
+
+func TestFetchRepoInfoForkWithParent(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{
+			"default_branch": "develop",
+			"fork": true,
+			"parent": {
+				"full_name": "upstream-org/upstream-repo"
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	coord := newTestCoordinator(t)
+	restClient := &rest.Client{
+		BaseURL: server.URL,
+		Token:   "test-token",
+	}
+	svc := &PRService{
+		Cache: coord,
+		REST:  restClient,
+		Owner: "fork-owner",
+		Repo:  "fork-repo",
+		Log:   pholog.NewNop(),
+	}
+
+	info, err := svc.FetchRepoInfo(context.Background(), domain.Repository{
+		Host:     "github.com",
+		Owner:    "fork-owner",
+		Name:     "fork-repo",
+		FullName: "fork-owner/fork-repo",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !info.Fork {
+		t.Error("expected fork=true")
+	}
+	if info.ParentFullName != "upstream-org/upstream-repo" {
+		t.Errorf("expected parent=upstream-org/upstream-repo, got %q", info.ParentFullName)
+	}
+}
+
+func TestFetchRepoInfoError(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"message": "Not Found"}`))
+	}))
+	defer server.Close()
+
+	coord := newTestCoordinator(t)
+	restClient := &rest.Client{
+		BaseURL: server.URL,
+		Token:   "test-token",
+	}
+	svc := &PRService{
+		Cache: coord,
+		REST:  restClient,
+		Owner: "owner",
+		Repo:  "repo",
+		Log:   pholog.NewNop(),
+	}
+
+	_, err := svc.FetchRepoInfo(context.Background(), testRepo())
+	if err == nil {
+		t.Fatal("expected error for 404 response")
+	}
+}
+
+func TestCreatePRSuccess(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{
+			"number": 42,
+			"title": "Add feature",
+			"body": "Description",
+			"state": "open",
+			"html_url": "https://github.com/owner/repo/pull/42",
+			"head": "feature-branch",
+			"base": "main",
+			"draft": false,
+			"created_at": "2026-01-01T00:00:00Z",
+			"updated_at": "2026-01-01T00:00:00Z",
+			"user": {"login": "testuser"}
+		}`))
+	}))
+	defer server.Close()
+
+	coord := newTestCoordinator(t)
+	// Seed dashboard cache to verify invalidation.
+	dashKey := "dashboard:v1:host=github.com:repo=owner/repo"
+	_ = coord.Write(context.Background(), dashKey, []domain.PullRequestSummary{}, domain.CacheMeta{})
+
+	restClient := &rest.Client{
+		BaseURL: server.URL,
+		Token:   "test-token",
+	}
+	svc := &PRService{
+		Cache: coord,
+		REST:  restClient,
+		Owner: "owner",
+		Repo:  "repo",
+		Now:   func() time.Time { return frozenNow },
+		Log:   pholog.NewNop(),
+	}
+
+	params := domain.CreatePRParams{
+		Repo:  testRepo(),
+		Title: "Add feature",
+		Body:  "Description",
+		Head:  "feature-branch",
+		Base:  "main",
+		Draft: false,
+	}
+
+	summary, err := svc.CreatePR(context.Background(), params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if summary.Number != 42 {
+		t.Errorf("expected number=42, got %d", summary.Number)
+	}
+	if summary.Title != "Add feature" {
+		t.Errorf("expected title=%q, got %q", "Add feature", summary.Title)
+	}
+	if summary.HeadRefName != "feature-branch" {
+		t.Errorf("expected head=%q, got %q", "feature-branch", summary.HeadRefName)
+	}
+	if summary.BaseRefName != "main" {
+		t.Errorf("expected base=%q, got %q", "main", summary.BaseRefName)
+	}
+	if summary.IsDraft {
+		t.Error("expected draft=false")
+	}
+
+	// Verify dashboard cache was invalidated.
+	_, found, _ := coord.L2.Get(context.Background(), dashKey, &[]domain.PullRequestSummary{})
+	if found {
+		t.Error("expected dashboard cache to be invalidated after PR creation")
+	}
+}
+
+func TestCreatePRDraft(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{
+			"number": 1,
+			"title": "WIP: Feature",
+			"state": "open",
+			"html_url": "https://github.com/owner/repo/pull/1",
+			"head": "wip-branch",
+			"base": "main",
+			"draft": true,
+			"created_at": "2026-01-01T00:00:00Z",
+			"updated_at": "2026-01-01T00:00:00Z",
+			"user": {"login": "testuser"}
+		}`))
+	}))
+	defer server.Close()
+
+	coord := newTestCoordinator(t)
+	restClient := &rest.Client{
+		BaseURL: server.URL,
+		Token:   "test-token",
+	}
+	svc := &PRService{
+		Cache: coord,
+		REST:  restClient,
+		Owner: "owner",
+		Repo:  "repo",
+		Log:   pholog.NewNop(),
+	}
+
+	params := domain.CreatePRParams{
+		Repo:  testRepo(),
+		Title: "WIP: Feature",
+		Head:  "wip-branch",
+		Base:  "main",
+		Draft: true,
+	}
+
+	summary, err := svc.CreatePR(context.Background(), params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !summary.IsDraft {
+		t.Error("expected draft=true")
+	}
+}
+
+func TestCreatePRError(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = w.Write([]byte(`{"message": "Validation Failed"}`))
+	}))
+	defer server.Close()
+
+	coord := newTestCoordinator(t)
+	restClient := &rest.Client{
+		BaseURL: server.URL,
+		Token:   "test-token",
+	}
+	svc := &PRService{
+		Cache: coord,
+		REST:  restClient,
+		Owner: "owner",
+		Repo:  "repo",
+		Log:   pholog.NewNop(),
+	}
+
+	params := domain.CreatePRParams{
+		Repo:  testRepo(),
+		Title: "Test",
+		Head:  "branch",
+		Base:  "nonexistent",
+	}
+
+	_, err := svc.CreatePR(context.Background(), params)
+	if err == nil {
+		t.Fatal("expected error for validation failure")
+	}
+}

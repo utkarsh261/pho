@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/utkarsh261/pho/internal/domain"
 )
 
 func TestFetchRawDiffSuccess(t *testing.T) {
@@ -213,5 +215,357 @@ func TestFetchRawDiffContextCancelled(t *testing.T) {
 	_, err := client.FetchRawDiff(ctx, "owner", "repo", 1)
 	if err == nil {
 		t.Fatal("expected error for cancelled context")
+	}
+}
+
+func TestFetchRepoInfoSuccess(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/repos/owner/repo" {
+			t.Errorf("expected path=/repos/owner/repo, got %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Accept"); got != acceptJSONHeader {
+			t.Errorf("expected Accept=%q, got %q", acceptJSONHeader, got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{
+			"default_branch": "main",
+			"fork": false
+		}`))
+	}))
+	defer server.Close()
+
+	client := &Client{
+		BaseURL: server.URL,
+		Token:   "test-token",
+	}
+
+	info, err := client.FetchRepoInfo(context.Background(), "owner", "repo")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if info.DefaultBranch != "main" {
+		t.Errorf("expected default_branch=main, got %q", info.DefaultBranch)
+	}
+	if info.Fork {
+		t.Error("expected fork=false")
+	}
+}
+
+func TestFetchRepoInfoForkWithParent(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{
+			"default_branch": "develop",
+			"fork": true,
+			"parent": {
+				"full_name": "upstream-org/upstream-repo"
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	client := &Client{
+		BaseURL: server.URL,
+		Token:   "test-token",
+	}
+
+	info, err := client.FetchRepoInfo(context.Background(), "fork-owner", "fork-repo")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if info.DefaultBranch != "develop" {
+		t.Errorf("expected default_branch=develop, got %q", info.DefaultBranch)
+	}
+	if !info.Fork {
+		t.Error("expected fork=true")
+	}
+	if info.Parent == nil || info.Parent.FullName != "upstream-org/upstream-repo" {
+		t.Errorf("expected parent full_name=upstream-org/upstream-repo, got %v", info.Parent)
+	}
+}
+
+func TestFetchRepoInfoServerError(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"message": "Not Found"}`))
+	}))
+	defer server.Close()
+
+	client := &Client{
+		BaseURL: server.URL,
+		Token:   "test-token",
+	}
+
+	_, err := client.FetchRepoInfo(context.Background(), "owner", "nonexistent")
+	if err == nil {
+		t.Fatal("expected error for 404 response")
+	}
+}
+
+func TestCreatePullRequestSuccess(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected method=POST, got %s", r.Method)
+		}
+		if r.URL.Path != "/repos/owner/repo/pulls" {
+			t.Errorf("expected path=/repos/owner/repo/pulls, got %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Content-Type"); got != "application/json" {
+			t.Errorf("expected Content-Type=application/json, got %q", got)
+		}
+		if got := r.Header.Get("Authorization"); got != "token test-token" {
+			t.Errorf("expected Authorization=%q, got %q", "token test-token", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{
+			"number": 42,
+			"title": "Add feature",
+			"body": "Description here",
+			"state": "open",
+			"html_url": "https://github.com/owner/repo/pull/42",
+			"head": "feature-branch",
+			"base": "main",
+			"draft": false,
+			"created_at": "2026-01-01T00:00:00Z",
+			"updated_at": "2026-01-01T00:00:00Z",
+			"user": {"login": "testuser"}
+		}`))
+	}))
+	defer server.Close()
+
+	client := &Client{
+		BaseURL: server.URL,
+		Token:   "test-token",
+	}
+
+	params := domain.CreatePRParams{
+		Title: "Add feature",
+		Body:  "Description here",
+		Head:  "feature-branch",
+		Base:  "main",
+		Draft: false,
+	}
+
+	pr, err := client.CreatePullRequest(context.Background(), "owner", "repo", params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if pr.Number != 42 {
+		t.Errorf("expected number=42, got %d", pr.Number)
+	}
+	if pr.Title != "Add feature" {
+		t.Errorf("expected title=%q, got %q", "Add feature", pr.Title)
+	}
+	if pr.HTMLURL != "https://github.com/owner/repo/pull/42" {
+		t.Errorf("expected html_url=%q, got %q", "https://github.com/owner/repo/pull/42", pr.HTMLURL)
+	}
+	if pr.HeadRefName != "feature-branch" {
+		t.Errorf("expected head=%q, got %q", "feature-branch", pr.HeadRefName)
+	}
+	if pr.BaseRefName != "main" {
+		t.Errorf("expected base=%q, got %q", "main", pr.BaseRefName)
+	}
+	if pr.IsDraft {
+		t.Error("expected draft=false")
+	}
+}
+
+func TestCreatePullRequestDraft(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{
+			"number": 1,
+			"title": "WIP: Feature",
+			"state": "open",
+			"html_url": "https://github.com/owner/repo/pull/1",
+			"head": "wip-branch",
+			"base": "main",
+			"draft": true,
+			"created_at": "2026-01-01T00:00:00Z",
+			"updated_at": "2026-01-01T00:00:00Z",
+			"user": {"login": "testuser"}
+		}`))
+	}))
+	defer server.Close()
+
+	client := &Client{
+		BaseURL: server.URL,
+		Token:   "test-token",
+	}
+
+	params := domain.CreatePRParams{
+		Title: "WIP: Feature",
+		Head:  "wip-branch",
+		Base:  "main",
+		Draft: true,
+	}
+
+	pr, err := client.CreatePullRequest(context.Background(), "owner", "repo", params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !pr.IsDraft {
+		t.Error("expected draft=true")
+	}
+}
+
+func TestCreatePullRequestEmptyBody(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{
+			"number": 1,
+			"title": "No body PR",
+			"state": "open",
+			"html_url": "https://github.com/owner/repo/pull/1",
+			"head": "branch",
+			"base": "main",
+			"draft": false,
+			"created_at": "2026-01-01T00:00:00Z",
+			"updated_at": "2026-01-01T00:00:00Z",
+			"user": {"login": "testuser"}
+		}`))
+	}))
+	defer server.Close()
+
+	client := &Client{
+		BaseURL: server.URL,
+		Token:   "test-token",
+	}
+
+	params := domain.CreatePRParams{
+		Title: "No body PR",
+		Head:  "branch",
+		Base:  "main",
+	}
+
+	_, err := client.CreatePullRequest(context.Background(), "owner", "repo", params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestCreatePullRequestValidationError(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = w.Write([]byte(`{
+			"message": "Validation Failed",
+			"errors": [{"resource": "PullRequest", "field": "base", "code": "invalid"}]
+		}`))
+	}))
+	defer server.Close()
+
+	client := &Client{
+		BaseURL: server.URL,
+		Token:   "test-token",
+	}
+
+	params := domain.CreatePRParams{
+		Title: "Test",
+		Head:  "branch",
+		Base:  "nonexistent-branch",
+	}
+
+	_, err := client.CreatePullRequest(context.Background(), "owner", "repo", params)
+	if err == nil {
+		t.Fatal("expected error for validation failure")
+	}
+}
+
+func TestCreatePullRequestServerError(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"message": "Internal Server Error"}`))
+	}))
+	defer server.Close()
+
+	client := &Client{
+		BaseURL: server.URL,
+		Token:   "test-token",
+	}
+
+	params := domain.CreatePRParams{
+		Title: "Test",
+		Head:  "branch",
+		Base:  "main",
+	}
+
+	_, err := client.CreatePullRequest(context.Background(), "owner", "repo", params)
+	if err == nil {
+		t.Fatal("expected error for 500 response")
+	}
+}
+
+func TestBuildRepoURL(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		baseURL string
+		owner   string
+		repo    string
+		want    string
+	}{
+		{
+			baseURL: "https://api.github.com",
+			owner:   "owner",
+			repo:    "repo",
+			want:    "https://api.github.com/repos/owner/repo",
+		},
+		{
+			baseURL: "https://github.example.com/api/v3",
+			owner:   "org",
+			repo:    "project",
+			want:    "https://github.example.com/api/v3/repos/org/project",
+		},
+	}
+
+	for _, tc := range tests {
+		got := buildRepoURL(tc.baseURL, tc.owner, tc.repo)
+		if got != tc.want {
+			t.Errorf("buildRepoURL(%q, %q, %q) = %q, want %q",
+				tc.baseURL, tc.owner, tc.repo, got, tc.want)
+		}
+	}
+}
+
+func TestBuildCreatePRURL(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		baseURL string
+		owner   string
+		repo    string
+		want    string
+	}{
+		{
+			baseURL: "https://api.github.com",
+			owner:   "owner",
+			repo:    "repo",
+			want:    "https://api.github.com/repos/owner/repo/pulls",
+		},
+		{
+			baseURL: "https://github.example.com/api/v3",
+			owner:   "org",
+			repo:    "project",
+			want:    "https://github.example.com/api/v3/repos/org/project/pulls",
+		},
+	}
+
+	for _, tc := range tests {
+		got := buildCreatePRURL(tc.baseURL, tc.owner, tc.repo)
+		if got != tc.want {
+			t.Errorf("buildCreatePRURL(%q, %q, %q) = %q, want %q",
+				tc.baseURL, tc.owner, tc.repo, got, tc.want)
+		}
 	}
 }
