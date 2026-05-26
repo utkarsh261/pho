@@ -1,8 +1,8 @@
 package createpr
 
 import (
-	"fmt"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -80,10 +80,10 @@ func TestOverlayViewIdleSnapshot(t *testing.T) {
 	m.SetTheme(theme.Default())
 
 	data := cmds.CreatePRFormData{
-		DefaultBase:   "main",
-		CurrentBranch: "feature",
-		LastCommitMsg: "Add feature",
-		LocalBranches: []string{"main", "feature", "fix"},
+		DefaultBase:    "main",
+		CurrentBranch:  "feature",
+		LastCommitMsg:  "Add feature",
+		LocalBranches:  []string{"main", "feature", "fix"},
 		RemoteBranches: []string{"origin/main", "origin/feature"},
 	}
 	m.SetFormData(data)
@@ -211,10 +211,10 @@ func TestSetFormDataBuildsForm(t *testing.T) {
 	m.Open(repo)
 
 	data := cmds.CreatePRFormData{
-		DefaultBase:   "main",
-		CurrentBranch: "feature",
-		LastCommitMsg: "Add feature",
-		LocalBranches: []string{"main", "feature", "fix"},
+		DefaultBase:    "main",
+		CurrentBranch:  "feature",
+		LastCommitMsg:  "Add feature",
+		LocalBranches:  []string{"main", "feature", "fix"},
 		RemoteBranches: []string{"origin/main", "origin/feature"},
 	}
 

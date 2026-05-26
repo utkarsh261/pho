@@ -332,7 +332,7 @@ func (m *Model) View() string {
 	borderStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(th.Border).
-		Width(boxW - 6).
+		Width(boxW-6).
 		Padding(1, 2)
 
 	box := borderStyle.Render(content)
