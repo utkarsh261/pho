@@ -238,8 +238,8 @@ func (s *PRService) CreatePR(ctx context.Context, params domain.CreatePRParams) 
 		IsDraft:     pr.IsDraft,
 		UpdatedAt:   updatedAt,
 		CreatedAt:   createdAt,
-		HeadRefName: pr.HeadRefName,
-		BaseRefName: pr.BaseRefName,
+		HeadRefName: pr.Head.Ref,
+		BaseRefName: pr.Base.Ref,
 	}
 
 	// Invalidate dashboard cache so the new PR appears.

@@ -304,6 +304,25 @@ func TestModel_BoxFitsContent(t *testing.T) {
 	}
 }
 
+func TestBuildBindings_DashboardActionsIncludeCreatePR(t *testing.T) {
+	t.Parallel()
+
+	groups := BuildBindings(Context{View: domain.PrimaryViewDashboard, Focus: domain.FocusPRListPanel})
+	found := false
+	for _, g := range groups {
+		if g.Name == "Actions" {
+			for _, b := range g.Bindings {
+				if b.Key == "n" && b.Description == "Create pull request" {
+					found = true
+				}
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected Actions group to contain n: Create pull request")
+	}
+}
+
 func assertContains(t *testing.T, got, want string) {
 	t.Helper()
 	if !strings.Contains(got, want) {

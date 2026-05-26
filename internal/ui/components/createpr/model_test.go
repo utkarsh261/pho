@@ -2,6 +2,10 @@ package createpr
 
 import (
 	"fmt"
+	"flag"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -9,7 +13,155 @@ import (
 
 	"github.com/utkarsh261/pho/internal/application/cmds"
 	"github.com/utkarsh261/pho/internal/domain"
+	"github.com/utkarsh261/pho/internal/ui/theme"
 )
+
+var updateGolden = flag.Bool("update-createpr", false, "overwrite createpr golden files with current output")
+
+// brokenANSI matches escape sequences that are malformed (missing the ESC prefix
+// or having a trailing/leading partial sequence that was split mid-render).
+var brokenANSI = regexp.MustCompile(`(?m)(^[^\x1b]*[0-9;]+m|^[^\x1b]*m[0-9;]+$)`)
+
+func hasBrokenANSI(s string) bool {
+	return brokenANSI.MatchString(s)
+}
+
+// stripANSI removes all ANSI escape codes so we can compare semantic content.
+var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+func stripANSI(s string) string {
+	return ansiRe.ReplaceAllString(s, "")
+}
+
+func checkGolden(t *testing.T, got, name string) {
+	t.Helper()
+	goldenPath := filepath.Join("testdata", "golden", name)
+	if *updateGolden {
+		if err := os.MkdirAll(filepath.Dir(goldenPath), 0755); err != nil {
+			t.Fatalf("mkdir golden dir: %v", err)
+		}
+		if err := os.WriteFile(goldenPath, []byte(got), 0644); err != nil {
+			t.Fatalf("write golden %s: %v", goldenPath, err)
+		}
+		return
+	}
+	data, err := os.ReadFile(goldenPath)
+	if err != nil {
+		t.Fatalf("read golden %s: %v (run with -update-createpr to generate)", goldenPath, err)
+	}
+	if got != string(data) {
+		t.Errorf("golden mismatch for %s\ngot:\n%s\nwant:\n%s", name, got, string(data))
+	}
+}
+
+func TestOverlayViewLoadingSnapshot(t *testing.T) {
+	t.Parallel()
+
+	m := NewModel()
+	repo := domain.Repository{FullName: "owner/repo"}
+	m.Open(repo)
+	m.SetSize(80, 24)
+	m.SetTheme(theme.Default())
+
+	view := m.View()
+	if hasBrokenANSI(view) {
+		t.Fatal("loading view contains broken ANSI sequences")
+	}
+	checkGolden(t, stripANSI(view), "overlay_loading.txt")
+}
+
+func TestOverlayViewIdleSnapshot(t *testing.T) {
+	t.Parallel()
+
+	m := NewModel()
+	repo := domain.Repository{FullName: "owner/repo"}
+	m.Open(repo)
+	m.SetSize(80, 24)
+	m.SetTheme(theme.Default())
+
+	data := cmds.CreatePRFormData{
+		DefaultBase:   "main",
+		CurrentBranch: "feature",
+		LastCommitMsg: "Add feature",
+		LocalBranches: []string{"main", "feature", "fix"},
+		RemoteBranches: []string{"origin/main", "origin/feature"},
+	}
+	m.SetFormData(data)
+
+	view := m.View()
+	if hasBrokenANSI(view) {
+		t.Fatal("idle view contains broken ANSI sequences")
+	}
+	checkGolden(t, stripANSI(view), "overlay_idle.txt")
+}
+
+func TestOverlayViewErrorSnapshot(t *testing.T) {
+	t.Parallel()
+
+	m := NewModel()
+	repo := domain.Repository{FullName: "owner/repo"}
+	m.Open(repo)
+	m.SetSize(80, 24)
+	m.SetTheme(theme.Default())
+
+	data := cmds.CreatePRFormData{
+		DefaultBase:   "main",
+		CurrentBranch: "feature",
+		LastCommitMsg: "Add feature",
+		LocalBranches: []string{"main", "feature"},
+	}
+	m.SetFormData(data)
+	m.SetError(fmt.Errorf("validation failed"))
+
+	view := m.View()
+	if hasBrokenANSI(view) {
+		t.Fatal("error view contains broken ANSI sequences")
+	}
+	checkGolden(t, stripANSI(view), "overlay_error.txt")
+}
+
+func TestOverlayViewOverDoesNotCorruptBackground(t *testing.T) {
+	t.Parallel()
+
+	// Build a realistic styled background with ANSI codes.
+	styledLine := "\x1b[38;2;124;58;237mRepo\x1b[0m  \x1b[38;5;81mPR #1\x1b[0m  Title"
+	bg := strings.Repeat(styledLine+"\n", 20)
+
+	m := NewModel()
+	repo := domain.Repository{FullName: "owner/repo"}
+	m.Open(repo)
+	m.SetSize(80, 24)
+	m.SetTheme(theme.Default())
+
+	data := cmds.CreatePRFormData{
+		DefaultBase:   "main",
+		CurrentBranch: "feature",
+		LastCommitMsg: "Add feature",
+		LocalBranches: []string{"main", "feature"},
+	}
+	m.SetFormData(data)
+
+	result := m.ViewOver(bg)
+	if hasBrokenANSI(result) {
+		t.Fatal("ViewOver output contains broken ANSI sequences")
+	}
+	// Verify the styled background text is still present outside the overlay.
+	if !strings.Contains(result, "Repo") {
+		t.Fatal("ViewOver destroyed background content")
+	}
+	checkGolden(t, stripANSI(result), "overlay_over_bg.txt")
+}
+
+func TestOverlayViewOverInactiveReturnsBackground(t *testing.T) {
+	t.Parallel()
+
+	m := NewModel()
+	bg := "background content"
+	result := m.ViewOver(bg)
+	if result != bg {
+		t.Errorf("expected background unchanged when inactive, got %q", result)
+	}
+}
 
 func TestNewModelInactive(t *testing.T) {
 	t.Parallel()
@@ -139,7 +291,6 @@ func TestSubmitEmptyTitleError(t *testing.T) {
 		cmd()
 	}
 
-	// The form was initialized with empty title, so Submit should fail.
 	_, err := m.Submit()
 	if err == nil {
 		t.Fatal("expected error for empty title")
@@ -347,17 +498,6 @@ func TestViewLoadingState(t *testing.T) {
 	}
 	if !strings.Contains(view, "Loading repository info") {
 		t.Error("expected loading message in view")
-	}
-}
-
-func TestViewOverReturnsBackgroundWhenInactive(t *testing.T) {
-	t.Parallel()
-
-	m := NewModel()
-	bg := "background content"
-	result := m.ViewOver(bg)
-	if result != bg {
-		t.Errorf("expected background unchanged, got %q", result)
 	}
 }
 

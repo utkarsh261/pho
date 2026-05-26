@@ -2,12 +2,14 @@ package createpr
 
 import (
 	"fmt"
+	"os/exec"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/utkarsh261/pho/internal/application/cmds"
 	"github.com/utkarsh261/pho/internal/domain"
@@ -22,15 +24,15 @@ type CancelMsg struct{}
 
 // Model is the Create PR overlay.
 type Model struct {
-	active     bool
-	repo       domain.Repository
-	form       *huh.Form
-	formData   cmds.CreatePRFormData
-	status     overlayStatus
-	errMsg     string
-	theme      *theme.Theme
-	width      int
-	height     int
+	active   bool
+	repo     domain.Repository
+	form     *huh.Form
+	formData cmds.CreatePRFormData
+	status   overlayStatus
+	errMsg   string
+	theme    *theme.Theme
+	width    int
+	height   int
 
 	// branch lists for dynamic OptionsFunc
 	baseBranches []string
@@ -91,16 +93,24 @@ func (m *Model) Init() tea.Cmd {
 }
 
 // SetFormData populates the overlay with preflight data and builds the form.
-func (m *Model) SetFormData(data cmds.CreatePRFormData) {
+// Returns a tea.Cmd that must be run to initialize the form.
+func (m *Model) SetFormData(data cmds.CreatePRFormData) tea.Cmd {
 	m.formData = data
 	m.status = overlayStatusIdle
 
-	// Build branch lists.
-	m.baseBranches = append([]string{data.DefaultBase}, filterOut([]string{data.DefaultBase}, allBranches(data))...)
-	m.headBranches = append([]string{data.CurrentBranch}, filterOut([]string{data.CurrentBranch}, allBranches(data))...)
+	// Build branch lists (deduped, current/default first, capped to 12).
+	m.baseBranches = limitBranches(
+		data.DefaultBase,
+		filterOut([]string{data.DefaultBase}, allBranches(data)),
+	)
+	m.headBranches = limitBranches(
+		data.CurrentBranch,
+		filterOut([]string{data.CurrentBranch}, allBranches(data)),
+	)
 
 	// Build the form.
 	m.form = m.buildForm()
+	return m.form.Init()
 }
 
 func (m *Model) buildForm() *huh.Form {
@@ -116,9 +126,6 @@ func (m *Model) buildForm() *huh.Form {
 	km.Text.Next = key.NewBinding(key.WithKeys("tab"))
 	km.Text.NewLine = key.NewBinding(key.WithKeys("enter"))
 	km.Text.Submit = key.NewBinding(key.WithKeys("ctrl+s"))
-
-	// Prevent Enter from submitting select fields; use Tab instead.
-	km.Select.Next = key.NewBinding(key.WithKeys("tab", "enter"))
 
 	groups := huh.NewGroup(
 		huh.NewSelect[string]().
@@ -176,7 +183,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 	// Custom submit key.
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
-		if keyMsg.String() == "ctrl+s" {
+		if keyMsg.Type == tea.KeyCtrlS || keyMsg.String() == "ctrl+s" {
 			return func() tea.Msg { return SubmitMsg{} }
 		}
 		if keyMsg.String() == "esc" {
@@ -220,6 +227,14 @@ func (m *Model) Submit() (domain.CreatePRParams, error) {
 
 	if strings.TrimSpace(title) == "" {
 		return domain.CreatePRParams{}, fmt.Errorf("title is required")
+	}
+
+	// Verify the selected head branch exists on the remote.
+	if m.repo.LocalPath != "" {
+		remoteBranch := "origin/" + head
+		if out, err := execGit(m.repo.LocalPath, "branch", "-r", "--list", remoteBranch); err != nil || strings.TrimSpace(out) == "" {
+			return domain.CreatePRParams{}, fmt.Errorf("branch %q has not been pushed to origin — run: git push -u origin %s", head, head)
+		}
 	}
 
 	params := domain.CreatePRParams{
@@ -312,11 +327,12 @@ func (m *Model) View() string {
 		content += "\n" + th.MutedTxt.Render("Ctrl+S: Create PR   Esc: Cancel")
 	}
 
+	// lipgloss.Width sets the *content* width. With Padding(1,2) and RoundedBorder,
+	// total overhead is 6 cols (2 padding + 1 border each side).
 	borderStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(th.Border).
-		Width(boxW - 2).
-		Height(boxH - 2).
+		Width(boxW - 6).
 		Padding(1, 2)
 
 	box := borderStyle.Render(content)
@@ -360,16 +376,18 @@ func (m *Model) ViewOver(bg string) string {
 			continue
 		}
 		bgLine := result[rowIdx]
-		if startCol+len(ovlLine) > len(bgLine) {
-			// Pad bgLine if necessary.
-			if startCol < len(bgLine) {
-				result[rowIdx] = bgLine[:startCol] + ovlLine
-			} else {
-				result[rowIdx] = bgLine + strings.Repeat(" ", startCol-len(bgLine)) + ovlLine
-			}
-		} else {
-			result[rowIdx] = bgLine[:startCol] + ovlLine + bgLine[startCol+len(ovlLine):]
+		bgWidth := ansi.StringWidth(bgLine)
+
+		// Pad background line to reach startCol if needed.
+		if bgWidth < startCol {
+			bgLine = bgLine + strings.Repeat(" ", startCol-bgWidth)
+			bgWidth = startCol
 		}
+
+		ovlWidth := ansi.StringWidth(ovlLine)
+		left := ansi.Cut(bgLine, 0, startCol)
+		right := ansi.Cut(bgLine, startCol+ovlWidth, bgWidth)
+		result[rowIdx] = left + ovlLine + right
 	}
 
 	return strings.Join(result, "\n")
@@ -440,4 +458,21 @@ func filterOut(exclude []string, src []string) []string {
 		}
 	}
 	return out
+}
+
+// limitBranches returns a branch list with first at the front and at most 11
+// additional items. This keeps the form from ballooning to 30+ rows per select.
+func limitBranches(first string, rest []string) []string {
+	const maxRest = 11
+	if len(rest) > maxRest {
+		rest = rest[:maxRest]
+	}
+	return append([]string{first}, rest...)
+}
+
+// execGit runs a git command in the given local path and returns trimmed stdout.
+func execGit(localPath string, args ...string) (string, error) {
+	cmdArgs := append([]string{"-C", localPath}, args...)
+	out, err := exec.Command("git", cmdArgs...).CombinedOutput()
+	return strings.TrimSpace(string(out)), err
 }

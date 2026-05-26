@@ -17,8 +17,8 @@ import (
 	"github.com/utkarsh261/pho/internal/diff/parse"
 	"github.com/utkarsh261/pho/internal/domain"
 	"github.com/utkarsh261/pho/internal/github/rest"
-	"github.com/utkarsh261/pho/internal/testutil"
 	pholog "github.com/utkarsh261/pho/internal/log"
+	"github.com/utkarsh261/pho/internal/testutil"
 )
 
 type fakeGitHubClient struct {
@@ -1048,8 +1048,8 @@ func TestCreatePRSuccess(t *testing.T) {
 			"body": "Description",
 			"state": "open",
 			"html_url": "https://github.com/owner/repo/pull/42",
-			"head": "feature-branch",
-			"base": "main",
+			"head": {"ref": "feature-branch"},
+			"base": {"ref": "main"},
 			"draft": false,
 			"created_at": "2026-01-01T00:00:00Z",
 			"updated_at": "2026-01-01T00:00:00Z",
@@ -1123,8 +1123,8 @@ func TestCreatePRDraft(t *testing.T) {
 			"title": "WIP: Feature",
 			"state": "open",
 			"html_url": "https://github.com/owner/repo/pull/1",
-			"head": "wip-branch",
-			"base": "main",
+			"head": {"ref": "wip-branch"},
+			"base": {"ref": "main"},
 			"draft": true,
 			"created_at": "2026-01-01T00:00:00Z",
 			"updated_at": "2026-01-01T00:00:00Z",

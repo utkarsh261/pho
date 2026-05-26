@@ -53,17 +53,21 @@ type RepoInfo struct {
 
 // PullRequestResponse holds the REST API response for creating a pull request.
 type PullRequestResponse struct {
-	Number      int    `json:"number"`
-	Title       string `json:"title"`
-	Body        string `json:"body"`
-	State       string `json:"state"`
-	HTMLURL     string `json:"html_url"`
-	HeadRefName string `json:"head",omitempty`
-	BaseRefName string `json:"base",omitempty`
-	IsDraft     bool   `json:"draft"`
-	CreatedAt   string `json:"created_at"`
-	UpdatedAt   string `json:"updated_at"`
-	User        struct {
+	Number  int    `json:"number"`
+	Title   string `json:"title"`
+	Body    string `json:"body"`
+	State   string `json:"state"`
+	HTMLURL string `json:"html_url"`
+	Head    struct {
+		Ref string `json:"ref"`
+	} `json:"head"`
+	Base struct {
+		Ref string `json:"ref"`
+	} `json:"base"`
+	IsDraft   bool   `json:"draft"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+	User      struct {
 		Login string `json:"login"`
 	} `json:"user"`
 }

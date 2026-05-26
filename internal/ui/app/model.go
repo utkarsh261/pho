@@ -338,7 +338,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case cmds.CreatePRFormData:
 		if m.createPR != nil && m.createPR.Active() {
-			m.createPR.SetFormData(msg)
+			cmd := m.createPR.SetFormData(msg)
+			return m, cmd
 		}
 		return m, nil
 	case createpr.SubmitMsg:
@@ -382,6 +383,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// composeSuccessDismissMsg) reach it. The view guard prevents prDetail's
 		// spinner from ticking forever after the user navigates back to the dashboard.
 		var outCmds []tea.Cmd
+		if m.createPR != nil && m.createPR.Active() {
+			cmd := m.createPR.Update(msg)
+			outCmds = append(outCmds, cmd)
+		}
 		if m.prDetail != nil && m.currentView() == domain.PrimaryViewPRDetail {
 			next, cmd := m.prDetail.Update(msg)
 			m.prDetail = next

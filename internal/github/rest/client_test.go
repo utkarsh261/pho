@@ -330,8 +330,8 @@ func TestCreatePullRequestSuccess(t *testing.T) {
 			"body": "Description here",
 			"state": "open",
 			"html_url": "https://github.com/owner/repo/pull/42",
-			"head": "feature-branch",
-			"base": "main",
+			"head": {"ref": "feature-branch"},
+			"base": {"ref": "main"},
 			"draft": false,
 			"created_at": "2026-01-01T00:00:00Z",
 			"updated_at": "2026-01-01T00:00:00Z",
@@ -366,11 +366,11 @@ func TestCreatePullRequestSuccess(t *testing.T) {
 	if pr.HTMLURL != "https://github.com/owner/repo/pull/42" {
 		t.Errorf("expected html_url=%q, got %q", "https://github.com/owner/repo/pull/42", pr.HTMLURL)
 	}
-	if pr.HeadRefName != "feature-branch" {
-		t.Errorf("expected head=%q, got %q", "feature-branch", pr.HeadRefName)
+	if pr.Head.Ref != "feature-branch" {
+		t.Errorf("expected head=%q, got %q", "feature-branch", pr.Head.Ref)
 	}
-	if pr.BaseRefName != "main" {
-		t.Errorf("expected base=%q, got %q", "main", pr.BaseRefName)
+	if pr.Base.Ref != "main" {
+		t.Errorf("expected base=%q, got %q", "main", pr.Base.Ref)
 	}
 	if pr.IsDraft {
 		t.Error("expected draft=false")
@@ -387,8 +387,8 @@ func TestCreatePullRequestDraft(t *testing.T) {
 			"title": "WIP: Feature",
 			"state": "open",
 			"html_url": "https://github.com/owner/repo/pull/1",
-			"head": "wip-branch",
-			"base": "main",
+			"head": {"ref": "wip-branch"},
+			"base": {"ref": "main"},
 			"draft": true,
 			"created_at": "2026-01-01T00:00:00Z",
 			"updated_at": "2026-01-01T00:00:00Z",
@@ -428,8 +428,8 @@ func TestCreatePullRequestEmptyBody(t *testing.T) {
 			"title": "No body PR",
 			"state": "open",
 			"html_url": "https://github.com/owner/repo/pull/1",
-			"head": "branch",
-			"base": "main",
+			"head": {"ref": "branch"},
+			"base": {"ref": "main"},
 			"draft": false,
 			"created_at": "2026-01-01T00:00:00Z",
 			"updated_at": "2026-01-01T00:00:00Z",

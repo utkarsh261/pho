@@ -1,0 +1,31 @@
+              ╭──────────────────────────────────────────────────╮              
+              │                                                  │              
+              │  ┃ Base branch                                   │              
+              │  ┃ main                                          │              
+              │  ┃ feature                                       │              
+              │                                                  │              
+              │    Head branch                                   │              
+              │    > feature                                     │              
+              │      main                                        │              
+              │                                                  │              
+              │    Draft PR?                                     │              
+              │                                                  │              
+              │      Yes     No                                  │              
+              │                                                  │              
+              │    Title                                         │              
+              │    > Add feature                                 │              
+              │                                                  │              
+              │    Body                                          │              
+              │    Alt+Enter: newline  Ctrl+E: $EDITOR           │              
+              │                                                  │              
+              │                                                  │              
+              │                                                  │              
+              │                                                  │              
+              │                                                  │              
+              │                                                  │              
+              │                                                  │              
+              │  ↑ up • ↓ down • / filter • enter select         │              
+              │  ✗ validation failed                             │              
+              │  Ctrl+S: Create PR   Esc: Cancel                 │              
+              │                                                  │              
+              ╰──────────────────────────────────────────────────╯              

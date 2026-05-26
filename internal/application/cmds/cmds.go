@@ -184,16 +184,16 @@ type PRCreated struct {
 
 // CreatePRFormData carries the preflight information for the create-PR form.
 type CreatePRFormData struct {
-	Repo            domain.Repository
-	CurrentBranch   string
-	DefaultBase     string
-	LastCommitMsg   string
-	IsPushed        bool
-	IsFork          bool
-	ParentFullName  string // empty if not a fork
-	LocalBranches   []string
-	RemoteBranches  []string
-	Err             error
+	Repo           domain.Repository
+	CurrentBranch  string
+	DefaultBase    string
+	LastCommitMsg  string
+	IsPushed       bool
+	IsFork         bool
+	ParentFullName string // empty if not a fork
+	LocalBranches  []string
+	RemoteBranches []string
+	Err            error
 }
 
 type RefreshStarted struct {
@@ -557,8 +557,8 @@ func LoadCreatePRFormDataCmd(repo domain.Repository, svc PRService) tea.Cmd {
 			data.IsPushed = true
 		}
 
-		// Local branches
-		if out, err := execGit(repo.LocalPath, "branch", "--format=%(refname:short)"); err == nil {
+		// Local branches (sorted by most recent commit).
+		if out, err := execGit(repo.LocalPath, "branch", "--sort=-committerdate", "--format=%(refname:short)"); err == nil {
 			for _, b := range strings.Split(out, "\n") {
 				b = strings.TrimSpace(b)
 				if b != "" {
@@ -567,8 +567,8 @@ func LoadCreatePRFormDataCmd(repo domain.Repository, svc PRService) tea.Cmd {
 			}
 		}
 
-		// Remote branches
-		if out, err := execGit(repo.LocalPath, "branch", "-r", "--format=%(refname:short)"); err == nil {
+		// Remote branches (sorted by most recent commit).
+		if out, err := execGit(repo.LocalPath, "branch", "-r", "--sort=-committerdate", "--format=%(refname:short)"); err == nil {
 			for _, b := range strings.Split(out, "\n") {
 				b = strings.TrimSpace(b)
 				if b != "" && !strings.Contains(b, "HEAD ->") {
