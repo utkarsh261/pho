@@ -190,6 +190,68 @@ func (s *PRService) ReopenPR(ctx context.Context, repo domain.Repository, number
 	return nil
 }
 
+// FetchRepoInfo retrieves repository metadata via the REST API.
+func (s *PRService) FetchRepoInfo(ctx context.Context, repo domain.Repository) (domain.RepoInfo, error) {
+	defer s.logTimer("pr fetch repo info", pholog.FieldRepo, repo.FullName)()
+
+	info, err := s.REST.FetchRepoInfo(ctx, s.ownerName(repo), s.RepoName(repo))
+	if err != nil {
+		s.logWarn("fetch repo info failed", "repo", repo.FullName, "err", err)
+		return domain.RepoInfo{}, err
+	}
+
+	result := domain.RepoInfo{
+		DefaultBranch: info.DefaultBranch,
+		Fork:          info.Fork,
+	}
+	if info.Parent != nil {
+		result.ParentFullName = info.Parent.FullName
+	}
+	return result, nil
+}
+
+// CreatePR creates a new pull request via the REST API and returns its summary.
+func (s *PRService) CreatePR(ctx context.Context, params domain.CreatePRParams) (domain.PullRequestSummary, error) {
+	defer s.logTimer("pr create", pholog.FieldRepo, params.Repo.FullName)()
+
+	// Determine the target repo for the PR (upstream if fork).
+	targetOwner := s.ownerName(params.Repo)
+	targetRepo := s.RepoName(params.Repo)
+	repoFull := repoFullName(params.Repo)
+
+	pr, err := s.REST.CreatePullRequest(ctx, targetOwner, targetRepo, params)
+	if err != nil {
+		s.logWarn("create pr failed", "repo", repoFull, "err", err)
+		return domain.PullRequestSummary{}, err
+	}
+
+	createdAt, _ := time.Parse(time.RFC3339, pr.CreatedAt)
+	updatedAt, _ := time.Parse(time.RFC3339, pr.UpdatedAt)
+
+	summary := domain.PullRequestSummary{
+		ID:          "", // REST response doesn't include node_id; we'll leave it empty
+		Repo:        repoFull,
+		Number:      pr.Number,
+		Title:       pr.Title,
+		Author:      pr.User.Login,
+		State:       domain.PRState(pr.State),
+		IsDraft:     pr.IsDraft,
+		UpdatedAt:   updatedAt,
+		CreatedAt:   createdAt,
+		HeadRefName: pr.Head.Ref,
+		BaseRefName: pr.Base.Ref,
+	}
+
+	// Invalidate dashboard cache so the new PR appears.
+	dashKey := fmt.Sprintf("dashboard:v1:host=%s:repo=%s", params.Repo.Host, repoFull)
+	if delErr := s.Cache.Delete(ctx, dashKey); delErr != nil {
+		s.logWarn("create pr cache delete failed", "key", dashKey, "err", delErr)
+	}
+
+	s.logDebug("pr created", "repo", repoFull, "number", pr.Number)
+	return summary, nil
+}
+
 // UpdatePR updates the title and/or body of a PR and invalidates the preview cache.
 func (s *PRService) UpdatePR(ctx context.Context, repo domain.Repository, number int, prID string, title string, body string) error {
 	defer s.logTimer("pr update", pholog.FieldRepo, repo.FullName, pholog.FieldPRNumber, number)()

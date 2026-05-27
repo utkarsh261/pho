@@ -305,6 +305,12 @@ func (s *closeReopenPRService) ReopenPR(_ context.Context, _ domain.Repository, 
 func (s *closeReopenPRService) UpdatePR(_ context.Context, _ domain.Repository, _ int, _ string, _ string, _ string) error {
 	return nil
 }
+func (s *closeReopenPRService) CreatePR(_ context.Context, _ domain.CreatePRParams) (domain.PullRequestSummary, error) {
+	return domain.PullRequestSummary{}, nil
+}
+func (s *closeReopenPRService) FetchRepoInfo(_ context.Context, _ domain.Repository) (domain.RepoInfo, error) {
+	return domain.RepoInfo{}, nil
+}
 
 func makeCloseReopenModel(state domain.PRState) *PRDetailModel {
 	m := NewModel(domain.PullRequestSummary{

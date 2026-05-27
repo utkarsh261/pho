@@ -470,3 +470,9 @@ func (s *prServiceStub) ReopenPR(_ context.Context, _ domain.Repository, _ int, 
 func (s *prServiceStub) UpdatePR(_ context.Context, _ domain.Repository, _ int, _ string, _ string, _ string) error {
 	return nil
 }
+func (s *prServiceStub) CreatePR(_ context.Context, _ domain.CreatePRParams) (domain.PullRequestSummary, error) {
+	return domain.PullRequestSummary{}, nil
+}
+func (s *prServiceStub) FetchRepoInfo(_ context.Context, _ domain.Repository) (domain.RepoInfo, error) {
+	return domain.RepoInfo{}, nil
+}

@@ -320,6 +320,7 @@ func buildDashboardBindings(ctx Context) []Group {
 	groups = append(groups, Group{
 		Name: "Actions",
 		Bindings: []Binding{
+			{Key: "n", Description: "Create pull request"},
 			{Key: "o", Description: "Open in browser"},
 			{Key: "R", Description: "Refresh"},
 		},

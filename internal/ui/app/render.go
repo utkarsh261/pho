@@ -35,7 +35,12 @@ func (m *Model) composeBody(height int) string {
 		columns = append(columns, panelCol{contentW: w, view: m.repoColumnView(height), focus: domain.FocusRepoPanel})
 	}
 	if w := m.layout.Current.PR; w > 0 {
-		columns = append(columns, panelCol{contentW: w, view: m.prList.View(), focus: domain.FocusPRListPanel})
+		// When create-PR overlay is active, render it inside the middle panel.
+		if m.createPR != nil && m.createPR.Active() {
+			columns = append(columns, panelCol{contentW: w, view: m.createPR.PanelView(w, height-2), focus: domain.FocusPRListPanel})
+		} else {
+			columns = append(columns, panelCol{contentW: w, view: m.prList.View(), focus: domain.FocusPRListPanel})
+		}
 	}
 	if w := m.layout.Current.Preview; w > 0 {
 		columns = append(columns, panelCol{contentW: w, view: m.preview.View(), focus: domain.FocusPreviewPanel})

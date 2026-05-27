@@ -1,0 +1,21 @@
+Repo  PR #1               ╭──────────────────────────────────────────────────╮              
+Repo  PR #1               │                                                  │              
+Repo  PR #1               │  ┃ Base branch                                   │              
+Repo  PR #1               │  ┃ ← main →                                      │              
+Repo  PR #1               │                                                  │              
+Repo  PR #1               │    Head branch                                   │              
+Repo  PR #1               │    feature                                       │              
+Repo  PR #1               │                                                  │              
+Repo  PR #1               │    Draft PR? Yes  No                             │              
+Repo  PR #1               │                                                  │              
+Repo  PR #1               │    Title                                         │              
+Repo  PR #1               │    > Add feature                                 │              
+Repo  PR #1               │                                                  │              
+Repo  PR #1               │    Body                                          │              
+Repo  PR #1               │    Alt+Enter: newline  Ctrl+E: $EDITOR           │              
+Repo  PR #1               │                                                  │              
+Repo  PR #1               │                                                  │              
+Repo  PR #1               │                                                  │              
+Repo  PR #1               │                                                  │              
+Repo  PR #1               │                                                  │              
+                          │   Create PR                                      │              

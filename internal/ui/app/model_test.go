@@ -14,6 +14,7 @@ import (
 	"github.com/utkarsh261/pho/internal/diff/model"
 	"github.com/utkarsh261/pho/internal/domain"
 	"github.com/utkarsh261/pho/internal/testutil"
+	"github.com/utkarsh261/pho/internal/ui/components/createpr"
 	"github.com/utkarsh261/pho/internal/ui/components/overlay"
 	"github.com/utkarsh261/pho/internal/ui/keymap"
 	"github.com/utkarsh261/pho/internal/ui/views/dashboard"
@@ -208,6 +209,12 @@ func (s *stubPRService) LoadPRCommits(_ context.Context, _ domain.Repository, _ 
 }
 func (s *stubPRService) LoadCommitDiff(_ context.Context, _ domain.Repository, _ string, _ bool) (model.DiffModel, error) {
 	return model.DiffModel{}, nil
+}
+func (s *stubPRService) CreatePR(_ context.Context, _ domain.CreatePRParams) (domain.PullRequestSummary, error) {
+	return domain.PullRequestSummary{}, nil
+}
+func (s *stubPRService) FetchRepoInfo(_ context.Context, _ domain.Repository) (domain.RepoInfo, error) {
+	return domain.RepoInfo{}, nil
 }
 
 func TestColdStartThenDashboardLoadedPopulates(t *testing.T) {
@@ -1740,4 +1747,201 @@ func TestOpenPRDetailSavesViewedHistory(t *testing.T) {
 	if viewedStore.data[key][0].Number != 1 {
 		t.Fatalf("expected saved PR #1, got #%d", viewedStore.data[key][0].Number)
 	}
+}
+
+func TestOpenCreatePROverlayOpensOverlay(t *testing.T) {
+	t.Parallel()
+
+	repo := testutil.Repo("owner/repo")
+	m := newTestModel([]domain.Repository{repo}, map[string]domain.DashboardSnapshot{
+		repo.FullName: testutil.DashboardSnap(repo, pr(repo.FullName, 1, "feat/one")),
+	})
+	m.state.Repos.SelectedRepo = &repo
+
+	cmd := m.openCreatePROverlay()
+	if cmd == nil {
+		t.Fatal("expected command to load form data")
+	}
+
+	if m.createPR == nil {
+		t.Fatal("expected createPR model to be initialized")
+	}
+	if !m.createPR.Active() {
+		t.Error("expected overlay to be active")
+	}
+}
+
+func TestOpenCreatePROverlayNoSelectedRepo(t *testing.T) {
+	t.Parallel()
+
+	m := newTestModel(nil, nil)
+
+	cmd := m.openCreatePROverlay()
+	if cmd != nil {
+		t.Error("expected nil command when no repo selected")
+	}
+	if m.createPR != nil && m.createPR.Active() {
+		t.Error("expected overlay to not be active")
+	}
+}
+
+func TestHandleCreatePRFormData(t *testing.T) {
+	t.Parallel()
+
+	repo := testutil.Repo("owner/repo")
+	m := newTestModel([]domain.Repository{repo}, nil)
+	m.state.Repos.SelectedRepo = &repo
+
+	// Open the overlay.
+	_ = m.openCreatePROverlay()
+
+	// Simulate form data loaded.
+	formData := cmds.CreatePRFormData{
+		DefaultBase:   "main",
+		CurrentBranch: "feature",
+		LastCommitMsg: "Add feature",
+		LocalBranches: []string{"main", "feature"},
+	}
+	next, _ := m.Update(formData)
+	m = next.(*Model)
+
+	if !m.createPR.Active() {
+		t.Error("expected overlay to remain active")
+	}
+}
+
+func TestHandleCreatePRSubmit(t *testing.T) {
+	t.Parallel()
+
+	repo := testutil.Repo("owner/repo")
+	m := newTestModel([]domain.Repository{repo}, nil)
+	m.state.Repos.SelectedRepo = &repo
+
+	// Open the overlay and set form data.
+	_ = m.openCreatePROverlay()
+	formData := cmds.CreatePRFormData{
+		DefaultBase:   "main",
+		CurrentBranch: "feature",
+		LastCommitMsg: "Add feature",
+		LocalBranches: []string{"main", "feature"},
+	}
+	next, _ := m.Update(formData)
+	m = next.(*Model)
+
+	// Simulate submit message.
+	// Note: The form needs to be properly initialized for Submit() to work.
+	// Since huh forms require bubbletea runtime, we test the message handling path.
+	// The overlay will try to Submit() which will fail validation (form not fully init),
+	// but we can verify the error handling path.
+	next, _ = m.Update(createprSubmitMsg())
+	m = next.(*Model)
+
+	// Overlay should be in error state or submitting state.
+	if !m.createPR.Active() {
+		t.Error("expected overlay to remain active after submit attempt")
+	}
+}
+
+func TestHandlePRCreatedSuccess(t *testing.T) {
+	t.Parallel()
+
+	repo := testutil.Repo("owner/repo")
+	m := newTestModel([]domain.Repository{repo}, nil)
+	m.state.Repos.SelectedRepo = &repo
+
+	// Open the overlay.
+	_ = m.openCreatePROverlay()
+
+	// Simulate successful PR creation.
+	summary := domain.PullRequestSummary{
+		Number: 42,
+		Title:  "New PR",
+		Repo:   repo.FullName,
+	}
+	prCreated := cmds.PRCreated{
+		Repo:    repo.FullName,
+		Summary: summary,
+	}
+	next, cmd := m.Update(prCreated)
+	m = next.(*Model)
+
+	// Overlay should be closed.
+	if m.createPR.Active() {
+		t.Error("expected overlay to be closed after successful PR creation")
+	}
+	// Should have a command to open PR detail.
+	if cmd == nil {
+		t.Error("expected command to open PR detail after successful creation")
+	}
+}
+
+func TestHandlePRCreatedError(t *testing.T) {
+	t.Parallel()
+
+	repo := testutil.Repo("owner/repo")
+	m := newTestModel([]domain.Repository{repo}, nil)
+	m.state.Repos.SelectedRepo = &repo
+
+	// Open the overlay.
+	_ = m.openCreatePROverlay()
+
+	// Simulate failed PR creation.
+	prCreated := cmds.PRCreated{
+		Repo: repo.FullName,
+		Err:  fmt.Errorf("validation failed"),
+	}
+	next, _ := m.Update(prCreated)
+	m = next.(*Model)
+
+	// Overlay should still be active (showing error).
+	if !m.createPR.Active() {
+		t.Error("expected overlay to remain active after error")
+	}
+}
+
+func TestHandleCreatePRCancel(t *testing.T) {
+	t.Parallel()
+
+	repo := testutil.Repo("owner/repo")
+	m := newTestModel([]domain.Repository{repo}, nil)
+	m.state.Repos.SelectedRepo = &repo
+
+	// Open the overlay.
+	_ = m.openCreatePROverlay()
+
+	// Simulate cancel message.
+	next, _ := m.Update(createprCancelMsg())
+	m = next.(*Model)
+
+	// Overlay should be closed.
+	if m.createPR.Active() {
+		t.Error("expected overlay to be closed after cancel")
+	}
+}
+
+func TestCreatePRKeymapAction(t *testing.T) {
+	t.Parallel()
+
+	repo := testutil.Repo("owner/repo")
+	m := newTestModel([]domain.Repository{repo}, nil)
+	m.state.Repos.SelectedRepo = &repo
+	m.state.Session.ViewerByHost["github.com"] = "octocat"
+
+	// Simulate keymap.CreatePR action via handleRootAction.
+	cmd := m.handleRootAction(keymap.CreatePR{})
+
+	if cmd == nil {
+		t.Error("expected command from CreatePR action")
+	}
+	if m.createPR == nil || !m.createPR.Active() {
+		t.Error("expected overlay to be active after CreatePR action")
+	}
+}
+
+func createprSubmitMsg() tea.Msg {
+	return createpr.SubmitMsg{}
+}
+
+func createprCancelMsg() tea.Msg {
+	return createpr.CancelMsg{}
 }

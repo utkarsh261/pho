@@ -404,6 +404,23 @@ const (
 	PrimaryViewCommitDetail PrimaryView = "commit_detail"
 )
 
+// CreatePRParams holds the user-supplied data for creating a new pull request.
+type CreatePRParams struct {
+	Repo  Repository
+	Title string
+	Body  string
+	Head  string // branch name (with fork-owner prefix if needed)
+	Base  string
+	Draft bool
+}
+
+// RepoInfo holds metadata about a GitHub repository.
+type RepoInfo struct {
+	DefaultBranch  string
+	Fork           bool
+	ParentFullName string // empty if not a fork
+}
+
 type OverlayView string
 
 const (
