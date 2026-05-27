@@ -1,7 +1,7 @@
               ╭──────────────────────────────────────────────────╮              
               │                                                  │              
-              │  ┃ Base branch                                   │              
-              │  ┃ ← main →                                      │              
+              │    Base branch                                   │              
+              │    main                                          │              
               │                                                  │              
               │    Head branch                                   │              
               │    feature                                       │              
@@ -18,8 +18,8 @@
               │                                                  │              
               │                                                  │              
               │                                                  │              
-              │   Create PR                                      │              
+              │                      Create PR                   │              
               │                                                  │              
-              │  ← left • → right • / filter • enter select      │              
+              │  shift+tab back • enter submit                   │              
               │                                                  │              
               ╰──────────────────────────────────────────────────╯              

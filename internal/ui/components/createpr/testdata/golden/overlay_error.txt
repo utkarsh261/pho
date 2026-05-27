@@ -1,16 +1,12 @@
               ╭──────────────────────────────────────────────────╮              
               │                                                  │              
               │  ┃ Base branch                                   │              
-              │  ┃ main                                          │              
-              │  ┃ feature                                       │              
+              │  ┃ ← main →                                      │              
               │                                                  │              
               │    Head branch                                   │              
-              │    > feature                                     │              
-              │      main                                        │              
+              │    feature                                       │              
               │                                                  │              
-              │    Draft PR?                                     │              
-              │                                                  │              
-              │      Yes     No                                  │              
+              │    Draft PR? Yes  No                             │              
               │                                                  │              
               │    Title                                         │              
               │    > Add feature                                 │              
@@ -22,10 +18,9 @@
               │                                                  │              
               │                                                  │              
               │                                                  │              
+              │   Create PR                                      │              
               │                                                  │              
-              │                                                  │              
-              │  ↑ up • ↓ down • / filter • enter select         │              
+              │  ← left • → right • / filter • enter select      │              
               │  ✗ validation failed                             │              
-              │  Ctrl+S: Create PR   Esc: Cancel                 │              
               │                                                  │              
               ╰──────────────────────────────────────────────────╯              

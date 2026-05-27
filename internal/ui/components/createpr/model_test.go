@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/utkarsh261/pho/internal/application/cmds"
 	"github.com/utkarsh261/pho/internal/domain"
@@ -95,6 +96,36 @@ func TestOverlayViewIdleSnapshot(t *testing.T) {
 	checkGolden(t, stripANSI(view), "overlay_idle.txt")
 }
 
+func TestPanelViewIdleSnapshot(t *testing.T) {
+	t.Parallel()
+
+	m := NewModel()
+	repo := domain.Repository{FullName: "owner/repo"}
+	m.Open(repo)
+	m.SetTheme(theme.Default())
+
+	data := cmds.CreatePRFormData{
+		DefaultBase:    "main",
+		CurrentBranch:  "feature",
+		LastCommitMsg:  "Add feature",
+		LocalBranches:  []string{"main", "feature", "fix"},
+		RemoteBranches: []string{"origin/main", "origin/feature"},
+	}
+	m.SetFormData(data)
+
+	view := m.PanelView(80, 24)
+	if hasBrokenANSI(view) {
+		t.Fatal("panel idle view contains broken ANSI sequences")
+	}
+	clean := stripANSI(view)
+	for i, line := range strings.Split(clean, "\n") {
+		if lipgloss.Width(line) > 80 {
+			t.Errorf("panel idle: line %d exceeds width (80): %q", i, line)
+		}
+	}
+	checkGolden(t, clean, "panel_idle.txt")
+}
+
 func TestOverlayViewErrorSnapshot(t *testing.T) {
 	t.Parallel()
 
@@ -160,6 +191,73 @@ func TestOverlayViewOverInactiveReturnsBackground(t *testing.T) {
 	result := m.ViewOver(bg)
 	if result != bg {
 		t.Errorf("expected background unchanged when inactive, got %q", result)
+	}
+}
+
+// focusField sends Tab to the form until it reaches the target field,
+// runs any returned commands, and returns the view.
+func focusField(t *testing.T, m *Model, targetKey string) string {
+	t.Helper()
+	// Huh forms have 5 fields: base, head, draft, title, body.
+	// We iterate up to 10 times to be safe.
+	for i := 0; i < 10; i++ {
+		cmd := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+		if cmd != nil {
+			msg := cmd()
+			// Feed the message back into the model.
+			cmd2 := m.Update(msg)
+			if cmd2 != nil {
+				cmd2()
+			}
+		}
+		if m.form != nil {
+			f := m.form.GetFocusedField()
+			if f != nil && f.GetKey() == targetKey {
+				break
+			}
+		}
+	}
+	return m.View()
+}
+
+func TestFormFieldFocusSnapshots(t *testing.T) {
+	t.Parallel()
+
+	m := NewModel()
+	repo := domain.Repository{FullName: "owner/repo"}
+	m.Open(repo)
+	m.SetSize(80, 24)
+	m.SetTheme(theme.Default())
+
+	data := cmds.CreatePRFormData{
+		DefaultBase:    "main",
+		CurrentBranch:  "feature",
+		LastCommitMsg:  "Add feature",
+		LocalBranches:  []string{"main", "feature", "fix"},
+		RemoteBranches: []string{"origin/main", "origin/feature"},
+	}
+	if cmd := m.SetFormData(data); cmd != nil {
+		msg := cmd()
+		cmd2 := m.Update(msg)
+		if cmd2 != nil {
+			cmd2()
+		}
+	}
+
+	fields := []string{"base", "head", "draft", "title", "body"}
+	for _, key := range fields {
+		view := focusField(t, m, key)
+		if hasBrokenANSI(view) {
+			t.Fatalf("focus %s: broken ANSI", key)
+		}
+		// Strip ANSI and check every line fits within the 80-col overlay.
+		clean := stripANSI(view)
+		for i, line := range strings.Split(clean, "\n") {
+			if lipgloss.Width(line) > 80 {
+				t.Errorf("focus %s: line %d exceeds panel width (80): %q", key, i, line)
+			}
+		}
+		checkGolden(t, clean, fmt.Sprintf("focus_%s.txt", key))
 	}
 }
 

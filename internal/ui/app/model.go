@@ -339,6 +339,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case cmds.CreatePRFormData:
 		if m.createPR != nil && m.createPR.Active() {
 			cmd := m.createPR.SetFormData(msg)
+			m.syncStatus()
 			return m, cmd
 		}
 		return m, nil
@@ -347,9 +348,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			params, err := m.createPR.Submit()
 			if err != nil {
 				m.createPR.SetError(err)
+				m.syncStatus()
 				return m, nil
 			}
 			m.createPR.SetSubmitting()
+			m.syncStatus()
 			return m, cmds.CreatePRCmd(m.deps.PR, params)
 		}
 		return m, nil
@@ -357,6 +360,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.createPR != nil && m.createPR.Active() {
 			if msg.Err != nil {
 				m.createPR.SetError(msg.Err)
+				m.syncStatus()
 				return m, nil
 			}
 			m.createPR.Close()
@@ -372,6 +376,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.createPR != nil {
 			m.createPR.Close()
 		}
+		m.syncStatus()
 		return m, nil
 	default:
 		// Always route unknown messages through applyMessage so dashboard state
@@ -447,9 +452,6 @@ func (m *Model) View() string {
 		bg = m.renderDashboard()
 	}
 
-	if m.createPR != nil && m.createPR.Active() {
-		return m.createPR.ViewOver(bg)
-	}
 	if m.keymapOverlay.Visible {
 		return m.keymapOverlay.ViewOver(bg)
 	}
@@ -1250,7 +1252,9 @@ func (m *Model) syncStatus() {
 	} else {
 		m.status.SelectedRepo = ""
 	}
-	if m.currentView() == domain.PrimaryViewPRDetail && m.prDetail != nil {
+	if m.createPR != nil && m.createPR.Active() {
+		m.status.HintOverride = "Tab: Next field   ←/→: Change option   Ctrl+S: Create PR   Esc: Cancel"
+	} else if m.currentView() == domain.PrimaryViewPRDetail && m.prDetail != nil {
 		m.status.HintOverride = m.prDetail.StatusHint()
 	} else if m.currentView() == domain.PrimaryViewCommitDetail && m.commitDetail != nil {
 		m.status.HintOverride = m.commitDetail.StatusHint()
@@ -1617,6 +1621,7 @@ func (m *Model) openCreatePROverlay() tea.Cmd {
 	}
 	m.createPR.SetSize(m.layout.Current.Width, m.layout.Current.Height)
 	m.createPR.Open(repo)
+	m.syncStatus()
 	return cmds.LoadCreatePRFormDataCmd(repo, m.deps.PR)
 }
 

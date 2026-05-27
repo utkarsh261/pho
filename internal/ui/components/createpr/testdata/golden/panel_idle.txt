@@ -1,0 +1,24 @@
+▸ Create PR                                                                     
+owner/repo  •  feature → main                                                   
+
+┃ Base branch                                                                 
+┃ ← main →                                                                    
+                                                                              
+  Head branch                                                                 
+  feature                                                                     
+                                                                              
+  Draft PR? Yes  No                                                           
+                                                                              
+  Title                                                                       
+  > Add feature                                                               
+                                                                              
+  Body                                                                        
+  Alt+Enter: newline  Ctrl+E: $EDITOR                                         
+                                                                              
+                                                                              
+                                                                              
+                                                                              
+                                                                              
+ Create PR                                                                   
+
+Tab: Next field   ←/→: Change option   Ctrl+S: Create PR   Esc: Cancel          

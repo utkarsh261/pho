@@ -402,7 +402,6 @@ const (
 	PrimaryViewDashboard    PrimaryView = "dashboard"
 	PrimaryViewPRDetail     PrimaryView = "pr_detail"
 	PrimaryViewCommitDetail PrimaryView = "commit_detail"
-	PrimaryViewCreatePR     PrimaryView = "create_pr"
 )
 
 // CreatePRParams holds the user-supplied data for creating a new pull request.
@@ -413,12 +412,6 @@ type CreatePRParams struct {
 	Head  string // branch name (with fork-owner prefix if needed)
 	Base  string
 	Draft bool
-}
-
-// CreatePRResult holds the outcome of a create-PR attempt.
-type CreatePRResult struct {
-	Summary PullRequestSummary
-	Err     error
 }
 
 // RepoInfo holds metadata about a GitHub repository.
