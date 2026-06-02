@@ -649,7 +649,7 @@ func TestLeftPanelFullUIRender(t *testing.T) {
 
 	out := stripANSI(m.View(20, "⠋"))
 	expected := `┌────────────────────────────────────────┐
-│  FILES                                 │
+│  FILES                         +10 -4  │
 ├────────────────────────────────────────┤
 │   cmd/main.go                    +5 -2 │
 │   internal/app/app.go            +5 -2 │
@@ -937,5 +937,169 @@ func TestEscFromCIGoesToFiles(t *testing.T) {
 	m = pressKey(m, "esc")
 	if m.leftPanel.Focus != FocusFiles {
 		t.Errorf("expected Esc from CI to move to Files, got %v", m.leftPanel.Focus)
+	}
+}
+
+// ─── Header totals tests ─────────────────────────────────────────────────────
+
+func TestLeftPanelFilesHeaderShowsTotals(t *testing.T) {
+	t.Parallel()
+	files := []diffmodel.DiffFile{
+		{OldPath: "a.go", NewPath: "a.go", Status: "modified", Additions: 5, Deletions: 2},
+		{OldPath: "b.go", NewPath: "b.go", Status: "modified", Additions: 2, Deletions: 1},
+	}
+	panel := makePanelWithFiles(files, FocusFiles)
+	out := stripANSI(panel.View(12, "⠋"))
+
+	if !strings.Contains(out, "+7") || !strings.Contains(out, "-3") {
+		t.Errorf("expected aggregate +7 -3 in FILES header, got:\n%s", out)
+	}
+}
+
+func TestLeftPanelFilesHeaderNoStatsWhenLoading(t *testing.T) {
+	t.Parallel()
+	files := makeFiles("a.go", "b.go")
+	panel := makePanelWithFiles(files, FocusFiles)
+	panel.Loading = true
+	out := stripANSI(panel.View(12, "⠋"))
+
+	var headerLine string
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "FILES") {
+			headerLine = line
+			break
+		}
+	}
+	if headerLine == "" {
+		t.Fatal("expected FILES header line")
+	}
+	if strings.Contains(headerLine, "+") || strings.Contains(headerLine, "-") {
+		t.Errorf("expected no stats in header while loading, got: %s", headerLine)
+	}
+	if !strings.Contains(out, "⠋") {
+		t.Errorf("expected spinner frame in loading output")
+	}
+}
+
+func TestLeftPanelFilesHeaderNoStatsWhenEmpty(t *testing.T) {
+	t.Parallel()
+	panel := makePanelWithFiles(nil, FocusFiles)
+	out := stripANSI(panel.View(12, "⠋"))
+
+	var headerLine string
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "FILES") {
+			headerLine = line
+			break
+		}
+	}
+	if headerLine == "" {
+		t.Fatal("expected FILES header line")
+	}
+	if strings.Contains(headerLine, "+") || strings.Contains(headerLine, "-") {
+		t.Errorf("expected no stats in header when empty, got: %s", headerLine)
+	}
+	if !strings.Contains(out, "no files") {
+		t.Errorf("expected 'no files' in empty panel output, got:\n%s", out)
+	}
+}
+
+func TestLeftPanelFilesHeaderLargeNumbersTruncated(t *testing.T) {
+	t.Parallel()
+	files := []diffmodel.DiffFile{
+		{OldPath: "a.go", NewPath: "a.go", Status: "modified", Additions: 99999999, Deletions: 99999999},
+	}
+	panel := makePanelWithFiles(files, FocusFiles)
+	out := panel.View(12, "⠋")
+
+	var headerLine string
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "FILES") {
+			headerLine = line
+			break
+		}
+	}
+	if headerLine == "" {
+		t.Fatal("expected FILES header line")
+	}
+	plain := stripANSI(headerLine)
+	if !strings.Contains(plain, "…") {
+		t.Errorf("expected truncated stats with … in header, got: %s", plain)
+	}
+}
+
+func TestLeftPanelInactiveHeaderContainsColoredANSI(t *testing.T) {
+	t.Parallel()
+	files := makeFiles("a.go", "b.go")
+	panel := makePanelWithFiles(files, FocusCI)
+	out := panel.View(12, "⠋")
+
+	var headerLine string
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "FILES") {
+			headerLine = line
+			break
+		}
+	}
+	if headerLine == "" {
+		t.Fatal("expected FILES header line")
+	}
+	if !strings.Contains(headerLine, "\x1b[") {
+		t.Errorf("expected inactive header to contain ANSI codes for colored stats, got plain: %q", headerLine)
+	}
+}
+
+func TestLeftPanelActiveHeaderPlainNoColoredANSI(t *testing.T) {
+	t.Parallel()
+	files := makeFiles("a.go", "b.go")
+	panel := makePanelWithFiles(files, FocusFiles)
+	out := panel.View(12, "⠋")
+
+	var headerLine string
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "FILES") {
+			headerLine = line
+			break
+		}
+	}
+	if headerLine == "" {
+		t.Fatal("expected FILES header line")
+	}
+	// The theme's Additions color is Success = #10B981 → \x1b[38;2;16;185;129m
+	// The theme's Deletions color is Error = #EF4444 → \x1b[38;2;239;68;68m
+	if strings.Contains(headerLine, "16;185;129") || strings.Contains(headerLine, "239;68;68") {
+		t.Errorf("expected active header stats to be plain (no green/red ANSI), got: %q", headerLine)
+	}
+}
+
+func TestLeftPanelInactiveHeaderTotalsRightAligned(t *testing.T) {
+	t.Parallel()
+	files := makeFiles("cmd/main.go", "internal/app/app.go")
+	checks := makeChecks("build", "lint")
+	m := makePanelWithChecks(checks)
+	m.Files = files
+	m.Focus = FocusCI
+
+	out := stripANSI(m.View(20, "⠋"))
+	lines := strings.Split(out, "\n")
+
+	var headerLine string
+	for _, line := range lines {
+		if strings.Contains(line, "FILES") {
+			headerLine = line
+			break
+		}
+	}
+	if headerLine == "" {
+		t.Fatal("expected FILES header line")
+	}
+	plain := stripANSI(headerLine)
+	if !strings.Contains(plain, "+10") || !strings.Contains(plain, "-4") {
+		t.Errorf("expected +10 -4 in inactive FILES header, got: %s", plain)
+	}
+	// Stats should appear near the right edge (after at least 20 chars of space)
+	idx := strings.Index(plain, "+10")
+	if idx < 20 {
+		t.Errorf("expected stats right-aligned in header, got early position %d: %s", idx, plain)
 	}
 }

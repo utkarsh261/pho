@@ -640,3 +640,27 @@ func TestEnterOnFileNotInFileFocusIsNoop(t *testing.T) {
 		t.Errorf("expected FocusContent unchanged, got %v", m.leftPanel.Focus)
 	}
 }
+
+// ─── Narrow mode totals ──────────────────────────────────────────────────────
+
+func TestNarrowBodyShowsTotalsWhenDiffLoaded(t *testing.T) {
+	t.Parallel()
+	files := makeFilesWithDisplayRows(2, 10)
+	m := makePRDetail(79, 30, files, nil)
+	m.Detail = makeDetailWithBody("")
+	m.Diff = makeDiff(files)
+	m.Diff.Stats.TotalAdditions = 10
+	m.Diff.Stats.TotalDeletions = 4
+	m.DiffLoading = false
+	m.DetailLoading = false
+	m.leftPanel.Focus = FocusContent
+	m.SetTheme(theme.Default())
+
+	out := plainText(m.View())
+	if !strings.Contains(out, "files changed") {
+		t.Errorf("expected 'files changed' in narrow mode output; got:\n%s", out)
+	}
+	if !strings.Contains(out, "+10") || !strings.Contains(out, "-4") {
+		t.Errorf("expected aggregate stats in narrow mode output; got:\n%s", out)
+	}
+}
