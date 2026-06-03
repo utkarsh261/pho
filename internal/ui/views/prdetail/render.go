@@ -303,7 +303,14 @@ func (m *PRDetailModel) renderNarrowBody(width, height int) string {
 	} else if m.Detail != nil {
 		fileCount = m.Detail.FileCount
 	}
-	header := fmt.Sprintf("  %d files changed", fileCount)
+
+	var header string
+	if m.Diff != nil {
+		header = fmt.Sprintf("  %d files changed  +%d -%d",
+			fileCount, m.Diff.Stats.TotalAdditions, m.Diff.Stats.TotalDeletions)
+	} else {
+		header = fmt.Sprintf("  %d files changed", fileCount)
+	}
 	if height <= 1 {
 		return lipgloss.NewStyle().Width(width).Render(header)
 	}

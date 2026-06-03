@@ -53,6 +53,47 @@ func (m *LeftPanelModel) SetTheme(th *theme.Theme) {
 	m.theme = th
 }
 
+// renderFilesHeaderLabel builds the FILES header label, optionally including
+// aggregate stats right-aligned. Active tab uses plain stats to avoid ANSI
+// reset codes wiping the background highlight; inactive tab uses colored stats.
+func (m *LeftPanelModel) renderFilesHeaderLabel(totalAdd, totalDel int) string {
+	hasStats := len(m.Files) > 0 && !m.Loading
+	if !hasStats {
+		label := "FILES"
+		if m.theme != nil {
+			if m.Focus == FocusFiles {
+				return m.theme.TabActive.Render(label)
+			}
+			return m.theme.TabInactive.Render(label)
+		}
+		if m.Focus == FocusFiles {
+			return "[" + label + "]"
+		}
+		return label
+	}
+
+	if m.theme != nil {
+		if m.Focus == FocusFiles {
+			statsPlain := formatFileStats(totalAdd, totalDel)
+			gap := max((lpInner-2)-len([]rune("FILES"))-lpStatsWidth, 0)
+			content := "FILES" + strings.Repeat(" ", gap) + statsPlain
+			return m.theme.TabActive.Render(content)
+		}
+		labelStyled := m.theme.TabInactive.Render("FILES")
+		statsColored := formatFileStatsColored(totalAdd, totalDel, m.theme)
+		gap := max(lpInner-lipgloss.Width(labelStyled)-lpStatsWidth, 0)
+		return labelStyled + strings.Repeat(" ", gap) + statsColored
+	}
+
+	statsPlain := formatFileStats(totalAdd, totalDel)
+	gap := max((lpInner-2)-len([]rune("FILES"))-lpStatsWidth, 0)
+	content := "FILES" + strings.Repeat(" ", gap) + statsPlain
+	if m.Focus == FocusFiles {
+		return "[" + content + "]"
+	}
+	return content
+}
+
 // View renders the left panel into a string of LeftPanelWidth columns.
 // height is the total outer row count available for the left panel.
 // spinnerFrame is the current animation frame from PRDetailModel's spinner.
@@ -80,18 +121,13 @@ func (m *LeftPanelModel) renderFilesArea(outerHeight int, spinnerFrame string) s
 	// subtract top border, title, mid border, bottom border
 	innerH := max(outerHeight-4, 1)
 
-	tabLabel := "FILES"
-	if m.theme != nil {
-		if m.Focus == FocusFiles {
-			tabLabel = m.theme.TabActive.Render(tabLabel)
-		} else {
-			tabLabel = m.theme.TabInactive.Render(tabLabel)
-		}
-	} else {
-		if m.Focus == FocusFiles {
-			tabLabel = "[" + tabLabel + "]"
-		}
+	totalAdd, totalDel := 0, 0
+	for _, f := range m.Files {
+		totalAdd += f.Additions
+		totalDel += f.Deletions
 	}
+
+	tabLabel := m.renderFilesHeaderLabel(totalAdd, totalDel)
 
 	var rows []string
 	if m.Loading {
