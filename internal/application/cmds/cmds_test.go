@@ -304,6 +304,70 @@ func TestPostCommentCmd(t *testing.T) {
 	})
 }
 
+func TestPostCommentReplyCmd(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		svc := &prService{postCommentReplyFn: func(ctx context.Context, repo domain.Repository, prID, commentID, body string) error {
+			if prID != "PR_abc123" || commentID != "c1" || body != "hello" {
+				t.Fatalf("postCommentReply args prID=%q commentID=%q body=%q", prID, commentID, body)
+			}
+			return nil
+		}}
+
+		msg := run(t, cmds.PostCommentReplyCmd(svc, domain.Repository{}, "PR_abc123", "c1", "hello"))
+		if _, ok := msg.(cmds.CommentPosted); !ok {
+			t.Fatalf("message type = %T, want cmds.CommentPosted", msg)
+		}
+	})
+
+	t.Run("failure", func(t *testing.T) {
+		wantErr := errors.New("403 Forbidden")
+		svc := &prService{postCommentReplyFn: func(ctx context.Context, repo domain.Repository, prID, commentID, body string) error {
+			return wantErr
+		}}
+
+		msg := run(t, cmds.PostCommentReplyCmd(svc, domain.Repository{}, "PR_abc123", "c1", "hello"))
+		got, ok := msg.(cmds.CommentFailed)
+		if !ok {
+			t.Fatalf("message type = %T, want cmds.CommentFailed", msg)
+		}
+		if !errors.Is(got.Err, wantErr) {
+			t.Fatalf("err = %v, want %v", got.Err, wantErr)
+		}
+	})
+}
+
+func TestPostThreadReplyCmd(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		svc := &prService{postThreadReplyFn: func(ctx context.Context, repo domain.Repository, threadID, body string) error {
+			if threadID != "t1" || body != "hello" {
+				t.Fatalf("postThreadReply args threadID=%q body=%q", threadID, body)
+			}
+			return nil
+		}}
+
+		msg := run(t, cmds.PostThreadReplyCmd(svc, domain.Repository{}, "t1", "hello"))
+		if _, ok := msg.(cmds.CommentPosted); !ok {
+			t.Fatalf("message type = %T, want cmds.CommentPosted", msg)
+		}
+	})
+
+	t.Run("failure", func(t *testing.T) {
+		wantErr := errors.New("403 Forbidden")
+		svc := &prService{postThreadReplyFn: func(ctx context.Context, repo domain.Repository, threadID, body string) error {
+			return wantErr
+		}}
+
+		msg := run(t, cmds.PostThreadReplyCmd(svc, domain.Repository{}, "t1", "hello"))
+		got, ok := msg.(cmds.CommentFailed)
+		if !ok {
+			t.Fatalf("message type = %T, want cmds.CommentFailed", msg)
+		}
+		if !errors.Is(got.Err, wantErr) {
+			t.Fatalf("err = %v, want %v", got.Err, wantErr)
+		}
+	})
+}
+
 func TestFetchAllPRsPageCmd(t *testing.T) {
 	repoArg := repo("org/myrepo")
 	entries := []domain.PullRequestSummary{
@@ -435,7 +499,9 @@ func repo(full string) domain.Repository {
 }
 
 type prService struct {
-	postCommentFn func(ctx context.Context, repo domain.Repository, prID, body string) error
+	postCommentFn      func(ctx context.Context, repo domain.Repository, prID, body string) error
+	postCommentReplyFn func(ctx context.Context, repo domain.Repository, prID, commentID, body string) error
+	postThreadReplyFn  func(ctx context.Context, repo domain.Repository, threadID, body string) error
 }
 
 func (s *prService) LoadDetail(_ context.Context, _ domain.Repository, _ int, _ bool) (domain.PRPreviewSnapshot, bool, error) {
@@ -451,6 +517,20 @@ func (s *prService) PostComment(ctx context.Context, repo domain.Repository, prI
 		panic("prService.PostComment called but postCommentFn is nil")
 	}
 	return s.postCommentFn(ctx, repo, prID, body)
+}
+
+func (s *prService) PostCommentReply(ctx context.Context, repo domain.Repository, prID, commentID, body string) error {
+	if s.postCommentReplyFn == nil {
+		panic("prService.PostCommentReply called but postCommentReplyFn is nil")
+	}
+	return s.postCommentReplyFn(ctx, repo, prID, commentID, body)
+}
+
+func (s *prService) PostThreadReply(ctx context.Context, repo domain.Repository, threadID, body string) error {
+	if s.postThreadReplyFn == nil {
+		panic("prService.PostThreadReply called but postThreadReplyFn is nil")
+	}
+	return s.postThreadReplyFn(ctx, repo, threadID, body)
 }
 
 func (s *prService) PostReviewComment(_ context.Context, _ domain.Repository, _, _ string) error {

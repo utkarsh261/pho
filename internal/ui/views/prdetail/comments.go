@@ -18,6 +18,8 @@ type commentEntry struct {
 	line        int    // 0 for PR-level comments
 	contextLine string // the raw diff line text
 	isDraft     bool
+	threadID    string // non-empty for review thread comments; used for threaded replies
+	commentID   string // non-empty for PR-level comments; used for comment replies
 }
 
 // commentEntries returns the sorted slice of comment/review entries for the current PR.
@@ -45,48 +47,86 @@ func (m *PRDetailModel) commentEntries() []commentEntry {
 		})
 	}
 
-	// Real inline comments from reviewers.
+	// Real review threads (inline comments with thread IDs).
+	for _, thread := range m.Detail.ReviewThreads {
+		if thread.ID == "" {
+			continue
+		}
+		for i, c := range thread.Comments {
+			if c.Login == "" {
+				continue
+			}
+			entry := commentEntry{
+				login:     c.Login,
+				ts:        c.CreatedAt,
+				body:      c.Body,
+				path:      thread.Path,
+				line:      thread.Line,
+				threadID:  thread.ID,
+				commentID: c.ID,
+			}
+			// Only the first comment in a thread shows the diff context line.
+			if i == 0 {
+				entry.contextLine = m.lookupDiffLine(thread.Path, thread.Line)
+			}
+			entries = append(entries, entry)
+		}
+	}
+
+	// Backward-compatibility fallback: old cached data may have inline comments
+	// inside PreviewReviewer.InlineComments instead of ReviewThreads.
+	if len(m.Detail.ReviewThreads) == 0 {
+		for _, r := range m.Detail.Reviewers {
+			if r.Login == "" {
+				continue
+			}
+			for _, ic := range r.InlineComments {
+				entries = append(entries, commentEntry{
+					login:       r.Login,
+					state:       r.State,
+					ts:          r.SubmittedAt,
+					body:        ic.Body,
+					path:        ic.Path,
+					line:        ic.Line,
+					contextLine: m.lookupDiffLine(ic.Path, ic.Line),
+				})
+			}
+		}
+	}
+
+	// Review summaries (APPROVED, CHANGES_REQUESTED, etc.).
 	for _, r := range m.Detail.Reviewers {
 		if r.Login == "" {
 			continue
 		}
-		// Add inline comments as individual entries.
-		for _, ic := range r.InlineComments {
-			entries = append(entries, commentEntry{
-				login:       r.Login,
-				state:       r.State,
-				ts:          r.SubmittedAt,
-				body:        ic.Body,
-				path:        ic.Path,
-				line:        ic.Line,
-				contextLine: m.lookupDiffLine(ic.Path, ic.Line),
-			})
-		}
-		// Add the review summary entry only if it has a body or no inline comments.
 		state := r.State
 		if state == "" {
 			state = "COMMENTED"
 		}
-		body := r.Body
-		if body == "" && len(r.InlineComments) > 0 {
-			continue // skip empty summary when inline comments exist
+		// Skip empty COMMENTED summaries — they add no value when inline
+		// comments (now in ReviewThreads) are shown separately.
+		if r.Body == "" && state == "COMMENTED" {
+			continue
 		}
 		entries = append(entries, commentEntry{
 			login: r.Login,
 			state: state,
 			ts:    r.SubmittedAt,
-			body:  body,
+			body:  r.Body,
 		})
 	}
+
+	// PR-level comments (issue comments).
 	for _, c := range m.Detail.Comments {
 		if c.Login == "" {
 			continue
 		}
 		entries = append(entries, commentEntry{
-			login: c.Login,
-			state: "",
-			ts:    c.CreatedAt,
-			body:  c.Body,
+			login:     c.Login,
+			state:     "",
+			ts:        c.CreatedAt,
+			body:      c.Body,
+			commentID: c.ID,
 		})
 	}
 
@@ -225,7 +265,7 @@ func (m *PRDetailModel) commentLines(contentWidth int, activeIdx int) []string {
 		if active {
 			var hint string
 			if e.path != "" && e.line > 0 {
-				hint = "[Enter]"
+				hint = "[Enter | r: Reply]"
 			} else if !e.isDraft {
 				hint = "[r: Reply]"
 			}

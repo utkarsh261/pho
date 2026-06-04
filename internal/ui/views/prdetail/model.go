@@ -340,10 +340,8 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 
 	// Forward all messages to compose so textinput receives tick events for cursor blink.
 	var composeCmd tea.Cmd
-	// composeConsumedKey tracks whether compose was active at the start of this
-	// cycle. When compose closes itself on Esc in the same Update cycle,
-	// m.compose.active becomes false, but the key must not fall through to handleKey.
 	composeConsumedKey := m.compose.active
+	composeWasIdle := m.compose.active && m.compose.status == composeStatusIdle
 	m.compose, composeCmd = m.compose.Update(msg)
 
 	switch msg := msg.(type) {
@@ -479,12 +477,6 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 			m.editPosting = true
 			return m, tea.Batch(spinCmd, composeCmd, cmds.UpdatePRCmd(m.PRService, m.Repo, m.Summary.Number, m.Summary.ID, m.Summary.Title, msg.body))
 		}
-		if m.compose.mode == composeModeReply && m.commentCursor >= 0 {
-			entries := m.commentEntries()
-			if m.commentCursor < len(entries) {
-				body = buildReplyBody(entries[m.commentCursor], msg.body)
-			}
-		}
 		if m.PRService == nil {
 			return m, tea.Batch(spinCmd, composeCmd)
 		}
@@ -504,6 +496,19 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		var postCmd tea.Cmd
 		if m.compose.mode == composeModeReviewComment {
 			postCmd = cmds.PostReviewCommentCmd(m.PRService, m.Repo, m.Summary.ID, body)
+		} else if m.compose.mode == composeModeReply {
+			target := m.compose.target
+			if target.threadID != "" {
+				postCmd = cmds.PostThreadReplyCmd(m.PRService, m.Repo, target.threadID, body)
+			} else if target.commentID != "" {
+				body = buildReplyBody(target, body)
+				postCmd = cmds.PostCommentReplyCmd(m.PRService, m.Repo, m.Summary.ID, target.commentID, body)
+			} else if target.login != "" {
+				body = buildReplyBody(target, body)
+				postCmd = cmds.PostCommentCmd(m.PRService, m.Repo, m.Summary.ID, body)
+			} else {
+				postCmd = cmds.PostCommentCmd(m.PRService, m.Repo, m.Summary.ID, body)
+			}
 		} else {
 			postCmd = cmds.PostCommentCmd(m.PRService, m.Repo, m.Summary.ID, body)
 		}
@@ -730,9 +735,14 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 			// Key already routed to compose.Update above; skip handleKey.
 			return m, tea.Batch(spinCmd, composeCmd)
 		}
-		// If compose was active at the start of this cycle and just closed itself
-		// (e.g. Esc in draft-inline mode), don't let the consumed key reach handleKey.
-		if composeConsumedKey && !m.compose.active && m.compose.mode == composeModeDraftInline && msg.String() == "esc" {
+		// If compose was idle at the start of this cycle, the key was consumed
+		// by compose (typing, Enter that triggers posting, Esc that closes, etc.)
+		// and must not fall through to handleKey.
+		if composeConsumedKey && composeWasIdle {
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		// If compose closed itself (e.g. Esc dismissed error), swallow the key.
+		if composeConsumedKey && !m.compose.active {
 			return m, tea.Batch(spinCmd, composeCmd)
 		}
 		next, cmd := m.handleKey(msg)

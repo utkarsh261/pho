@@ -199,8 +199,14 @@ func (f *fakePRService) LoadCommitDiff(ctx context.Context, repo domain.Reposito
 func (f *fakePRService) PostComment(ctx context.Context, repo domain.Repository, prID string, body string) error {
 	return nil
 }
+func (f *fakePRService) PostCommentReply(_ context.Context, _ domain.Repository, _, _, _ string) error {
+	return nil
+}
 func (f *fakePRService) PostReviewComment(ctx context.Context, repo domain.Repository, prID string, body string) error {
 	f.postReviewCommentCalled = true
+	return nil
+}
+func (f *fakePRService) PostThreadReply(_ context.Context, _ domain.Repository, _, _ string) error {
 	return nil
 }
 func (f *fakePRService) ApprovePR(ctx context.Context, repo domain.Repository, prID string, body string) error {

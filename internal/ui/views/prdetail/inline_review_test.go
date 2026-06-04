@@ -339,11 +339,11 @@ func TestCommentEntryWithCodeContext(t *testing.T) {
 	t.Parallel()
 	m := makeInlineReviewModel(100, 40)
 	m.Detail = &domain.PRPreviewSnapshot{
-		Reviewers: []domain.PreviewReviewer{
+		ReviewThreads: []domain.PreviewReviewThread{
 			{
-				Login: "alice", State: "COMMENTED",
-				InlineComments: []domain.PreviewInlineComment{
-					{Login: "alice", Body: "nice code", Path: "a.go", Line: 1},
+				ID: "thread1", Path: "a.go", Line: 1,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "alice", Body: "nice code"},
 				},
 			},
 		},
@@ -383,6 +383,165 @@ func TestDraftCommentEntry(t *testing.T) {
 	}
 	if entries[0].contextLine != " line1" {
 		t.Errorf("expected contextLine ' line1', got %q", entries[0].contextLine)
+	}
+}
+
+// ── Thread-aware comment entry tests ──────────────────────────────────────────
+
+func TestCommentEntriesFromReviewThreads(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.Detail = &domain.PRPreviewSnapshot{
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "t1", Path: "a.go", Line: 10,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "alice", Body: "first"},
+					{ID: "c2", Login: "bob", Body: "second"},
+				},
+			},
+		},
+	}
+	entries := m.commentEntries()
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(entries))
+	}
+	if entries[0].login != "alice" {
+		t.Errorf("expected first entry login=alice, got %q", entries[0].login)
+	}
+	if entries[0].threadID != "t1" {
+		t.Errorf("expected first entry threadID=t1, got %q", entries[0].threadID)
+	}
+	if entries[0].commentID != "c1" {
+		t.Errorf("expected first entry commentID=c1, got %q", entries[0].commentID)
+	}
+	if entries[1].login != "bob" {
+		t.Errorf("expected second entry login=bob, got %q", entries[1].login)
+	}
+	if entries[1].commentID != "c2" {
+		t.Errorf("expected second entry commentID=c2, got %q", entries[1].commentID)
+	}
+}
+
+func TestCommentEntriesBackwardCompatWithInlineComments(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.Detail = &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{
+				Login: "alice", State: "COMMENTED",
+				InlineComments: []domain.PreviewInlineComment{
+					{Login: "alice", Body: "legacy", Path: "b.go", Line: 2},
+				},
+			},
+		},
+	}
+	entries := m.commentEntries()
+	found := false
+	for _, e := range entries {
+		if e.path == "b.go" && e.line == 2 && e.body == "legacy" {
+			found = true
+			if e.threadID != "" {
+				t.Error("expected legacy entry to have no threadID")
+			}
+		}
+	}
+	if !found {
+		t.Error("expected backward-compat entry from InlineComments")
+	}
+}
+
+func TestCommentEntriesSkipsEmptyCommentedReviews(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.Detail = &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{Login: "alice", State: "COMMENTED", Body: ""},
+			{Login: "bob", State: "APPROVED", Body: ""},
+		},
+	}
+	entries := m.commentEntries()
+	for _, e := range entries {
+		if e.login == "alice" {
+			t.Error("expected empty COMMENTED review to be skipped")
+		}
+	}
+	foundBob := false
+	for _, e := range entries {
+		if e.login == "bob" && e.state == "APPROVED" {
+			foundBob = true
+		}
+	}
+	if !foundBob {
+		t.Error("expected empty APPROVED review to still appear")
+	}
+}
+
+// ── Reply routing tests ───────────────────────────────────────────────────────
+
+func TestReplyComposeHintForThread(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.PRService = &prServiceStub{}
+	m.Detail = &domain.PRPreviewSnapshot{
+		ReviewThreads: []domain.PreviewReviewThread{
+			{ID: "t1", Path: "a.go", Line: 5, Comments: []domain.PreviewThreadComment{
+				{ID: "c1", Login: "alice", Body: "hi"},
+			}},
+		},
+	}
+	m.switchTab(TabComments)
+	m.commentCursor = 0
+	m = pressKey(m, "r")
+	if !m.compose.active {
+		t.Fatal("expected compose active")
+	}
+	view := m.compose.View(80)
+	if !strings.Contains(descStripANSI(view), "Reply to thread on a.go:5") {
+		t.Errorf("expected thread reply hint in compose view, got:\n%s", descStripANSI(view))
+	}
+}
+
+func TestReplyComposeHintForPRComment(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.PRService = &prServiceStub{}
+	m.Detail = &domain.PRPreviewSnapshot{
+		Comments: []domain.PreviewComment{
+			{ID: "c99", Login: "bob", Body: "general note"},
+		},
+	}
+	m.switchTab(TabComments)
+	m.commentCursor = 0
+	m = pressKey(m, "r")
+	if !m.compose.active {
+		t.Fatal("expected compose active")
+	}
+	view := m.compose.View(80)
+	if !strings.Contains(descStripANSI(view), "Reply to @bob") {
+		t.Errorf("expected PR comment reply hint in compose view, got:\n%s", descStripANSI(view))
+	}
+}
+
+func TestReplyComposeCursorOnThreadEntry(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.PRService = &prServiceStub{}
+	m.Detail = &domain.PRPreviewSnapshot{
+		ReviewThreads: []domain.PreviewReviewThread{
+			{ID: "t1", Path: "a.go", Line: 1, Comments: []domain.PreviewThreadComment{
+				{ID: "c1", Login: "alice", Body: "hi"},
+			}},
+		},
+	}
+	m.switchTab(TabComments)
+	m.commentCursor = 0
+	m = pressKey(m, "r")
+	if m.compose.target.threadID != "t1" {
+		t.Errorf("expected compose target threadID=t1, got %q", m.compose.target.threadID)
+	}
+	if m.compose.target.path != "a.go" {
+		t.Errorf("expected compose target path=a.go, got %q", m.compose.target.path)
 	}
 }
 
@@ -581,11 +740,11 @@ func TestJumpToCodeFromInlineComment(t *testing.T) {
 	t.Parallel()
 	m := makeInlineReviewModel(100, 40)
 	m.Detail = &domain.PRPreviewSnapshot{
-		Reviewers: []domain.PreviewReviewer{
+		ReviewThreads: []domain.PreviewReviewThread{
 			{
-				Login: "alice", State: "COMMENTED",
-				InlineComments: []domain.PreviewInlineComment{
-					{Body: "nice", Path: "a.go", Line: 1},
+				ID: "thread1", Path: "a.go", Line: 1,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "alice", Body: "nice"},
 				},
 			},
 		},

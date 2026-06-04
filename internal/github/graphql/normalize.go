@@ -138,6 +138,7 @@ func normalizePreviewNode(repo domain.Repository, number int, node model.PullReq
 		CreatedAt:      createdAt,
 		UpdatedAt:      updatedAt,
 		Reviewers:      previewReviewers(node.Reviews),
+		ReviewThreads:  previewReviewThreads(node.ReviewThreads),
 		Checks:         previewChecks(rollupContexts(node)),
 		FileCount:      node.ChangedFiles,
 		Additions:      node.Additions,
@@ -244,29 +245,52 @@ func previewReviewers(conn model.ReviewConnection) []domain.PreviewReviewer {
 		if node.SubmittedAt != nil {
 			submittedAt, _ = time.Parse(time.RFC3339, *node.SubmittedAt)
 		}
-		var inlineComments []domain.PreviewInlineComment
+		out = append(out, domain.PreviewReviewer{
+			Login:       login,
+			State:       node.State,
+			Avatar:      avatar,
+			Body:        strings.TrimSpace(node.Body),
+			SubmittedAt: submittedAt,
+		})
+	}
+	return out
+}
+
+func previewReviewThreads(conn model.ReviewThreadConnection) []domain.PreviewReviewThread {
+	if len(conn.Nodes) == 0 {
+		return nil
+	}
+	out := make([]domain.PreviewReviewThread, 0, len(conn.Nodes))
+	for _, node := range conn.Nodes {
+		if node.ID == "" {
+			continue
+		}
+		var comments []domain.PreviewThreadComment
 		for _, c := range node.Comments.Nodes {
-			cLogin := actorLogin(c.Author)
-			line := 0
-			if c.Line != nil {
-				line = *c.Line
-			} else if c.OriginalLine != nil {
-				line = *c.OriginalLine
+			login := actorLogin(c.Author)
+			if login == "" {
+				continue
 			}
-			inlineComments = append(inlineComments, domain.PreviewInlineComment{
-				Login: cLogin,
-				Body:  strings.TrimSpace(c.Body),
-				Path:  c.Path,
-				Line:  line,
+			var createdAt time.Time
+			if c.CreatedAt != "" {
+				createdAt, _ = time.Parse(time.RFC3339, c.CreatedAt)
+			}
+			comments = append(comments, domain.PreviewThreadComment{
+				ID:        c.ID,
+				Login:     login,
+				Body:      strings.TrimSpace(c.Body),
+				CreatedAt: createdAt,
 			})
 		}
-		out = append(out, domain.PreviewReviewer{
-			Login:          login,
-			State:          node.State,
-			Avatar:         avatar,
-			Body:           strings.TrimSpace(node.Body),
-			SubmittedAt:    submittedAt,
-			InlineComments: inlineComments,
+		if len(comments) == 0 {
+			continue
+		}
+		out = append(out, domain.PreviewReviewThread{
+			ID:         node.ID,
+			Path:       node.Path,
+			Line:       node.Line,
+			IsResolved: node.IsResolved,
+			Comments:   comments,
 		})
 	}
 	return out
@@ -287,6 +311,7 @@ func previewComments(conn model.IssueCommentConnection) []domain.PreviewComment 
 			createdAt, _ = time.Parse(time.RFC3339, node.CreatedAt)
 		}
 		out = append(out, domain.PreviewComment{
+			ID:        node.ID,
 			Login:     login,
 			Body:      strings.TrimSpace(node.Body),
 			CreatedAt: createdAt,

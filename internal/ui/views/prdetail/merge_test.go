@@ -34,7 +34,13 @@ func (s *mergePRService) LoadCommitDiff(_ context.Context, _ domain.Repository, 
 func (s *mergePRService) PostComment(_ context.Context, _ domain.Repository, _, _ string) error {
 	return nil
 }
+func (s *mergePRService) PostCommentReply(_ context.Context, _ domain.Repository, _, _, _ string) error {
+	return nil
+}
 func (s *mergePRService) PostReviewComment(_ context.Context, _ domain.Repository, _, _ string) error {
+	return nil
+}
+func (s *mergePRService) PostThreadReply(_ context.Context, _ domain.Repository, _, _ string) error {
 	return nil
 }
 func (s *mergePRService) ApprovePR(_ context.Context, _ domain.Repository, _, _ string) error {

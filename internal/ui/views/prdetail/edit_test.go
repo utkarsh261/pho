@@ -33,7 +33,13 @@ func (s *editPRService) LoadCommitDiff(_ context.Context, _ domain.Repository, _
 func (s *editPRService) PostComment(_ context.Context, _ domain.Repository, _, _ string) error {
 	return nil
 }
+func (s *editPRService) PostCommentReply(_ context.Context, _ domain.Repository, _, _, _ string) error {
+	return nil
+}
 func (s *editPRService) PostReviewComment(_ context.Context, _ domain.Repository, _, _ string) error {
+	return nil
+}
+func (s *editPRService) PostThreadReply(_ context.Context, _ domain.Repository, _, _ string) error {
 	return nil
 }
 func (s *editPRService) ApprovePR(_ context.Context, _ domain.Repository, _, _ string) error {

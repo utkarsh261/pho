@@ -170,7 +170,13 @@ func (s *stubPRService) LoadDiff(ctx context.Context, repo domain.Repository, nu
 func (s *stubPRService) PostComment(_ context.Context, _ domain.Repository, _, _ string) error {
 	return nil
 }
+func (s *stubPRService) PostCommentReply(_ context.Context, _ domain.Repository, _, _, _ string) error {
+	return nil
+}
 func (s *stubPRService) PostReviewComment(_ context.Context, _ domain.Repository, _, _ string) error {
+	return nil
+}
+func (s *stubPRService) PostThreadReply(_ context.Context, _ domain.Repository, _, _ string) error {
 	return nil
 }
 func (s *stubPRService) ApprovePR(_ context.Context, _ domain.Repository, _, _ string) error {

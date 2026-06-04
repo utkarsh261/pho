@@ -97,6 +97,66 @@ func TestNormalizePreviewResponse_Fixture(t *testing.T) {
 	}
 }
 
+func TestPreviewReviewThreads(t *testing.T) {
+	t.Parallel()
+	conn := model.ReviewThreadConnection{
+		Nodes: []model.ReviewThreadNode{
+			{
+				ID:         "thread1",
+				Path:       "a.go",
+				Line:       5,
+				IsResolved: false,
+				Comments: model.ReviewThreadCommentConnection{
+					Nodes: []model.ReviewThreadCommentNode{
+						{ID: "c1", Author: &model.ActorNode{Login: "alice"}, Body: "first", CreatedAt: "2024-01-01T00:00:00Z"},
+						{ID: "c2", Author: &model.ActorNode{Login: "bob"}, Body: "second", CreatedAt: "2024-01-02T00:00:00Z"},
+					},
+				},
+			},
+			{ID: "empty", Path: "b.go", Line: 1, Comments: model.ReviewThreadCommentConnection{}},
+			{ID: "", Path: "c.go", Line: 1, Comments: model.ReviewThreadCommentConnection{
+				Nodes: []model.ReviewThreadCommentNode{
+					{ID: "c3", Author: &model.ActorNode{Login: "dave"}, Body: "orphan"},
+				},
+			}},
+		},
+	}
+	threads := previewReviewThreads(conn)
+	// Only the first thread should survive: empty-ID and no-comment threads are skipped.
+	if len(threads) != 1 {
+		t.Fatalf("expected 1 thread, got %d", len(threads))
+	}
+	if threads[0].ID != "thread1" || threads[0].Path != "a.go" || threads[0].Line != 5 {
+		t.Errorf("unexpected first thread: %+v", threads[0])
+	}
+	if len(threads[0].Comments) != 2 {
+		t.Fatalf("expected 2 comments in first thread, got %d", len(threads[0].Comments))
+	}
+	if threads[0].Comments[0].ID != "c1" || threads[0].Comments[0].Login != "alice" {
+		t.Errorf("unexpected first comment: %+v", threads[0].Comments[0])
+	}
+}
+
+func TestPreviewCommentsWithIDs(t *testing.T) {
+	t.Parallel()
+	conn := model.IssueCommentConnection{
+		Nodes: []model.IssueCommentNode{
+			{ID: "c1", Author: &model.ActorNode{Login: "alice"}, Body: "hello", CreatedAt: "2024-01-01T00:00:00Z"},
+			{ID: "c2", Author: &model.ActorNode{Login: "bob"}, Body: "world", CreatedAt: "2024-01-02T00:00:00Z"},
+		},
+	}
+	comments := previewComments(conn)
+	if len(comments) != 2 {
+		t.Fatalf("expected 2 comments, got %d", len(comments))
+	}
+	if comments[0].ID != "c1" {
+		t.Errorf("expected first comment ID=c1, got %q", comments[0].ID)
+	}
+	if comments[1].ID != "c2" {
+		t.Errorf("expected second comment ID=c2, got %q", comments[1].ID)
+	}
+}
+
 func TestDashboardQueryShapeByHostProfile(t *testing.T) {
 	top := buildDashboardQuery(githubpkg.GitHubHostProfile{SupportsTopLevelRollup: true, SupportsHeadRefOID: true})
 	if !strings.Contains(top, "statusCheckRollup {") || strings.Contains(top, "commits(last: 1)") {

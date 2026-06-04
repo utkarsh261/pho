@@ -271,7 +271,13 @@ func (s *closeReopenPRService) LoadCommitDiff(_ context.Context, _ domain.Reposi
 func (s *closeReopenPRService) PostComment(_ context.Context, _ domain.Repository, _, _ string) error {
 	return nil
 }
+func (s *closeReopenPRService) PostCommentReply(_ context.Context, _ domain.Repository, _, _, _ string) error {
+	return nil
+}
 func (s *closeReopenPRService) PostReviewComment(_ context.Context, _ domain.Repository, _, _ string) error {
+	return nil
+}
+func (s *closeReopenPRService) PostThreadReply(_ context.Context, _ domain.Repository, _, _ string) error {
 	return nil
 }
 func (s *closeReopenPRService) ApprovePR(_ context.Context, _ domain.Repository, _, _ string) error {

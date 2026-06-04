@@ -78,6 +78,23 @@ func (c *Client) PostComment(ctx context.Context, host, pullRequestID, body stri
 	return err
 }
 
+// PostCommentReply falls back to PostComment because GitHub's GraphQL API
+// does not support threaded replies for issue comments.
+func (c *Client) PostCommentReply(ctx context.Context, host, pullRequestID, commentID, body string) error {
+	return c.PostComment(ctx, host, pullRequestID, body)
+}
+
+// PostThreadReply posts a reply to a review thread via GraphQL.
+func (c *Client) PostThreadReply(ctx context.Context, host, threadID, body string) error {
+	_, err := queryGraphQL[model.AddPullRequestReviewThreadReplyData](c, ctx, host, func(_ githubpkg.GitHubHostProfile) string {
+		return buildAddPullRequestReviewThreadReplyMutation()
+	}, map[string]any{
+		"threadId": threadID,
+		"body":     body,
+	})
+	return err
+}
+
 // PostReviewComment submits a PR review with COMMENT decision via GraphQL.
 func (c *Client) PostReviewComment(ctx context.Context, host, pullRequestID, body string) error {
 	vars := map[string]any{

@@ -293,6 +293,54 @@ func makeDetailWithGoldenComments() *domain.PRPreviewSnapshot {
 	}
 }
 
+func makeDetailWithGoldenThreads() *domain.PRPreviewSnapshot {
+	t1 := time.Date(2024, 3, 10, 0, 0, 0, 0, time.UTC)
+	t2 := time.Date(2024, 3, 11, 0, 0, 0, 0, time.UTC)
+	return &domain.PRPreviewSnapshot{
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "thread1", Path: "a.go", Line: 5,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "alice", Body: "Should we rename this?", CreatedAt: t1},
+					{ID: "c2", Login: "bob", Body: "I think `handleErr` is clearer.", CreatedAt: t2},
+				},
+			},
+		},
+	}
+}
+
+// ── comments section with threads golden ──────────────────────────────────────
+
+func TestCommentsLinesWithThreadsGolden(t *testing.T) {
+	for _, w := range composeGoldenWidths {
+		w := w
+		t.Run(fmt.Sprintf("w%d", w), func(t *testing.T) {
+			t.Parallel()
+			m := makePRDetail(w, 40, nil, nil)
+			m.Detail = makeDetailWithGoldenThreads()
+			m.SetTheme(theme.Default())
+			cw := m.contentW()
+			lines := m.commentLines(cw, -1)
+			got := descStripANSI(strings.Join(lines, "\n"))
+			checkGolden(t, got, fmt.Sprintf("comments_threads_w%d.txt", w))
+		})
+	}
+}
+
+func TestComposeViewThreadReplyGolden(t *testing.T) {
+	th := theme.Default()
+	for _, w := range composeGoldenWidths {
+		w := w
+		t.Run(fmt.Sprintf("w%d", w), func(t *testing.T) {
+			t.Parallel()
+			c := newComposeModel(th)
+			c.Open(composeModeReply, commentEntry{login: "alice", threadID: "thread1", path: "a.go", line: 5}, 0)
+			got := descStripANSI(c.View(w))
+			checkGolden(t, got, fmt.Sprintf("compose_thread_reply_w%d.txt", w))
+		})
+	}
+}
+
 // checkGolden compares got against testdata/golden/<name>, writing the file when -update is set.
 func checkGolden(t *testing.T, got, name string) {
 	t.Helper()
