@@ -62,8 +62,8 @@ func (f *fakeGitHubClient) PostComment(_ context.Context, _, _, _ string) error 
 }
 
 func (f *fakeGitHubClient) PostCommentReply(_ context.Context, _, _, _, _ string) error { return nil }
-func (f *fakeGitHubClient) PostReviewComment(_ context.Context, _, _, _ string) error { return nil }
-func (f *fakeGitHubClient) PostThreadReply(_ context.Context, _, _, _ string) error { return nil }
+func (f *fakeGitHubClient) PostReviewComment(_ context.Context, _, _, _ string) error   { return nil }
+func (f *fakeGitHubClient) PostThreadReply(_ context.Context, _, _, _ string) error     { return nil }
 func (f *fakeGitHubClient) ApprovePullRequest(_ context.Context, _, _, _ string) error {
 	return nil
 }
