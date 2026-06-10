@@ -10,16 +10,17 @@ import (
 
 // commentEntry is a single comment or review entry in the Comments section.
 type commentEntry struct {
-	login       string
-	state       string // review state ("APPROVED", "COMMENTED", etc.) or "" for plain comments
-	ts          time.Time
-	body        string
-	path        string // empty for PR-level comments
-	line        int    // 0 for PR-level comments
-	contextLine string // the raw diff line text
-	isDraft     bool
-	threadID    string // non-empty for review thread comments; used for threaded replies
-	commentID   string // non-empty for PR-level comments; used for comment replies
+	login         string
+	state         string // review state ("APPROVED", "COMMENTED", etc.) or "" for plain comments
+	ts            time.Time
+	body          string
+	path          string // empty for PR-level comments
+	line          int    // 0 for PR-level comments
+	contextLine   string // the raw diff line text
+	isDraft       bool
+	isThreadReply bool   // true for replies inside a review thread (not the root comment)
+	threadID      string // non-empty for review thread comments; used for threaded replies
+	commentID     string // non-empty for PR-level comments; used for comment replies
 }
 
 // commentEntries returns the sorted slice of comment/review entries for the current PR.
@@ -47,7 +48,46 @@ func (m *PRDetailModel) commentEntries() []commentEntry {
 		})
 	}
 
-	// Real review threads (inline comments with thread IDs).
+	// Review summaries (APPROVED, CHANGES_REQUESTED, etc.) — built before
+	// threads so that when timestamps tie, top-level review comments sort
+	// before inline review threads.
+	for _, r := range m.Detail.Reviewers {
+		if r.Login == "" {
+			continue
+		}
+		state := r.State
+		if state == "" {
+			state = "COMMENTED"
+		}
+		// Skip empty COMMENTED summaries — they add no value when inline
+		// comments (now in ReviewThreads) are shown separately.
+		if r.Body == "" && state == "COMMENTED" {
+			continue
+		}
+		entries = append(entries, commentEntry{
+			login: r.Login,
+			state: state,
+			ts:    r.SubmittedAt,
+			body:  r.Body,
+		})
+	}
+
+	// PR-level comments (issue comments) — also before threads.
+	for _, c := range m.Detail.Comments {
+		if c.Login == "" {
+			continue
+		}
+		entries = append(entries, commentEntry{
+			login:     c.Login,
+			state:     "",
+			ts:        c.CreatedAt,
+			body:      c.Body,
+			commentID: c.ID,
+		})
+	}
+
+	// Review threads (inline review threads with thread IDs) — built after
+	// top-level comments so they sort after when timestamps tie.
 	for _, thread := range m.Detail.ReviewThreads {
 		if thread.ID == "" {
 			continue
@@ -65,7 +105,10 @@ func (m *PRDetailModel) commentEntries() []commentEntry {
 				threadID:  thread.ID,
 				commentID: c.ID,
 			}
-			// Only the first comment in a thread shows the diff context line.
+			// First comment is the root; replies are indented in the UI.
+			if i > 0 {
+				entry.isThreadReply = true
+			}
 			if i == 0 {
 				entry.contextLine = m.lookupDiffLine(thread.Path, thread.Line)
 			}
@@ -94,56 +137,86 @@ func (m *PRDetailModel) commentEntries() []commentEntry {
 		}
 	}
 
-	// Review summaries (APPROVED, CHANGES_REQUESTED, etc.).
-	for _, r := range m.Detail.Reviewers {
-		if r.Login == "" {
-			continue
-		}
-		state := r.State
-		if state == "" {
-			state = "COMMENTED"
-		}
-		// Skip empty COMMENTED summaries — they add no value when inline
-		// comments (now in ReviewThreads) are shown separately.
-		if r.Body == "" && state == "COMMENTED" {
-			continue
-		}
-		entries = append(entries, commentEntry{
-			login: r.Login,
-			state: state,
-			ts:    r.SubmittedAt,
-			body:  r.Body,
-		})
-	}
-
-	// PR-level comments (issue comments).
-	for _, c := range m.Detail.Comments {
-		if c.Login == "" {
-			continue
-		}
-		entries = append(entries, commentEntry{
-			login:     c.Login,
-			state:     "",
-			ts:        c.CreatedAt,
-			body:      c.Body,
-			commentID: c.ID,
-		})
-	}
-
-	// Sort non-draft entries by timestamp: zero times go last.
-	// Drafts stay at the top (indices 0..draftCount-1).
+	// Sort non-draft entries chronologically, with each review thread kept
+	// as an atomic unit sorted by its earliest comment timestamp. When a review
+	// summary and a thread unit were submitted around the same time (within a
+	// 5-minute window), the review summary sorts before the thread — this
+	// matches how GitHub groups a review body with its inline comments. Drafts
+	// stay at the top.
 	draftCount := len(m.drafts)
-	for i := draftCount + 1; i < len(entries); i++ {
-		for j := i; j > draftCount; j-- {
-			a, b := entries[j-1], entries[j]
-			aZero, bZero := a.ts.IsZero(), b.ts.IsZero()
-			if aZero && !bZero {
-				entries[j-1], entries[j] = entries[j], entries[j-1]
-			} else if !aZero && !bZero && a.ts.After(b.ts) {
-				entries[j-1], entries[j] = entries[j], entries[j-1]
+	if draftCount < len(entries) {
+		type unit struct {
+			entries  []commentEntry
+			ts       time.Time
+			category int // 0=summary, 1=prComment, 2=thread
+		}
+		var units []unit
+		i := draftCount
+		for i < len(entries) {
+			if entries[i].threadID != "" {
+				j := i + 1
+				for j < len(entries) && entries[j].threadID == entries[i].threadID {
+					j++
+				}
+				var key time.Time
+				for k := i; k < j; k++ {
+					if !entries[k].ts.IsZero() {
+						if key.IsZero() || entries[k].ts.Before(key) {
+							key = entries[k].ts
+						}
+					}
+				}
+				u := make([]commentEntry, j-i)
+				copy(u, entries[i:j])
+				units = append(units, unit{entries: u, ts: key, category: 2})
+				i = j
+			} else if entries[i].state != "" {
+				units = append(units, unit{entries: []commentEntry{entries[i]}, ts: entries[i].ts, category: 0})
+				i++
 			} else {
-				break
+				units = append(units, unit{entries: []commentEntry{entries[i]}, ts: entries[i].ts, category: 1})
+				i++
 			}
+		}
+		// Sort primarily by timestamp. Within a 5-minute window, review summaries
+		// (category 0) come before PR comments (category 1) come before threads
+		// (category 2). This groups a review body with its inline comments while
+		// maintaining overall chronological order.
+		const window = 5 * time.Minute
+		for i := 1; i < len(units); i++ {
+			for j := i; j > 0; j-- {
+				a, b := units[j-1], units[j]
+				aZero, bZero := a.ts.IsZero(), b.ts.IsZero()
+				shouldSwap := false
+				if aZero && !bZero {
+					shouldSwap = true
+				} else if !aZero && !bZero {
+					if a.ts.After(b.ts) && a.ts.Sub(b.ts) > window {
+						// Far apart — strict chronological order.
+						shouldSwap = true
+					} else if b.ts.Sub(a.ts) > window {
+						// Already in order and far apart — no swap.
+						break
+					} else {
+						// Within the same window — break ties by category.
+						if a.category > b.category {
+							shouldSwap = true
+						} else {
+							break
+						}
+					}
+				}
+				if shouldSwap {
+					units[j-1], units[j] = units[j], units[j-1]
+				} else {
+					break
+				}
+			}
+		}
+		pos := draftCount
+		for _, u := range units {
+			copy(entries[pos:], u.entries)
+			pos += len(u.entries)
 		}
 	}
 	m.cachedCommentEntries = entries
@@ -152,12 +225,12 @@ func (m *PRDetailModel) commentEntries() []commentEntry {
 }
 
 // entryRowCount returns the display-row count for a single comment entry at cw columns.
-// Layout: 1 header + (if path: 1 blank + 1 path:line + 1 contextLine) + (if body: 1 blank + bodyLines) + 1 trailing blank.
-// Body wraps at innerW = cw-2 to match the width inside the rounded border in commentLines.
+// Layout: 1 header + (if root with path: 1 blank + 1 path:line + 1 contextLine) +
+// (if body: 1 blank + bodyLines) + 1 trailing blank.
 // Must exactly mirror what commentLines() generates for each entry.
 func (m *PRDetailModel) entryRowCount(e commentEntry, cw int) int {
 	rows := 1 // header line
-	if e.path != "" && e.line > 0 {
+	if !e.isThreadReply && e.path != "" && e.line > 0 {
 		rows++ // blank after header
 		rows++ // path:line line
 		rows++ // context line
@@ -165,6 +238,9 @@ func (m *PRDetailModel) entryRowCount(e commentEntry, cw int) int {
 	if e.body != "" {
 		rows++ // blank before body
 		innerW := max(cw-2, 1)
+		if e.isThreadReply {
+			innerW = max(cw-4, 1) // account for "  " indent inside the box
+		}
 		if m.mdRenderer != nil {
 			rows += len(m.mdRenderer.Render(e.body, innerW))
 		} else {
@@ -175,9 +251,50 @@ func (m *PRDetailModel) entryRowCount(e commentEntry, cw int) int {
 	return rows
 }
 
+// entryRenderHeight returns the total rendered rows this entry contributes in
+// the context of its group. Standalone entries and thread roots contribute a
+// top border (+1) plus a bottom border (+1) when they are the only or last
+// entry. Thread replies contribute no border rows.
+func (m *PRDetailModel) entryRenderHeight(e commentEntry, cw int, entries []commentEntry, i int) int {
+	h := m.entryRowCount(e, cw)
+	isRoot := e.threadID == "" || i == 0 || entries[i-1].threadID != e.threadID
+	isLast := e.threadID == "" || i == len(entries)-1 || entries[i+1].threadID != e.threadID
+	if isRoot {
+		h += 1 // top border
+	}
+	if isLast {
+		h += 1 // bottom border
+	}
+	return h
+}
+
+// threadBounds returns the first and last index within the thread that
+// entries[idx] belongs to. If the entry is standalone, first == last == idx.
+func threadBounds(entries []commentEntry, idx int) (first, last int) {
+	first, last = idx, idx
+	if entries[idx].threadID == "" {
+		return
+	}
+	for i := idx - 1; i >= 0; i-- {
+		if entries[i].threadID == entries[idx].threadID {
+			first = i
+		} else {
+			break
+		}
+	}
+	for i := idx + 1; i < len(entries); i++ {
+		if entries[i].threadID == entries[idx].threadID {
+			last = i
+		} else {
+			break
+		}
+	}
+	return
+}
+
 // commentEntryStartRows returns, for each entry, the tab-relative row index
-// where its border-top line appears. Every entry is always rendered with a
-// rounded border, so heights are constant regardless of which entry is active.
+// where its visible area starts. For standalone entries and thread roots this
+// is the top border row; for thread replies this is the first content line.
 // The section header occupies 3 rows before the first entry.
 // Returns nil when there are no entries.
 func (m *PRDetailModel) commentEntryStartRows(contentWidth int) []int {
@@ -188,24 +305,69 @@ func (m *PRDetailModel) commentEntryStartRows(contentWidth int) []int {
 	cw := max(contentWidth, 1)
 	result := make([]int, len(entries))
 	cursor := 3 // section header rows: blank + separator + "Comments" label
-	for i, e := range entries {
-		result[i] = cursor
-		cursor += m.entryRowCount(e, cw) + 2 // +2 for top + bottom border (always present)
+	i := 0
+	for i < len(entries) {
+		e := entries[i]
+		if e.threadID != "" {
+			j := i + 1
+			for j < len(entries) && entries[j].threadID == e.threadID {
+				j++
+			}
+			// Thread group: parent + replies.
+			result[i] = cursor
+			cursor += 1 // top border
+			for k := i + 1; k < j; k++ {
+				cursor += m.entryRowCount(entries[k-1], cw)
+				result[k] = cursor
+			}
+			cursor += m.entryRowCount(entries[j-1], cw)
+			cursor += 1 // bottom border
+			i = j
+		} else {
+			result[i] = cursor
+			cursor += m.entryRowCount(e, cw) + 2 // top + bottom border
+			i++
+		}
 	}
 	return result
 }
 
+// commentRenderGroup is a contiguous slice of entries rendered as one unit:
+// either a single standalone entry (start+1 == end) or a full review thread.
+type commentRenderGroup struct {
+	start int
+	end   int // exclusive
+}
+
+func buildCommentRenderGroups(entries []commentEntry) []commentRenderGroup {
+	var groups []commentRenderGroup
+	i := 0
+	for i < len(entries) {
+		if entries[i].threadID != "" {
+			j := i + 1
+			for j < len(entries) && entries[j].threadID == entries[i].threadID {
+				j++
+			}
+			groups = append(groups, commentRenderGroup{start: i, end: j})
+			i = j
+		} else {
+			groups = append(groups, commentRenderGroup{start: i, end: i + 1})
+			i++
+		}
+	}
+	return groups
+}
+
 // commentLines returns the display lines for the Comments section.
-// Every entry is rendered inside a rounded border; the active entry's border
-// uses the Primary color, inactive entries use the muted Border color.
-// The active entry also shows a right-aligned "[r: Reply]" hint in its header.
+// Review threads are rendered as shared rounded boxes: the root comment appears
+// at the full inner width and replies appear with a 2-space indent.
+// Active entry headers use Primary color; active groups use Primary border.
 // Returns nil when detail is not loaded.
 func (m *PRDetailModel) commentLines(contentWidth int, activeIdx int) []string {
 	if m.Detail == nil {
 		return nil
 	}
 	cw := max(contentWidth, 1)
-
 	entries := m.commentEntries()
 
 	// Section header: blank + separator + label.
@@ -228,111 +390,150 @@ func (m *PRDetailModel) commentLines(contentWidth int, activeIdx int) []string {
 		return append(sectionHeader, msg)
 	}
 
-	// innerW is the content width inside the border (1 char left + 1 char right).
 	innerW := max(cw-2, 1)
-
 	lines := append([]string{}, sectionHeader...)
-	for i, e := range entries {
-		active := i == activeIdx
 
-		// Format timestamp.
-		ts := ""
-		if !e.ts.IsZero() {
-			ts = relativeTime(e.ts)
-		}
-
-		// Build header text.
-		var headerText string
-		if m.theme != nil {
-			headerText = m.theme.SecondaryTxt.Render("@" + e.login)
-			if e.state != "" {
-				headerText += m.theme.MutedTxt.Render(" · " + e.state)
-			}
-			if ts != "" {
-				headerText += m.theme.MutedTxt.Render(" · " + ts)
-			}
-		} else {
-			headerText = "@" + e.login
-			if e.state != "" {
-				headerText += " · " + e.state
-			}
-			if ts != "" {
-				headerText += " · " + ts
-			}
-		}
-
-		// Active entry gets a right-aligned hint in the header.
-		if active {
-			var hint string
-			if e.path != "" && e.line > 0 {
-				hint = "[Enter | r: Reply]"
-			} else if !e.isDraft {
-				hint = "[r: Reply]"
-			}
-			if hint != "" {
-				if m.theme != nil {
-					hint = m.theme.MutedTxt.Render(hint)
-				}
-				pad := innerW - lipgloss.Width(headerText) - lipgloss.Width(hint)
-				if pad > 0 {
-					headerText += strings.Repeat(" ", pad) + hint
-				} else {
-					headerText += " " + hint
-				}
-			}
-		}
-
-		// Collect inner lines (same structure for active and inactive).
-		var inner []string
-		inner = append(inner, headerText)
-		if e.path != "" && e.line > 0 {
-			inner = append(inner, "")
-			loc := fmt.Sprintf("%s:%d", e.path, e.line)
-			if m.theme != nil {
-				loc = m.theme.MutedTxt.Render(loc)
-			}
-			inner = append(inner, loc)
-			ctxLine := e.contextLine
-			if ctxLine == "" {
-				ctxLine = " "
-			}
-			// Render context line in a subtle/monospace style.
-			if m.theme != nil {
-				ctxLine = lipgloss.NewStyle().Foreground(m.theme.Muted).Render(ctxLine)
-			}
-			inner = append(inner, ctxLine)
-		}
-		if e.body != "" {
-			inner = append(inner, "")
-			bodyW := innerW
-			var bodyLines []string
-			if m.mdRenderer != nil {
-				bodyLines = m.mdRenderer.Render(e.body, bodyW)
-			} else {
-				bodyLines = wrapParagraph(e.body, bodyW)
-			}
-			inner = append(inner, bodyLines...)
-		}
-		inner = append(inner, "") // trailing blank
-
-		// Border color: primary for active, muted for inactive.
-		borderStyle := lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			Width(innerW)
-		if m.theme != nil {
+	for _, g := range buildCommentRenderGroups(entries) {
+		if g.end-g.start == 1 {
+			// Standalone entry: single box.
+			i := g.start
+			e := entries[i]
+			active := i == activeIdx
+			inner := m.buildCommentEntryInner(e, innerW, active)
 			bc := m.theme.Border
 			if active {
 				bc = m.theme.Primary
 			}
-			borderStyle = borderStyle.BorderForeground(bc)
+			borderStyle := lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				Width(innerW).
+				BorderForeground(bc)
+			block := borderStyle.Render(strings.Join(inner, "\n"))
+			lines = append(lines, strings.Split(block, "\n")...)
+			continue
 		}
-		block := borderStyle.Render(strings.Join(inner, "\n"))
+
+		// Thread group: shared rounded box.
+		var allInner []string
+		groupActive := false
+		for j := g.start; j < g.end; j++ {
+			e := entries[j]
+			active := j == activeIdx
+			if active {
+				groupActive = true
+			}
+			effectiveW := innerW
+			if e.isThreadReply {
+				effectiveW = max(innerW-2, 1)
+			}
+			entryInner := m.buildCommentEntryInner(e, effectiveW, active)
+			if e.isThreadReply {
+				for _, line := range entryInner {
+					allInner = append(allInner, "  "+line)
+				}
+			} else {
+				allInner = append(allInner, entryInner...)
+			}
+		}
+		bc := m.theme.Border
+		if groupActive {
+			bc = m.theme.Primary
+		}
+		borderStyle := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			Width(innerW).
+			BorderForeground(bc)
+		block := borderStyle.Render(strings.Join(allInner, "\n"))
 		lines = append(lines, strings.Split(block, "\n")...)
 	}
-	// Pad with a trailing blank line so the last comment's bottom border
-	// doesn't sit flush against the viewport edge.
 	lines = append(lines, "")
 	return lines
+}
+
+// buildCommentEntryInner builds the content lines for a single comment entry
+// (header, optional path/context, body, trailing blank) without any border or prefix.
+func (m *PRDetailModel) buildCommentEntryInner(e commentEntry, innerW int, active bool) []string {
+	var inner []string
+
+	ts := ""
+	if !e.ts.IsZero() {
+		ts = relativeTime(e.ts)
+	}
+
+	var headerText string
+	if m.theme != nil {
+		style := m.theme.SecondaryTxt
+		if active {
+			style = m.theme.PrimaryTxt
+		}
+		headerText = style.Render("@" + e.login)
+		if e.state != "" {
+			headerText += m.theme.MutedTxt.Render(" · " + e.state)
+		}
+		if ts != "" {
+			headerText += m.theme.MutedTxt.Render(" · " + ts)
+		}
+	} else {
+		headerText = "@" + e.login
+		if e.state != "" {
+			headerText += " · " + e.state
+		}
+		if ts != "" {
+			headerText += " · " + ts
+		}
+	}
+
+	if active {
+		var hint string
+		if e.path != "" && e.line > 0 {
+			hint = "[Enter | r: Reply]"
+		} else if !e.isDraft {
+			hint = "[r: Reply]"
+		}
+		if hint != "" {
+			if m.theme != nil {
+				hint = m.theme.MutedTxt.Render(hint)
+			}
+			pad := innerW - lipgloss.Width(headerText) - lipgloss.Width(hint)
+			if pad > 0 {
+				headerText += strings.Repeat(" ", pad) + hint
+			} else {
+				headerText += " " + hint
+			}
+		}
+	}
+
+	inner = append(inner, headerText)
+
+	if !e.isThreadReply && e.path != "" && e.line > 0 {
+		inner = append(inner, "")
+		loc := fmt.Sprintf("%s:%d", e.path, e.line)
+		if m.theme != nil {
+			loc = m.theme.MutedTxt.Render(loc)
+		}
+		inner = append(inner, loc)
+		ctxLine := e.contextLine
+		if ctxLine == "" {
+			ctxLine = " "
+		}
+		if m.theme != nil {
+			ctxLine = lipgloss.NewStyle().Foreground(m.theme.Muted).Render(ctxLine)
+		}
+		inner = append(inner, ctxLine)
+	}
+
+	if e.body != "" {
+		inner = append(inner, "")
+		var bodyLines []string
+		if m.mdRenderer != nil {
+			bodyLines = m.mdRenderer.Render(e.body, innerW)
+		} else {
+			bodyLines = wrapParagraph(e.body, innerW)
+		}
+		inner = append(inner, bodyLines...)
+	}
+	inner = append(inner, "")
+	return inner
 }
 
 // renderCommentsTab renders the Comments tab content at the given scroll and
@@ -350,4 +551,14 @@ func (m *PRDetailModel) renderCommentsTab(scroll, contentH, contentWidth int) []
 		}
 	}
 	return out
+}
+
+// sortUnits sorts comment units by category first (summaries before PR comments
+// before threads), then by timestamp within each category. Zero timestamps sort
+// last within their category. Uses stable insertion sort to preserve build order
+// among equal-timestamp entries.
+type commentUnit struct {
+	entries  []commentEntry
+	ts       time.Time
+	category int
 }

@@ -9,13 +9,9 @@ Comments
 │                              │
 │Should we rename this?        │
 │                              │
-╰──────────────────────────────╯
-╭──────────────────────────────╮
-│@bob · Mar 11 2024            │
+│  @bob · Mar 11 2024          │
 │                              │
-│a.go:5                        │
-│                              │
-│                              │
-│I think handleErr is clearer. │
+│  I think handleErr is        │
+│  clearer.                    │
 │                              │
 ╰──────────────────────────────╯

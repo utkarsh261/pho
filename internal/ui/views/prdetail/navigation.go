@@ -57,7 +57,15 @@ func (m *PRDetailModel) scrollToCommentCursor() {
 	}
 	entries := m.commentEntries()
 	entryTop := startRows[m.commentCursor]
-	entryBottom := entryTop + m.entryRowCount(entries[m.commentCursor], cw) + 2 // +2 for border
+	entryBottom := entryTop + m.entryRowCount(entries[m.commentCursor], cw)
+	isRoot := entries[m.commentCursor].threadID == "" || m.commentCursor == 0 || entries[m.commentCursor-1].threadID != entries[m.commentCursor].threadID
+	isLast := entries[m.commentCursor].threadID == "" || m.commentCursor == len(entries)-1 || entries[m.commentCursor+1].threadID != entries[m.commentCursor].threadID
+	if isRoot {
+		entryBottom += 1 // top border
+	}
+	if isLast {
+		entryBottom += 1 // bottom border
+	}
 	vh := m.contentViewportHeight()
 	viewTop := m.ContentScroll
 	viewBottom := viewTop + vh

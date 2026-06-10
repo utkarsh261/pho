@@ -3,6 +3,7 @@ package prdetail
 import (
 	"strings"
 	"testing"
+	"time"
 
 	diffmodel "github.com/utkarsh261/pho/internal/diff/model"
 	"github.com/utkarsh261/pho/internal/domain"
@@ -420,6 +421,362 @@ func TestCommentEntriesFromReviewThreads(t *testing.T) {
 	}
 	if entries[1].commentID != "c2" {
 		t.Errorf("expected second entry commentID=c2, got %q", entries[1].commentID)
+	}
+	if entries[0].isThreadReply {
+		t.Error("expected first entry to be the thread root")
+	}
+	if !entries[1].isThreadReply {
+		t.Error("expected second entry to be a thread reply")
+	}
+}
+
+func TestThreadEntryRowCountExcludesPathAndContext(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	root := commentEntry{login: "alice", body: "root", path: "a.go", line: 5, contextLine: "ctx"}
+	reply := commentEntry{login: "bob", body: "reply", path: "a.go", line: 5, isThreadReply: true}
+	cw := 80
+	rootH := m.entryRowCount(root, cw)
+	replyH := m.entryRowCount(reply, cw)
+	if rootH <= replyH {
+		t.Errorf("expected root height (%d) > reply height (%d)", rootH, replyH)
+	}
+}
+
+func TestThreadEntriesStayContiguousAfterSort(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.Detail = &domain.PRPreviewSnapshot{
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "t1", Path: "a.go", Line: 1,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "alice", Body: "early", CreatedAt: time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC)},
+					{ID: "c2", Login: "bob", Body: "late", CreatedAt: time.Date(2024, 1, 1, 14, 0, 0, 0, time.UTC)},
+				},
+			},
+		},
+		Comments: []domain.PreviewComment{
+			{ID: "c3", Login: "carol", Body: "middle", CreatedAt: time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)},
+		},
+	}
+	entries := m.commentEntries()
+	var aliceIdx, bobIdx int
+	for i, e := range entries {
+		if e.login == "alice" {
+			aliceIdx = i
+		}
+		if e.login == "bob" {
+			bobIdx = i
+		}
+	}
+	if bobIdx-aliceIdx != 1 {
+		t.Errorf("expected alice and bob to be contiguous (indices %d and %d)", aliceIdx, bobIdx)
+	}
+}
+
+func TestInterleavedThreadsSortAsUnits(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.Detail = &domain.PRPreviewSnapshot{
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "t1", Path: "a.go", Line: 1,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "alice", Body: "root", CreatedAt: time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC)},
+					{ID: "c2", Login: "alice2", Body: "reply", CreatedAt: time.Date(2024, 1, 1, 16, 0, 0, 0, time.UTC)},
+				},
+			},
+			{
+				ID: "t2", Path: "b.go", Line: 2,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c3", Login: "bob", Body: "root", CreatedAt: time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)},
+				},
+			},
+		},
+	}
+	entries := m.commentEntries()
+	var t1Start, t2Start int = -1, -1
+	for i, e := range entries {
+		if e.threadID == "t1" && t1Start == -1 {
+			t1Start = i
+		}
+		if e.threadID == "t2" && t2Start == -1 {
+			t2Start = i
+		}
+	}
+	if t1Start == -1 || t2Start == -1 {
+		t.Fatalf("could not locate threads: t1Start=%d t2Start=%d", t1Start, t2Start)
+	}
+	if t1Start >= t2Start {
+		t.Errorf("expected t1 (start %d) before t2 (start %d)", t1Start, t2Start)
+	}
+	if entries[t1Start+1].threadID != "t1" {
+		t.Error("expected t1's two comments to be contiguous")
+	}
+}
+
+func TestReviewSummaryBeforeNearbyThreads(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	threadTime := time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC)
+	reviewTime := time.Date(2024, 1, 1, 10, 0, 30, 0, time.UTC)
+	m.Detail = &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{Login: "alice", State: "COMMENTED", Body: "test latest", SubmittedAt: reviewTime},
+		},
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "t1", Path: "handlers.go", Line: 103,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "alice", Body: "test", CreatedAt: threadTime},
+					{ID: "c2", Login: "bob", Body: "test inline", CreatedAt: threadTime.Add(1 * time.Hour)},
+				},
+			},
+		},
+	}
+	entries := m.commentEntries()
+	reviewIdx := -1
+	threadIdx := -1
+	for i, e := range entries {
+		if e.state == "COMMENTED" && e.body == "test latest" {
+			reviewIdx = i
+		}
+		if e.threadID == "t1" && threadIdx == -1 {
+			threadIdx = i
+		}
+	}
+	if reviewIdx == -1 {
+		t.Fatal("review summary 'test latest' not found")
+	}
+	if threadIdx == -1 {
+		t.Fatal("thread t1 not found")
+	}
+	if reviewIdx >= threadIdx {
+		t.Errorf("review summary (idx %d) must appear before nearby thread (idx %d)", reviewIdx, threadIdx)
+	}
+}
+
+func TestSortChronological_DistantReviewsAndThreads(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	oldReview := time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC)
+	newThread := time.Date(2024, 6, 1, 10, 0, 0, 0, time.UTC)
+	m.Detail = &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{Login: "alice", State: "APPROVED", Body: "LGTM", SubmittedAt: oldReview},
+		},
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "t1", Path: "a.go", Line: 5,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "bob", Body: "new comment", CreatedAt: newThread},
+				},
+			},
+		},
+	}
+	entries := m.commentEntries()
+	oldIdx := -1
+	newIdx := -1
+	for i, e := range entries {
+		if e.body == "LGTM" {
+			oldIdx = i
+		}
+		if e.body == "new comment" {
+			newIdx = i
+		}
+	}
+	if oldIdx == -1 || newIdx == -1 {
+		t.Fatalf("missing entries: old=%d new=%d", oldIdx, newIdx)
+	}
+	if oldIdx > newIdx {
+		t.Errorf("old review (Jan) at idx %d should be before new thread (Jun) at idx %d", oldIdx, newIdx)
+	}
+}
+
+func TestSort_PRCommentBetweenReviewAndThread(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	reviewTime := time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC)
+	prCommentTime := time.Date(2024, 1, 1, 11, 0, 0, 0, time.UTC)
+	threadTime := time.Date(2024, 1, 1, 14, 0, 0, 0, time.UTC)
+	m.Detail = &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{Login: "alice", State: "APPROVED", Body: "LGTM", SubmittedAt: reviewTime},
+		},
+		Comments: []domain.PreviewComment{
+			{ID: "pc1", Login: "bob", Body: "nice PR", CreatedAt: prCommentTime},
+		},
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "t1", Path: "a.go", Line: 5,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "carol", Body: "inline comment", CreatedAt: threadTime},
+				},
+			},
+		},
+	}
+	entries := m.commentEntries()
+	reviewIdx := -1
+	prIdx := -1
+	threadIdx := -1
+	for i, e := range entries {
+		if e.body == "LGTM" && e.state == "APPROVED" {
+			reviewIdx = i
+		}
+		if e.body == "nice PR" && e.state == "" {
+			prIdx = i
+		}
+		if e.body == "inline comment" {
+			threadIdx = i
+		}
+	}
+	if reviewIdx == -1 || prIdx == -1 || threadIdx == -1 {
+		t.Fatalf("missing entries: review=%d pr=%d thread=%d", reviewIdx, prIdx, threadIdx)
+	}
+	if !(reviewIdx < prIdx && prIdx < threadIdx) {
+		t.Errorf("expected review(%d) < prComment(%d) < thread(%d)", reviewIdx, prIdx, threadIdx)
+	}
+}
+
+func TestSort_ReviewSummaryFarFromThread_PlacedChronologically(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	threadTime := time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC)
+	reviewTime := time.Date(2024, 1, 1, 18, 0, 0, 0, time.UTC)
+	m.Detail = &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{Login: "alice", State: "COMMENTED", Body: "evening review", SubmittedAt: reviewTime},
+		},
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "t1", Path: "a.go", Line: 5,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "bob", Body: "morning comment", CreatedAt: threadTime},
+				},
+			},
+		},
+	}
+	entries := m.commentEntries()
+	threadIdx := -1
+	reviewIdx := -1
+	for i, e := range entries {
+		if e.body == "morning comment" {
+			threadIdx = i
+		}
+		if e.body == "evening review" {
+			reviewIdx = i
+		}
+	}
+	if threadIdx == -1 || reviewIdx == -1 {
+		t.Fatalf("missing entries: thread=%d review=%d", threadIdx, reviewIdx)
+	}
+	if threadIdx > reviewIdx {
+		t.Errorf("morning thread (idx %d) should appear before evening review (idx %d)", threadIdx, reviewIdx)
+	}
+}
+
+func TestSort_MultipleReviewsStayChronological(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.Detail = &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{Login: "alice", State: "APPROVED", Body: "first review", SubmittedAt: time.Date(2024, 1, 1, 9, 0, 0, 0, time.UTC)},
+			{Login: "bob", State: "COMMENTED", Body: "second review", SubmittedAt: time.Date(2024, 1, 2, 9, 0, 0, 0, time.UTC)},
+			{Login: "carol", State: "APPROVED", Body: "third review", SubmittedAt: time.Date(2024, 1, 3, 9, 0, 0, 0, time.UTC)},
+		},
+	}
+	entries := m.commentEntries()
+	firstIdx := -1
+	secondIdx := -1
+	thirdIdx := -1
+	for i, e := range entries {
+		if e.body == "first review" {
+			firstIdx = i
+		}
+		if e.body == "second review" {
+			secondIdx = i
+		}
+		if e.body == "third review" {
+			thirdIdx = i
+		}
+	}
+	if !(firstIdx < secondIdx && secondIdx < thirdIdx) {
+		t.Errorf("reviews should be chronological: first=%d second=%d third=%d", firstIdx, secondIdx, thirdIdx)
+	}
+}
+
+func TestThreadOneBorderPerThread(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.Detail = &domain.PRPreviewSnapshot{
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "t1", Path: "a.go", Line: 5,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "alice", Body: "root"},
+					{ID: "c2", Login: "bob", Body: "reply"},
+				},
+			},
+		},
+	}
+	m.SetTheme(theme.Default())
+	cw := m.contentW()
+	lines := m.commentLines(cw, -1)
+	plain := descStripANSI(strings.Join(lines, "\n"))
+	borderTops := strings.Count(plain, "╭")
+	borderBottoms := strings.Count(plain, "╰")
+	if borderTops != 1 {
+		t.Errorf("expected 1 top border for single thread, got %d", borderTops)
+	}
+	if borderBottoms != 1 {
+		t.Errorf("expected 1 bottom border for single thread, got %d", borderBottoms)
+	}
+}
+
+func TestThreadReplyIndentedTwoSpaces(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.Detail = &domain.PRPreviewSnapshot{
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "t1", Path: "a.go", Line: 5,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "alice", Body: "root"},
+					{ID: "c2", Login: "bob", Body: "reply"},
+				},
+			},
+		},
+	}
+	m.SetTheme(theme.Default())
+	cw := m.contentW()
+	lines := m.commentLines(cw, -1)
+	plain := descStripANSI(strings.Join(lines, "\n"))
+	if !strings.Contains(plain, "  @bob") {
+		t.Error("expected reply header to be indented by 2 spaces")
+	}
+}
+
+func TestThreadNoPipePrefixOnReplies(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.Detail = &domain.PRPreviewSnapshot{
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "t1", Path: "a.go", Line: 5,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "alice", Body: "root"},
+					{ID: "c2", Login: "bob", Body: "reply"},
+				},
+			},
+		},
+	}
+	m.SetTheme(theme.Default())
+	cw := m.contentW()
+	lines := m.commentLines(cw, -1)
+	plain := descStripANSI(strings.Join(lines, "\n"))
+	if strings.Contains(plain, "│ @") || strings.Contains(plain, "││") {
+		t.Error("expected no │ prefix on reply lines")
 	}
 }
 
@@ -1075,4 +1432,404 @@ func TestSelectionHighlightOverridesDraftIndicator(t *testing.T) {
 	// The rendering logic in renderDiffSectionLines checks isSelected first,
 	// then isDrafted. This is verified by code inspection; the test documents
 	// the expected precedence.
+}
+
+// ── End-to-end thread rendering from PRPreviewSnapshot ──────────────────────────
+//
+// These tests verify that ReviewThreads from a normalized GraphQL response
+// produce grouped shared boxes (not separate boxes per comment).
+
+func commentEntriesFromSnapshot(snapshot *domain.PRPreviewSnapshot) []commentEntry {
+	m := makePRDetail(80, 40, nil, nil)
+	m.Detail = snapshot
+	m.SetTheme(theme.Default())
+	return m.commentEntries()
+}
+
+func commentLinesFromSnapshot(snapshot *domain.PRPreviewSnapshot, width, activeIdx int) []string {
+	m := makePRDetail(width, 40, nil, nil)
+	m.Detail = snapshot
+	m.SetTheme(theme.Default())
+	cw := m.contentW()
+	return m.commentLines(cw, activeIdx)
+}
+
+func stripANSIE2E(s string) string {
+	var out []byte
+	inEsc := false
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\x1b' {
+			inEsc = true
+			continue
+		}
+		if inEsc {
+			if s[i] >= 'A' && s[i] <= 'Z' || s[i] >= 'a' && s[i] <= 'z' {
+				inEsc = false
+			}
+			continue
+		}
+		out = append(out, s[i])
+	}
+	return string(out)
+}
+
+func TestE2E_ReviewThreadEntriesFromSnapshot(t *testing.T) {
+	t1 := time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC)
+	t2 := time.Date(2026, 6, 4, 0, 0, 0, 0, time.UTC)
+
+	snapshot := &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{Login: "utkarsh261", State: "COMMENTED", Body: "test latest", SubmittedAt: t1},
+		},
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID:   "thread1",
+				Path: "handlers.go",
+				Line: 103,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "utkarsh261", Body: "test", CreatedAt: t1},
+					{ID: "c2", Login: "utkarsh261", Body: "test inline", CreatedAt: t2},
+				},
+			},
+		},
+	}
+
+	entries := commentEntriesFromSnapshot(snapshot)
+
+	if len(entries) != 3 {
+		t.Fatalf("expected 3 entries (1 review summary + 2 thread comments), got %d", len(entries))
+	}
+
+	if entries[0].state != "COMMENTED" || entries[0].threadID != "" {
+		t.Errorf("entry 0 should be review summary, got state=%q threadID=%q", entries[0].state, entries[0].threadID)
+	}
+	if entries[1].threadID != "thread1" || entries[1].isThreadReply {
+		t.Errorf("entry 1 should be thread root, got threadID=%q isThreadReply=%v", entries[1].threadID, entries[1].isThreadReply)
+	}
+	if !entries[1].isThreadReply == false && entries[1].path != "handlers.go" {
+		t.Errorf("entry 1 should have path=handlers.go, got path=%q", entries[1].path)
+	}
+	if entries[2].threadID != "thread1" || !entries[2].isThreadReply {
+		t.Errorf("entry 2 should be thread reply, got threadID=%q isThreadReply=%v", entries[2].threadID, entries[2].isThreadReply)
+	}
+}
+
+func TestE2E_ReviewThreadBoxRenderingFromSnapshot(t *testing.T) {
+	t1 := time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC)
+	t2 := time.Date(2026, 6, 4, 0, 0, 0, 0, time.UTC)
+
+	snapshot := &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{Login: "utkarsh261", State: "COMMENTED", Body: "test latest", SubmittedAt: t1},
+		},
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID:   "thread1",
+				Path: "handlers.go",
+				Line: 103,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "utkarsh261", Body: "test", CreatedAt: t1},
+					{ID: "c2", Login: "utkarsh261", Body: "test inline", CreatedAt: t2},
+				},
+			},
+		},
+	}
+
+	lines := commentLinesFromSnapshot(snapshot, 80, -1)
+	plain := stripANSIE2E(strings.Join(lines, "\n"))
+
+	borderTops := strings.Count(plain, "╭")
+	borderBottoms := strings.Count(plain, "╰")
+
+	if borderTops != 2 {
+		t.Errorf("expected 2 top borders (review + thread shared box), got %d", borderTops)
+	}
+	if borderBottoms != 2 {
+		t.Errorf("expected 2 bottom borders, got %d", borderBottoms)
+	}
+	if strings.Contains(plain, "│ @") || strings.Contains(plain, "││") {
+		t.Error("expected no │ prefix on reply lines inside shared box")
+	}
+	if !strings.Contains(plain, "  @utkarsh261") {
+		t.Error("expected reply header indented by 2 spaces")
+	}
+	reviewIdx := strings.Index(plain, "test latest")
+	threadIdx := strings.Index(plain, "test")
+	if reviewIdx < 0 || threadIdx < 0 {
+		t.Fatal("expected both review summary and thread comment in output")
+	}
+	if reviewIdx > threadIdx {
+		t.Error("expected review summary to appear before thread comments")
+	}
+}
+
+func TestE2E_NoReviewThreads_FallbackToInlineComments(t *testing.T) {
+	t1 := time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC)
+
+	snapshot := &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{
+				Login:       "utkarsh261",
+				State:       "COMMENTED",
+				Body:        "",
+				SubmittedAt: t1,
+				InlineComments: []domain.PreviewInlineComment{
+					{Body: "inline comment", Path: "handlers.go", Line: 103},
+				},
+			},
+		},
+		ReviewThreads: nil,
+	}
+
+	entries := commentEntriesFromSnapshot(snapshot)
+
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 fallback inline comment entry, got %d", len(entries))
+	}
+	if entries[0].body != "inline comment" {
+		t.Errorf("expected body 'inline comment', got %q", entries[0].body)
+	}
+	if entries[0].path != "handlers.go" || entries[0].line != 103 {
+		t.Errorf("expected path handlers.go:103, got %s:%d", entries[0].path, entries[0].line)
+	}
+}
+
+func TestE2E_ReviewThreadsPreferredOverInlineComments(t *testing.T) {
+	t1 := time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC)
+
+	snapshot := &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{
+				Login:       "utkarsh261",
+				State:       "COMMENTED",
+				Body:        "",
+				SubmittedAt: t1,
+				InlineComments: []domain.PreviewInlineComment{
+					{Body: "stale inline", Path: "handlers.go", Line: 103},
+				},
+			},
+		},
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID:   "thread1",
+				Path: "handlers.go",
+				Line: 103,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "utkarsh261", Body: "fresh thread", CreatedAt: t1},
+				},
+			},
+		},
+	}
+
+	entries := commentEntriesFromSnapshot(snapshot)
+
+	for _, e := range entries {
+		if e.body == "stale inline" {
+			t.Error("stale InlineComments should not appear when ReviewThreads is populated")
+		}
+	}
+	found := false
+	for _, e := range entries {
+		if e.body == "fresh thread" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected 'fresh thread' from ReviewThreads but not found")
+	}
+}
+
+func TestE2E_RealPR13Data(t *testing.T) {
+	t.Parallel()
+
+	tReviewInline := mustTime("2026-04-25T12:00:44Z")
+	tComment := mustTime("2026-04-25T12:16:36Z")
+	tOk := mustTime("2026-04-25T12:17:20Z")
+	tAight := mustTime("2026-04-25T18:00:40Z")
+	tAsdjks := mustTime("2026-04-26T20:15:27Z")
+	tAsdasd := mustTime("2026-04-26T20:43:57Z")
+	tOkTest := mustTime("2026-04-27T09:38:18Z")
+	tTestLatest := mustTime("2026-06-03T19:10:00Z")
+	tEmptyReview := mustTime("2026-06-04T19:22:11Z")
+	tThreadComment := mustTime("2026-06-03T19:09:50Z")
+	tThreadReply := mustTime("2026-06-04T19:22:11Z")
+	tTestNew := mustTime("2026-06-03T19:09:56Z")
+
+	snapshot := &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{Login: "utkarsh261", State: "COMMENTED", Body: "reviews inline", SubmittedAt: tReviewInline},
+			{Login: "utkarsh261", State: "COMMENTED", Body: "comment", SubmittedAt: tComment},
+			{Login: "utkarsh261", State: "COMMENTED", Body: "ok", SubmittedAt: tOk},
+			{Login: "utkarsh261", State: "COMMENTED", Body: "aight", SubmittedAt: tAight},
+			{Login: "utkarsh261", State: "COMMENTED", Body: "asdjks", SubmittedAt: tAsdjks},
+			{Login: "utkarsh261", State: "COMMENTED", Body: "asdasd", SubmittedAt: tAsdasd},
+			{Login: "utkarsh261", State: "COMMENTED", Body: "ok test", SubmittedAt: tOkTest},
+			{Login: "utkarsh261", State: "COMMENTED", Body: "test latest", SubmittedAt: tTestLatest},
+			{Login: "utkarsh261", State: "COMMENTED", Body: "", SubmittedAt: tEmptyReview},
+		},
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "PRRT_kwDORWMYTM6G3LKU", Path: "internal/adapters/telegram/handlers.go", Line: 103,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "PRRC_kwDORWMYTM7HvxJS", Login: "utkarsh261", Body: "test", CreatedAt: tThreadComment},
+					{ID: "PRRC_kwDORWMYTM7ILEDC", Login: "utkarsh261", Body: "test inline", CreatedAt: tThreadReply},
+				},
+			},
+			{
+				ID: "PRRT_kwDORWMYTM6G3LRK", Path: "internal/adapters/telegram/handlers.go", Line: 110,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "PRRC_kwDORWMYTM7HvxSU", Login: "utkarsh261", Body: "test new", CreatedAt: tTestNew},
+				},
+			},
+		},
+	}
+
+	entries := commentEntriesFromSnapshot(snapshot)
+
+	t.Logf("Entry order:")
+	for i, e := range entries {
+		t.Logf("  [%d] login=%s state=%q body=%q threadID=%q isReply=%v", i, e.login, e.state, e.body, e.threadID, e.isThreadReply)
+	}
+
+	// The empty COMMENTED review should be filtered out.
+	for _, e := range entries {
+		if e.state == "COMMENTED" && e.body == "" {
+			t.Error("empty COMMENTED review should be skipped")
+		}
+	}
+
+// "test latest" review summary must appear before its nearby thread entries,
+	// but NOT at the very top — it should be near threads from the same time window.
+	reviewIdx := -1
+	threadIdx := -1
+	firstReviewIdx := -1
+	for i, e := range entries {
+		if e.state == "COMMENTED" && e.body == "test latest" {
+			reviewIdx = i
+		}
+		if e.threadID == "PRRT_kwDORWMYTM6G3LKU" && threadIdx == -1 {
+			threadIdx = i
+		}
+		if e.state != "" && firstReviewIdx == -1 {
+			firstReviewIdx = i
+		}
+	}
+	if reviewIdx == -1 {
+		t.Fatal("'test latest' review summary not found in entries")
+	}
+	if threadIdx == -1 {
+		t.Fatal("thread PRRT_kwDORWMYTM6G3LKU not found in entries")
+	}
+	if reviewIdx >= threadIdx {
+		t.Errorf("review summary 'test latest' (idx %d) must appear before nearby thread (idx %d)", reviewIdx, threadIdx)
+	}
+	if reviewIdx == 0 {
+		t.Error("'test latest' should not be the very first entry — older reviews should appear before it")
+	}
+
+	// The thread "test" + "test inline" must be contiguous with reply marked.
+	testIdx := -1
+	testInlineIdx := -1
+	for i, e := range entries {
+		if e.body == "test" && e.threadID == "PRRT_kwDORWMYTM6G3LKU" {
+			testIdx = i
+		}
+		if e.body == "test inline" && e.threadID == "PRRT_kwDORWMYTM6G3LKU" {
+			testInlineIdx = i
+		}
+	}
+	if testIdx == -1 || testInlineIdx == -1 {
+		t.Fatalf("thread entries not found: test=%d testInline=%d", testIdx, testInlineIdx)
+	}
+	if testInlineIdx != testIdx+1 {
+		t.Errorf("reply 'test inline' (idx %d) should be immediately after 'test' (idx %d)", testInlineIdx, testIdx)
+	}
+	if entries[testIdx].isThreadReply {
+		t.Error("'test' should NOT be a reply (it's the thread root)")
+	}
+	if !entries[testInlineIdx].isThreadReply {
+		t.Error("'test inline' SHOULD be a reply")
+	}
+
+	// Verify rendering: "test latest" should have its own box, "test" + "test inline" share a box, "test new" has its own box.
+	lines := commentLinesFromSnapshot(snapshot, 80, -1)
+	plain := stripANSIE2E(strings.Join(lines, "\n"))
+	borderTops := strings.Count(plain, "╭")
+	borderBottoms := strings.Count(plain, "╰")
+	if borderTops < 3 {
+		t.Errorf("expected at least 3 top borders (review + thread1 + thread2), got %d", borderTops)
+	}
+	if borderBottoms < 3 {
+		t.Errorf("expected at least 3 bottom borders, got %d", borderBottoms)
+	}
+}
+
+func TestE2E_RealPR13Data_RenderOutput(t *testing.T) {
+	tReviewInline := mustTime("2026-04-25T12:00:44Z")
+	tComment := mustTime("2026-04-25T12:16:36Z")
+	tOk := mustTime("2026-04-25T12:17:20Z")
+	tAight := mustTime("2026-04-25T18:00:40Z")
+	tAsdjks := mustTime("2026-04-26T20:15:27Z")
+	tAsdasd := mustTime("2026-04-26T20:43:57Z")
+	tOkTest := mustTime("2026-04-27T09:38:18Z")
+	tTestLatest := mustTime("2026-06-03T19:10:00Z")
+	tThreadComment := mustTime("2026-06-03T19:09:50Z")
+	tThreadReply := mustTime("2026-06-04T19:22:11Z")
+	tTestNew := mustTime("2026-06-03T19:09:56Z")
+
+	snapshot := &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{Login: "utkarsh261", State: "COMMENTED", Body: "reviews inline", SubmittedAt: tReviewInline},
+			{Login: "utkarsh261", State: "COMMENTED", Body: "comment", SubmittedAt: tComment},
+			{Login: "utkarsh261", State: "COMMENTED", Body: "ok", SubmittedAt: tOk},
+			{Login: "utkarsh261", State: "COMMENTED", Body: "aight", SubmittedAt: tAight},
+			{Login: "utkarsh261", State: "COMMENTED", Body: "asdjks", SubmittedAt: tAsdjks},
+			{Login: "utkarsh261", State: "COMMENTED", Body: "asdasd", SubmittedAt: tAsdasd},
+			{Login: "utkarsh261", State: "COMMENTED", Body: "ok test", SubmittedAt: tOkTest},
+			{Login: "utkarsh261", State: "COMMENTED", Body: "test latest", SubmittedAt: tTestLatest},
+		},
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "PRRT_kwDORWMYTM6G3LKU", Path: "internal/adapters/telegram/handlers.go", Line: 103,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "PRRC_1", Login: "utkarsh261", Body: "test", CreatedAt: tThreadComment},
+					{ID: "PRRC_2", Login: "utkarsh261", Body: "test inline", CreatedAt: tThreadReply},
+				},
+			},
+			{
+				ID: "PRRT_kwDORWMYTM6G3LRK", Path: "internal/adapters/telegram/handlers.go", Line: 110,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "PRRC_3", Login: "utkarsh261", Body: "test new", CreatedAt: tTestNew},
+				},
+			},
+		},
+	}
+
+	lines := commentLinesFromSnapshot(snapshot, 80, -1)
+	plain := stripANSIE2E(strings.Join(lines, "\n"))
+	t.Log("Rendered output:\n" + plain)
+
+	if !strings.Contains(plain, "test latest") {
+		t.Error("expected 'test latest' to appear in rendered output")
+	}
+	if !strings.Contains(plain, "test inline") {
+		t.Error("expected 'test inline' to appear in rendered output")
+	}
+	if !strings.Contains(plain, "test new") {
+		t.Error("expected 'test new' to appear in rendered output")
+	}
+	if !strings.Contains(plain, "reviews inline") {
+		t.Error("expected 'reviews inline' to appear in rendered output")
+	}
+	if !strings.Contains(plain, "test") && strings.Count(plain, "test") < 2 {
+		t.Error("expected multiple 'test' occurrences in rendered output")
+	}
+}
+
+func mustTime(s string) time.Time {
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		panic(err)
+	}
+	return t
 }
