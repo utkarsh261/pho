@@ -1699,7 +1699,7 @@ func TestE2E_RealPR13Data(t *testing.T) {
 		}
 	}
 
-// "test latest" review summary must appear before its nearby thread entries,
+	// "test latest" review summary must appear before its nearby thread entries,
 	// but NOT at the very top — it should be near threads from the same time window.
 	reviewIdx := -1
 	threadIdx := -1
