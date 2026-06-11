@@ -99,12 +99,14 @@ func TestNormalizePreviewResponse_Fixture(t *testing.T) {
 
 func TestPreviewReviewThreads(t *testing.T) {
 	t.Parallel()
+	five := 5
+	one := 1
 	conn := model.ReviewThreadConnection{
 		Nodes: []model.ReviewThreadNode{
 			{
 				ID:         "thread1",
 				Path:       "a.go",
-				Line:       5,
+				Line:       &five,
 				IsResolved: false,
 				Comments: model.ReviewThreadCommentConnection{
 					Nodes: []model.ReviewThreadCommentNode{
@@ -113,8 +115,8 @@ func TestPreviewReviewThreads(t *testing.T) {
 					},
 				},
 			},
-			{ID: "empty", Path: "b.go", Line: 1, Comments: model.ReviewThreadCommentConnection{}},
-			{ID: "", Path: "c.go", Line: 1, Comments: model.ReviewThreadCommentConnection{
+			{ID: "empty", Path: "b.go", Line: &one, Comments: model.ReviewThreadCommentConnection{}},
+			{ID: "", Path: "c.go", Line: &one, Comments: model.ReviewThreadCommentConnection{
 				Nodes: []model.ReviewThreadCommentNode{
 					{ID: "c3", Author: &model.ActorNode{Login: "dave"}, Body: "orphan"},
 				},
@@ -122,7 +124,6 @@ func TestPreviewReviewThreads(t *testing.T) {
 		},
 	}
 	threads := previewReviewThreads(conn)
-	// Only the first thread should survive: empty-ID and no-comment threads are skipped.
 	if len(threads) != 1 {
 		t.Fatalf("expected 1 thread, got %d", len(threads))
 	}
@@ -472,5 +473,127 @@ func TestNormalizePreviewResponse_ReviewThreadsFromJSON(t *testing.T) {
 
 	if len(snapshot.Reviewers[0].InlineComments) != 0 {
 		t.Errorf("expected InlineComments to be empty, got %d", len(snapshot.Reviewers[0].InlineComments))
+	}
+}
+
+func TestPreviewReviewThreads_LineNullFallback(t *testing.T) {
+	t.Parallel()
+	actual := 42
+	outdatedLine := 99
+	conn := model.ReviewThreadConnection{
+		Nodes: []model.ReviewThreadNode{
+			{
+				ID:           "thread1",
+				Path:         "a.go",
+				Line:         nil,
+				OriginalLine: &outdatedLine,
+				IsResolved:   false,
+				Comments: model.ReviewThreadCommentConnection{
+					Nodes: []model.ReviewThreadCommentNode{
+						{ID: "c1", Author: &model.ActorNode{Login: "alice"}, Body: "outdated", CreatedAt: "2024-01-01T00:00:00Z"},
+					},
+				},
+			},
+			{
+				ID:           "thread2",
+				Path:         "b.go",
+				Line:         &actual,
+				OriginalLine: nil,
+				IsResolved:   false,
+				Comments: model.ReviewThreadCommentConnection{
+					Nodes: []model.ReviewThreadCommentNode{
+						{ID: "c2", Author: &model.ActorNode{Login: "bob"}, Body: "current", CreatedAt: "2024-01-02T00:00:00Z"},
+					},
+				},
+			},
+			{
+				ID:           "thread3",
+				Path:         "c.go",
+				Line:         nil,
+				OriginalLine: nil,
+				IsResolved:   false,
+				Comments: model.ReviewThreadCommentConnection{
+					Nodes: []model.ReviewThreadCommentNode{
+						{ID: "c3", Author: &model.ActorNode{Login: "carol"}, Body: "no line", CreatedAt: "2024-01-03T00:00:00Z"},
+					},
+				},
+			},
+		},
+	}
+	threads := previewReviewThreads(conn)
+	if len(threads) != 3 {
+		t.Fatalf("expected 3 threads, got %d", len(threads))
+	}
+	if threads[0].Line != 99 {
+		t.Errorf("expected thread1 Line=99 (originalLine fallback), got %d", threads[0].Line)
+	}
+	if threads[1].Line != 42 {
+		t.Errorf("expected thread2 Line=42 (from line), got %d", threads[1].Line)
+	}
+	if threads[2].Line != 0 {
+		t.Errorf("expected thread3 Line=0 (both null), got %d", threads[2].Line)
+	}
+}
+
+func TestPreviewReviewThreads_GhostAuthor(t *testing.T) {
+	t.Parallel()
+	line := 10
+	conn := model.ReviewThreadConnection{
+		Nodes: []model.ReviewThreadNode{
+			{
+				ID:   "thread1",
+				Path: "a.go",
+				Line: &line,
+				Comments: model.ReviewThreadCommentConnection{
+					Nodes: []model.ReviewThreadCommentNode{
+						{ID: "c1", Author: nil, Body: "deleted user comment", CreatedAt: "2024-01-01T00:00:00Z"},
+						{ID: "c2", Author: &model.ActorNode{Login: ""}, Body: "empty login", CreatedAt: "2024-01-02T00:00:00Z"},
+						{ID: "c3", Author: &model.ActorNode{Login: "alice"}, Body: "normal", CreatedAt: "2024-01-03T00:00:00Z"},
+					},
+				},
+			},
+		},
+	}
+	threads := previewReviewThreads(conn)
+	if len(threads) != 1 {
+		t.Fatalf("expected 1 thread, got %d", len(threads))
+	}
+	if len(threads[0].Comments) != 3 {
+		t.Fatalf("expected 3 comments (including ghost authors), got %d", len(threads[0].Comments))
+	}
+	if threads[0].Comments[0].Login != "ghost" {
+		t.Errorf("expected nil author to get login 'ghost', got %q", threads[0].Comments[0].Login)
+	}
+	if threads[0].Comments[1].Login != "ghost" {
+		t.Errorf("expected empty login to get 'ghost', got %q", threads[0].Comments[1].Login)
+	}
+	if threads[0].Comments[2].Login != "alice" {
+		t.Errorf("expected 'alice', got %q", threads[0].Comments[2].Login)
+	}
+}
+
+func TestPreviewReviewThreads_GhostAuthorDoesNotDropThread(t *testing.T) {
+	t.Parallel()
+	line := 5
+	conn := model.ReviewThreadConnection{
+		Nodes: []model.ReviewThreadNode{
+			{
+				ID:   "thread1",
+				Path: "a.go",
+				Line: &line,
+				Comments: model.ReviewThreadCommentConnection{
+					Nodes: []model.ReviewThreadCommentNode{
+						{ID: "c1", Author: nil, Body: "only comment, deleted author", CreatedAt: "2024-01-01T00:00:00Z"},
+					},
+				},
+			},
+		},
+	}
+	threads := previewReviewThreads(conn)
+	if len(threads) != 1 {
+		t.Fatalf("expected 1 thread (ghost author should not drop it), got %d", len(threads))
+	}
+	if threads[0].Comments[0].Login != "ghost" {
+		t.Errorf("expected ghost login, got %q", threads[0].Comments[0].Login)
 	}
 }

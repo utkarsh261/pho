@@ -265,11 +265,17 @@ func previewReviewThreads(conn model.ReviewThreadConnection) []domain.PreviewRev
 		if node.ID == "" {
 			continue
 		}
+		line := 0
+		if node.Line != nil {
+			line = *node.Line
+		} else if node.OriginalLine != nil {
+			line = *node.OriginalLine
+		}
 		var comments []domain.PreviewThreadComment
 		for _, c := range node.Comments.Nodes {
 			login := actorLogin(c.Author)
 			if login == "" {
-				continue
+				login = "ghost"
 			}
 			var createdAt time.Time
 			if c.CreatedAt != "" {
@@ -288,7 +294,7 @@ func previewReviewThreads(conn model.ReviewThreadConnection) []domain.PreviewRev
 		out = append(out, domain.PreviewReviewThread{
 			ID:         node.ID,
 			Path:       node.Path,
-			Line:       node.Line,
+			Line:       line,
 			IsResolved: node.IsResolved,
 			Comments:   comments,
 		})

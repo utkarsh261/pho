@@ -7,6 +7,7 @@ import (
 	"time"
 
 	diffmodel "github.com/utkarsh261/pho/internal/diff/model"
+	"github.com/utkarsh261/pho/internal/application/cmds"
 	"github.com/utkarsh261/pho/internal/domain"
 	"github.com/utkarsh261/pho/internal/ui/theme"
 )
@@ -2366,5 +2367,128 @@ func TestCommentEntryStartRowsSyncWithIndentedThread(t *testing.T) {
 				t.Errorf("thread should start after review: reviewRow=%d threadRow=%d", reviewRow, threadRow)
 			}
 		})
+	}
+}
+
+// ── Sort preserves chronological order for non-associated items ────────────────
+
+func TestSort_PRCommentNotReorderedBeforeUnassociatedThread(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	threadTime := time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC)
+	prCommentTime := time.Date(2024, 1, 1, 10, 4, 0, 0, time.UTC)
+	reviewTime := time.Date(2024, 1, 1, 10, 5, 0, 0, time.UTC)
+	m.Detail = &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{Login: "alice", State: "COMMENTED", Body: "review body", SubmittedAt: reviewTime},
+		},
+		Comments: []domain.PreviewComment{
+			{ID: "pc1", Login: "bob", Body: "pr comment", CreatedAt: prCommentTime},
+		},
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "t1", Path: "a.go", Line: 1,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "carol", Body: "thread comment", CreatedAt: threadTime},
+				},
+			},
+		},
+	}
+	entries := m.commentEntries()
+	threadIdx := -1
+	prIdx := -1
+	for i, e := range entries {
+		if e.threadID == "t1" && !e.isThreadReply {
+			threadIdx = i
+		}
+		if e.commentID == "pc1" {
+			prIdx = i
+		}
+	}
+	if threadIdx == -1 || prIdx == -1 {
+		t.Fatalf("missing entries: thread=%d prComment=%d", threadIdx, prIdx)
+	}
+	if prIdx < threadIdx {
+		t.Errorf("PR comment at 10:04 (idx %d) should NOT sort before unassociated thread at 10:00 (idx %d)", prIdx, threadIdx)
+	}
+}
+
+func TestSort_UnassociatedReviewSummaryStaysChronological(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	threadTime := time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC)
+	reviewTime := time.Date(2024, 1, 1, 10, 20, 0, 0, time.UTC) // 20 min after thread
+	m.Detail = &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{Login: "alice", State: "APPROVED", Body: "unrelated review", SubmittedAt: reviewTime},
+		},
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "t1", Path: "a.go", Line: 1,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "bob", Body: "earlier thread", CreatedAt: threadTime},
+				},
+			},
+		},
+	}
+	entries := m.commentEntries()
+	threadIdx := -1
+	reviewIdx := -1
+	for i, e := range entries {
+		if e.threadID == "t1" {
+			threadIdx = i
+		}
+		if e.body == "unrelated review" {
+			reviewIdx = i
+		}
+	}
+	if threadIdx == -1 || reviewIdx == -1 {
+		t.Fatalf("missing entries: thread=%d review=%d", threadIdx, reviewIdx)
+	}
+	if reviewIdx < threadIdx {
+		t.Errorf("unrelated review at 10:20 (idx %d) should NOT sort before thread at 10:00 (idx %d) when not associated", reviewIdx, threadIdx)
+	}
+}
+
+// ── PR-level reply scroll edge case ───────────────────────────────────────────
+
+func TestPostedCommentReplyToPRCommentScrollsToEnd(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.PRService = &prServiceStub{}
+	m.Detail = &domain.PRPreviewSnapshot{
+		Comments: []domain.PreviewComment{
+			{ID: "pc1", Login: "bob", Body: "original", CreatedAt: mustTime("2024-01-01T00:00:00Z")},
+		},
+	}
+	m.switchTab(TabComments)
+	entries := m.commentEntries()
+	originalIdx := -1
+	for i, e := range entries {
+		if e.commentID == "pc1" {
+			originalIdx = i
+		}
+	}
+	if originalIdx < 0 {
+		t.Fatal("original comment not found")
+	}
+
+	m.postedComment = true
+	m.postedCommentTarget = commentEntry{commentID: "pc1", login: "bob", body: "original"}
+
+	refreshed := &domain.PRPreviewSnapshot{
+		Comments: []domain.PreviewComment{
+			{ID: "pc1", Login: "bob", Body: "original", CreatedAt: mustTime("2024-01-01T00:00:00Z")},
+			{ID: "pc2", Login: "alice", Body: "my reply", CreatedAt: mustTime("2024-01-02T00:00:00Z")},
+		},
+	}
+	m, _ = m.Update(cmds.PRDetailLoaded{Detail: *refreshed})
+
+	if m.commentCursor == originalIdx && len(m.commentEntries()) > 1 {
+		t.Errorf("PR-level reply should scroll to the new last entry, not the original comment (cursor=%d, original=%d, last=%d)",
+			m.commentCursor, originalIdx, len(m.commentEntries())-1)
+	}
+	if m.commentCursor != len(m.commentEntries())-1 {
+		t.Errorf("expected cursor at last entry (%d), got %d", len(m.commentEntries())-1, m.commentCursor)
 	}
 }

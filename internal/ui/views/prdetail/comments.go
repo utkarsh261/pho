@@ -2,6 +2,7 @@ package prdetail
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -139,17 +140,15 @@ func (m *PRDetailModel) commentEntries() []commentEntry {
 	}
 
 	// Sort non-draft entries chronologically, with each review thread kept
-	// as an atomic unit sorted by its earliest comment timestamp. When a review
-	// summary and a thread unit were submitted around the same time (within a
-	// 5-minute window), the review summary sorts before the thread — this
-	// matches how GitHub groups a review body with its inline comments. Drafts
-	// stay at the top.
+	// as an atomic unit sorted by its earliest comment timestamp. Review
+	// summaries are floated just before the first thread they are associated
+	// with (submitted within 5 minutes after the thread's earliest comment);
+	// all other items remain in strict timestamp order. Drafts stay at the top.
 	draftCount := len(m.drafts)
 	if draftCount < len(entries) {
 		type unit struct {
-			entries  []commentEntry
-			ts       time.Time
-			category int // 0=summary, 1=prComment, 2=thread
+			entries []commentEntry
+			ts      time.Time
 		}
 		var units []unit
 		i := draftCount
@@ -169,50 +168,78 @@ func (m *PRDetailModel) commentEntries() []commentEntry {
 				}
 				u := make([]commentEntry, j-i)
 				copy(u, entries[i:j])
-				units = append(units, unit{entries: u, ts: key, category: 2})
+				units = append(units, unit{entries: u, ts: key})
 				i = j
-			} else if entries[i].state != "" {
-				units = append(units, unit{entries: []commentEntry{entries[i]}, ts: entries[i].ts, category: 0})
-				i++
 			} else {
-				units = append(units, unit{entries: []commentEntry{entries[i]}, ts: entries[i].ts, category: 1})
+				units = append(units, unit{entries: []commentEntry{entries[i]}, ts: entries[i].ts})
 				i++
 			}
 		}
-		// Sort primarily by timestamp. Within a 5-minute window, review summaries
-		// (category 0) come before PR comments (category 1) come before threads
-		// (category 2). This groups a review body with its inline comments while
-		// maintaining overall chronological order.
+		// Strict chronological sort by timestamp. Zero timestamps sort last.
+		sort.SliceStable(units, func(i, j int) bool {
+			aZero, bZero := units[i].ts.IsZero(), units[j].ts.IsZero()
+			if aZero && !bZero {
+				return false
+			}
+			if !aZero && bZero {
+				return true
+			}
+			if !aZero && !bZero {
+				return units[i].ts.Before(units[j].ts)
+			}
+			return false
+		})
+		// Float review summaries before their associated threads. A review
+		// summary is associated with a thread if it was submitted within 5
+		// minutes after the thread's earliest comment. Each review summary is
+		// inserted before the first (earliest) thread it's associated with.
 		const window = 5 * time.Minute
-		for i := 1; i < len(units); i++ {
-			for j := i; j > 0; j-- {
-				a, b := units[j-1], units[j]
-				aZero, bZero := a.ts.IsZero(), b.ts.IsZero()
-				shouldSwap := false
-				if aZero && !bZero {
-					shouldSwap = true
-				} else if !aZero && !bZero {
-					if a.ts.After(b.ts) && a.ts.Sub(b.ts) > window {
-						// Far apart — strict chronological order.
-						shouldSwap = true
-					} else if b.ts.Sub(a.ts) > window {
-						// Already in order and far apart — no swap.
-						break
-					} else {
-						// Within the same window — break ties by category.
-						if a.category > b.category {
-							shouldSwap = true
-						} else {
-							break
+		type reviewInfo struct {
+			idx int
+			ts  time.Time
+		}
+		var reviews []reviewInfo
+		for i, u := range units {
+			if len(u.entries) == 1 && u.entries[0].state != "" && u.entries[0].threadID == "" {
+				reviews = append(reviews, reviewInfo{idx: i, ts: u.ts})
+			}
+		}
+		type insertion struct {
+			reviewIdx       int
+			insertBeforeIdx int
+		}
+		assigned := map[int]bool{}
+		var insertions []insertion
+		for ti, u := range units {
+			if len(u.entries) > 0 && u.entries[0].threadID != "" {
+				earliest := u.ts
+				for _, r := range reviews {
+					if assigned[r.idx] {
+						continue
+					}
+					if !r.ts.IsZero() && !earliest.IsZero() && r.ts.After(earliest) && r.ts.Sub(earliest) <= window {
+						if r.idx < ti {
+							continue
 						}
+						insertions = append(insertions, insertion{reviewIdx: r.idx, insertBeforeIdx: ti})
+						assigned[r.idx] = true
+						break
 					}
 				}
-				if shouldSwap {
-					units[j-1], units[j] = units[j], units[j-1]
-				} else {
-					break
-				}
 			}
+		}
+		// Apply insertions in reverse order to preserve indices.
+		sort.Slice(insertions, func(i, j int) bool {
+			return insertions[i].reviewIdx > insertions[j].reviewIdx
+		})
+		for _, ins := range insertions {
+			reviewUnit := units[ins.reviewIdx]
+			units = append(units[:ins.reviewIdx], units[ins.reviewIdx+1:]...)
+			insertAt := ins.insertBeforeIdx
+			if ins.reviewIdx < ins.insertBeforeIdx {
+				insertAt--
+			}
+			units = append(units[:insertAt], append([]unit{reviewUnit}, units[insertAt:]...)...)
 		}
 		pos := draftCount
 		for _, u := range units {

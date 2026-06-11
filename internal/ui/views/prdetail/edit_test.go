@@ -353,3 +353,138 @@ func TestEditBodySuccessAutoDismisses(t *testing.T) {
 		t.Fatal("expected postedComment false for edit dismiss")
 	}
 }
+
+func TestPostedCommentTarget_RemembersThreadID(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.PRService = &prServiceStub{}
+	m.Detail = &domain.PRPreviewSnapshot{
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "thread1", Path: "a.go", Line: 1,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "bob", Body: "early", CreatedAt: mustTime("2024-01-01T00:00:00Z")},
+				},
+			},
+		},
+	}
+	m.switchTab(TabComments)
+	m = pressKey(m, "j")
+	if m.commentCursor != 0 {
+		t.Fatalf("expected commentCursor=0, got %d", m.commentCursor)
+	}
+	entries := m.commentEntries()
+	if len(entries) == 0 || entries[0].threadID != "thread1" {
+		t.Fatalf("expected first entry to be thread1, got %+v", entries)
+	}
+	m = pressKey(m, "r")
+	if !m.compose.active {
+		t.Fatal("expected compose active after r")
+	}
+	if m.compose.target.threadID != "thread1" {
+		t.Fatalf("expected target threadID=thread1, got %q", m.compose.target.threadID)
+	}
+	m.compose.SetText("reply body")
+	m, _ = m.Update(submitComposeMsg{body: "reply body"})
+	m, _ = m.Update(cmds.PRDetailLoaded{Detail: *m.Detail})
+	m, _ = m.Update(composeSuccessDismissMsg{})
+	if !m.postedComment {
+		t.Fatal("expected postedComment true after dismiss")
+	}
+	if m.postedCommentTarget.threadID != "thread1" {
+		t.Errorf("expected postedCommentTarget.threadID=thread1, got %q", m.postedCommentTarget.threadID)
+	}
+}
+
+func TestPostedCommentScrollsToThread(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.PRService = &prServiceStub{}
+	t1 := mustTime("2024-01-01T09:00:00Z")
+	t2 := mustTime("2024-01-02T09:00:00Z")
+	t3 := mustTime("2024-01-03T09:00:00Z")
+	m.Detail = &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{Login: "alice", State: "APPROVED", Body: "LGTM", SubmittedAt: t1},
+		},
+		Comments: []domain.PreviewComment{
+			{ID: "pc1", Login: "bob", Body: "recent comment", CreatedAt: t3},
+		},
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "thread1", Path: "a.go", Line: 1,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "carol", Body: "thread root", CreatedAt: t2},
+				},
+			},
+		},
+	}
+	entries := m.commentEntries()
+	threadIdx := -1
+	for i, e := range entries {
+		if e.threadID == "thread1" {
+			threadIdx = i
+			break
+		}
+	}
+	if threadIdx < 0 {
+		t.Fatal("thread1 not found")
+	}
+
+	m.postedComment = true
+	m.postedCommentTarget = commentEntry{threadID: "thread1"}
+	m, _ = m.Update(cmds.PRDetailLoaded{Detail: *m.Detail})
+
+	if m.commentCursor != threadIdx {
+		t.Errorf("expected commentCursor=%d (thread), got %d", threadIdx, m.commentCursor)
+	}
+	if m.postedComment {
+		t.Error("expected postedComment to be reset after PRDetailLoaded")
+	}
+}
+
+func TestPostedCommentScrollsToLastWhenNoTarget(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.PRService = &prServiceStub{}
+	m.Detail = &domain.PRPreviewSnapshot{
+		Comments: []domain.PreviewComment{
+			{ID: "pc1", Login: "bob", Body: "hello", CreatedAt: mustTime("2024-01-01T00:00:00Z")},
+		},
+	}
+	m.switchTab(TabComments)
+	m.postedComment = true
+	m.postedCommentTarget = commentEntry{}
+	m, _ = m.Update(cmds.PRDetailLoaded{Detail: *m.Detail})
+	entries := m.commentEntries()
+	if m.commentCursor != len(entries)-1 {
+		t.Errorf("expected commentCursor=%d (last), got %d", len(entries)-1, m.commentCursor)
+	}
+}
+
+func TestPostedCommentTarget_RemembersCommentID(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.PRService = &prServiceStub{}
+	m.Detail = &domain.PRPreviewSnapshot{
+		Comments: []domain.PreviewComment{
+			{ID: "pc1", Login: "bob", Body: "hello", CreatedAt: mustTime("2024-01-01T00:00:00Z")},
+		},
+	}
+	m.switchTab(TabComments)
+	m = pressKey(m, "j")
+	m = pressKey(m, "r")
+	if !m.compose.active {
+		t.Fatal("expected compose active after r")
+	}
+	m.compose.SetText("reply body")
+	m, _ = m.Update(submitComposeMsg{body: "reply body"})
+	m, _ = m.Update(cmds.PRDetailLoaded{Detail: *m.Detail})
+	m, _ = m.Update(composeSuccessDismissMsg{})
+	if !m.postedComment {
+		t.Fatal("expected postedComment true after dismiss")
+	}
+	if m.postedCommentTarget.commentID != "pc1" {
+		t.Errorf("expected postedCommentTarget.commentID=pc1, got %q", m.postedCommentTarget.commentID)
+	}
+}

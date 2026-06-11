@@ -315,11 +315,12 @@ type ReviewThreadConnection struct {
 }
 
 type ReviewThreadNode struct {
-	ID         string                        `json:"id"`
-	Path       string                        `json:"path"`
-	Line       int                           `json:"line"`
-	IsResolved bool                          `json:"isResolved"`
-	Comments   ReviewThreadCommentConnection `json:"comments"`
+	ID           string                        `json:"id"`
+	Path         string                        `json:"path"`
+	Line         *int                          `json:"line"`
+	OriginalLine *int                          `json:"originalLine"`
+	IsResolved   bool                          `json:"isResolved"`
+	Comments     ReviewThreadCommentConnection `json:"comments"`
 }
 
 type ReviewThreadCommentConnection struct {

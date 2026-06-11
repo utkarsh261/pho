@@ -124,8 +124,9 @@ type PRDetailModel struct {
 	searchCursor  int
 	searchCommit  bool
 
-	commentCursor int // -1 = none, 0..n-1 = index of focused comment entry
-	postedComment bool
+	commentCursor       int  // -1 = none, 0..n-1 = index of focused comment entry
+	postedComment        bool
+	postedCommentTarget  commentEntry // remember what was replied to, for scroll-to
 
 	compose ComposeModel
 
@@ -372,18 +373,30 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 			entries := m.commentEntries()
 			startRows := m.commentEntryStartRows(cw)
 			if len(startRows) > 0 {
-				lastIdx := len(startRows) - 1
-				entryTop := startRows[lastIdx]
-				entryH := m.entryRowCount(entries[lastIdx], cw) + 2
+				target := m.postedCommentTarget
+				idx := -1
+				if target.threadID != "" {
+					for i := len(entries) - 1; i >= 0; i-- {
+						if entries[i].threadID == target.threadID {
+							idx = i
+							break
+						}
+					}
+				}
+				if idx < 0 {
+					idx = len(startRows) - 1
+				}
+				entryTop := startRows[idx]
+				entryH := m.entryRenderHeight(entries[idx], cw, entries, idx)
 				endRow := entryTop + entryH
 				vh := m.contentViewportHeight()
-				target := max(endRow-vh+1, 0)
+				targetScroll := max(endRow-vh+1, 0)
 				m.switchTab(TabComments)
-				m.ContentScroll = target
+				m.ContentScroll = targetScroll
 				m.clampContentScroll()
-				// Place cursor at the new comment so j/k starts from here.
-				m.commentCursor = lastIdx
+				m.commentCursor = idx
 			}
+			m.postedCommentTarget = commentEntry{}
 		}
 
 		var out []tea.Cmd
@@ -686,18 +699,19 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 			return composeSuccessDismissMsg{}
 		}))
 
-	case composeSuccessDismissMsg:
-		wasEdit := m.compose.mode == composeModeEditTitle || m.compose.mode == composeModeEditBody
-		m.compose.Close()
-		if wasEdit {
-			// Edit modes don't trigger comment auto-scroll.
-			return m, tea.Batch(spinCmd, composeCmd)
-		}
-		m.postedComment = true
-		if m.PRService != nil {
-			return m, tea.Batch(spinCmd, composeCmd, cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true))
-		}
+case composeSuccessDismissMsg:
+	wasEdit := m.compose.mode == composeModeEditTitle || m.compose.mode == composeModeEditBody
+	target := m.compose.target
+	m.compose.Close()
+	if wasEdit {
 		return m, tea.Batch(spinCmd, composeCmd)
+	}
+	m.postedComment = true
+	m.postedCommentTarget = target
+	if m.PRService != nil {
+		return m, tea.Batch(spinCmd, composeCmd, cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true))
+	}
+	return m, tea.Batch(spinCmd, composeCmd)
 
 	case composeClosedMsg:
 		// Compose closed itself (e.g. Esc). No action needed here; the same-cycle
