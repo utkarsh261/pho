@@ -97,6 +97,67 @@ func TestNormalizePreviewResponse_Fixture(t *testing.T) {
 	}
 }
 
+func TestPreviewReviewThreads(t *testing.T) {
+	t.Parallel()
+	five := 5
+	one := 1
+	conn := model.ReviewThreadConnection{
+		Nodes: []model.ReviewThreadNode{
+			{
+				ID:         "thread1",
+				Path:       "a.go",
+				Line:       &five,
+				IsResolved: false,
+				Comments: model.ReviewThreadCommentConnection{
+					Nodes: []model.ReviewThreadCommentNode{
+						{ID: "c1", Author: &model.ActorNode{Login: "alice"}, Body: "first", CreatedAt: "2024-01-01T00:00:00Z"},
+						{ID: "c2", Author: &model.ActorNode{Login: "bob"}, Body: "second", CreatedAt: "2024-01-02T00:00:00Z"},
+					},
+				},
+			},
+			{ID: "empty", Path: "b.go", Line: &one, Comments: model.ReviewThreadCommentConnection{}},
+			{ID: "", Path: "c.go", Line: &one, Comments: model.ReviewThreadCommentConnection{
+				Nodes: []model.ReviewThreadCommentNode{
+					{ID: "c3", Author: &model.ActorNode{Login: "dave"}, Body: "orphan"},
+				},
+			}},
+		},
+	}
+	threads := previewReviewThreads(conn)
+	if len(threads) != 1 {
+		t.Fatalf("expected 1 thread, got %d", len(threads))
+	}
+	if threads[0].ID != "thread1" || threads[0].Path != "a.go" || threads[0].Line != 5 {
+		t.Errorf("unexpected first thread: %+v", threads[0])
+	}
+	if len(threads[0].Comments) != 2 {
+		t.Fatalf("expected 2 comments in first thread, got %d", len(threads[0].Comments))
+	}
+	if threads[0].Comments[0].ID != "c1" || threads[0].Comments[0].Login != "alice" {
+		t.Errorf("unexpected first comment: %+v", threads[0].Comments[0])
+	}
+}
+
+func TestPreviewCommentsWithIDs(t *testing.T) {
+	t.Parallel()
+	conn := model.IssueCommentConnection{
+		Nodes: []model.IssueCommentNode{
+			{ID: "c1", Author: &model.ActorNode{Login: "alice"}, Body: "hello", CreatedAt: "2024-01-01T00:00:00Z"},
+			{ID: "c2", Author: &model.ActorNode{Login: "bob"}, Body: "world", CreatedAt: "2024-01-02T00:00:00Z"},
+		},
+	}
+	comments := previewComments(conn)
+	if len(comments) != 2 {
+		t.Fatalf("expected 2 comments, got %d", len(comments))
+	}
+	if comments[0].ID != "c1" {
+		t.Errorf("expected first comment ID=c1, got %q", comments[0].ID)
+	}
+	if comments[1].ID != "c2" {
+		t.Errorf("expected second comment ID=c2, got %q", comments[1].ID)
+	}
+}
+
 func TestDashboardQueryShapeByHostProfile(t *testing.T) {
 	top := buildDashboardQuery(githubpkg.GitHubHostProfile{SupportsTopLevelRollup: true, SupportsHeadRefOID: true})
 	if !strings.Contains(top, "statusCheckRollup {") || strings.Contains(top, "commits(last: 1)") {
@@ -310,5 +371,229 @@ func TestNormalizeCommitsResponseEmpty(t *testing.T) {
 	commits := normalizeCommitsResponse(resp)
 	if len(commits) != 0 {
 		t.Errorf("expected 0 commits for nil PR, got %d", len(commits))
+	}
+}
+
+func TestNormalizePreviewResponse_ReviewThreadsFromJSON(t *testing.T) {
+	raw := `{
+	  "data": {
+	    "repository": {
+	      "nameWithOwner": "myorg/myrepo",
+	      "pullRequest": {
+	        "id": "PR_1",
+	        "number": 42,
+	        "title": "Test PR",
+	        "body": "body text",
+	        "state": "OPEN",
+	        "isDraft": false,
+	        "createdAt": "2026-06-01T00:00:00Z",
+	        "updatedAt": "2026-06-02T00:00:00Z",
+	        "headRefName": "main",
+	        "baseRefName": "main",
+	        "additions": 1,
+	        "deletions": 1,
+	        "changedFiles": 1,
+	        "reviewDecision": "APPROVED",
+	        "mergeable": "MERGEABLE",
+	        "mergeStateStatus": "CLEAN",
+	        "author": {"login": "alice"},
+	        "assignees": {"nodes": []},
+	        "reviews": {"nodes": [
+	          {"author": {"login": "bob"}, "state": "COMMENTED", "submittedAt": "2026-06-01T12:00:00Z", "body": "test latest", "avatarUrl": ""}
+	        ]},
+	        "reviewThreads": {"nodes": [
+	          {
+	            "id": "thread1",
+	            "path": "handlers.go",
+	            "line": 103,
+	            "isResolved": false,
+	            "comments": {"nodes": [
+	              {"id": "c1", "author": {"login": "bob"}, "body": "test", "createdAt": "2026-06-01T12:00:00Z"},
+	              {"id": "c2", "author": {"login": "alice"}, "body": "test inline", "createdAt": "2026-06-02T12:00:00Z"}
+	            ]}
+	          },
+	          {
+	            "id": "thread2",
+	            "path": "handlers.go",
+	            "line": 110,
+	            "isResolved": false,
+	            "comments": {"nodes": [
+	              {"id": "c3", "author": {"login": "bob"}, "body": "test new", "createdAt": "2026-06-01T12:00:00Z"}
+	            ]}
+	          }
+	        ]},
+	        "comments": {"nodes": []},
+	        "files": {"nodes": []},
+	        "timelineItems": {"nodes": []},
+	        "repository": {"nameWithOwner": "myorg/myrepo"},
+	        "statusCheckRollup": null,
+	        "labels": {"nodes": []},
+	        "reviewRequests": {"nodes": []},
+	        "latestOpinionatedReviews": {"nodes": []}
+	      }
+	    }
+	  }
+	}`
+	var resp model.PreviewResponse
+	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	repo := domain.Repository{Host: "github.com", FullName: "myorg/myrepo"}
+	snapshot, err := normalizePreviewResponse(repo, 42, resp.Data)
+	if err != nil {
+		t.Fatalf("normalize: %v", err)
+	}
+	if len(snapshot.ReviewThreads) != 2 {
+		t.Fatalf("expected 2 review threads, got %d", len(snapshot.ReviewThreads))
+	}
+	th1 := snapshot.ReviewThreads[0]
+	if th1.ID != "thread1" || th1.Path != "handlers.go" || th1.Line != 103 {
+		t.Errorf("unexpected thread1: %+v", th1)
+	}
+	if len(th1.Comments) != 2 {
+		t.Fatalf("expected 2 comments in thread1, got %d", len(th1.Comments))
+	}
+	if th1.Comments[0].Login != "bob" || th1.Comments[0].Body != "test" {
+		t.Errorf("unexpected thread1 comment0: %+v", th1.Comments[0])
+	}
+	if th1.Comments[1].Login != "alice" || th1.Comments[1].Body != "test inline" {
+		t.Errorf("unexpected thread1 comment1: %+v", th1.Comments[1])
+	}
+	th2 := snapshot.ReviewThreads[1]
+	if th2.ID != "thread2" || th2.Path != "handlers.go" || th2.Line != 110 {
+		t.Errorf("unexpected thread2: %+v", th2)
+	}
+	if len(th2.Comments) != 1 {
+		t.Fatalf("expected 1 comment in thread2, got %d", len(th2.Comments))
+	}
+
+	if len(snapshot.Reviewers) != 1 || snapshot.Reviewers[0].Login != "bob" {
+		t.Errorf("unexpected reviewers: %+v", snapshot.Reviewers)
+	}
+
+	if len(snapshot.Reviewers[0].InlineComments) != 0 {
+		t.Errorf("expected InlineComments to be empty, got %d", len(snapshot.Reviewers[0].InlineComments))
+	}
+}
+
+func TestPreviewReviewThreads_LineNullFallback(t *testing.T) {
+	t.Parallel()
+	actual := 42
+	outdatedLine := 99
+	conn := model.ReviewThreadConnection{
+		Nodes: []model.ReviewThreadNode{
+			{
+				ID:           "thread1",
+				Path:         "a.go",
+				Line:         nil,
+				OriginalLine: &outdatedLine,
+				IsResolved:   false,
+				Comments: model.ReviewThreadCommentConnection{
+					Nodes: []model.ReviewThreadCommentNode{
+						{ID: "c1", Author: &model.ActorNode{Login: "alice"}, Body: "outdated", CreatedAt: "2024-01-01T00:00:00Z"},
+					},
+				},
+			},
+			{
+				ID:           "thread2",
+				Path:         "b.go",
+				Line:         &actual,
+				OriginalLine: nil,
+				IsResolved:   false,
+				Comments: model.ReviewThreadCommentConnection{
+					Nodes: []model.ReviewThreadCommentNode{
+						{ID: "c2", Author: &model.ActorNode{Login: "bob"}, Body: "current", CreatedAt: "2024-01-02T00:00:00Z"},
+					},
+				},
+			},
+			{
+				ID:           "thread3",
+				Path:         "c.go",
+				Line:         nil,
+				OriginalLine: nil,
+				IsResolved:   false,
+				Comments: model.ReviewThreadCommentConnection{
+					Nodes: []model.ReviewThreadCommentNode{
+						{ID: "c3", Author: &model.ActorNode{Login: "carol"}, Body: "no line", CreatedAt: "2024-01-03T00:00:00Z"},
+					},
+				},
+			},
+		},
+	}
+	threads := previewReviewThreads(conn)
+	if len(threads) != 3 {
+		t.Fatalf("expected 3 threads, got %d", len(threads))
+	}
+	if threads[0].Line != 99 {
+		t.Errorf("expected thread1 Line=99 (originalLine fallback), got %d", threads[0].Line)
+	}
+	if threads[1].Line != 42 {
+		t.Errorf("expected thread2 Line=42 (from line), got %d", threads[1].Line)
+	}
+	if threads[2].Line != 0 {
+		t.Errorf("expected thread3 Line=0 (both null), got %d", threads[2].Line)
+	}
+}
+
+func TestPreviewReviewThreads_GhostAuthor(t *testing.T) {
+	t.Parallel()
+	line := 10
+	conn := model.ReviewThreadConnection{
+		Nodes: []model.ReviewThreadNode{
+			{
+				ID:   "thread1",
+				Path: "a.go",
+				Line: &line,
+				Comments: model.ReviewThreadCommentConnection{
+					Nodes: []model.ReviewThreadCommentNode{
+						{ID: "c1", Author: nil, Body: "deleted user comment", CreatedAt: "2024-01-01T00:00:00Z"},
+						{ID: "c2", Author: &model.ActorNode{Login: ""}, Body: "empty login", CreatedAt: "2024-01-02T00:00:00Z"},
+						{ID: "c3", Author: &model.ActorNode{Login: "alice"}, Body: "normal", CreatedAt: "2024-01-03T00:00:00Z"},
+					},
+				},
+			},
+		},
+	}
+	threads := previewReviewThreads(conn)
+	if len(threads) != 1 {
+		t.Fatalf("expected 1 thread, got %d", len(threads))
+	}
+	if len(threads[0].Comments) != 3 {
+		t.Fatalf("expected 3 comments (including ghost authors), got %d", len(threads[0].Comments))
+	}
+	if threads[0].Comments[0].Login != "ghost" {
+		t.Errorf("expected nil author to get login 'ghost', got %q", threads[0].Comments[0].Login)
+	}
+	if threads[0].Comments[1].Login != "ghost" {
+		t.Errorf("expected empty login to get 'ghost', got %q", threads[0].Comments[1].Login)
+	}
+	if threads[0].Comments[2].Login != "alice" {
+		t.Errorf("expected 'alice', got %q", threads[0].Comments[2].Login)
+	}
+}
+
+func TestPreviewReviewThreads_GhostAuthorDoesNotDropThread(t *testing.T) {
+	t.Parallel()
+	line := 5
+	conn := model.ReviewThreadConnection{
+		Nodes: []model.ReviewThreadNode{
+			{
+				ID:   "thread1",
+				Path: "a.go",
+				Line: &line,
+				Comments: model.ReviewThreadCommentConnection{
+					Nodes: []model.ReviewThreadCommentNode{
+						{ID: "c1", Author: nil, Body: "only comment, deleted author", CreatedAt: "2024-01-01T00:00:00Z"},
+					},
+				},
+			},
+		},
+	}
+	threads := previewReviewThreads(conn)
+	if len(threads) != 1 {
+		t.Fatalf("expected 1 thread (ghost author should not drop it), got %d", len(threads))
+	}
+	if threads[0].Comments[0].Login != "ghost" {
+		t.Errorf("expected ghost login, got %q", threads[0].Comments[0].Login)
 	}
 }

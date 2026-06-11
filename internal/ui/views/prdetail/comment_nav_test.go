@@ -436,7 +436,13 @@ func (s *prServiceStub) LoadCommitDiff(_ context.Context, _ domain.Repository, _
 func (s *prServiceStub) PostComment(_ context.Context, _ domain.Repository, _, _ string) error {
 	return nil
 }
+func (s *prServiceStub) PostCommentReply(_ context.Context, _ domain.Repository, _, _, _ string) error {
+	return nil
+}
 func (s *prServiceStub) PostReviewComment(_ context.Context, _ domain.Repository, _, _ string) error {
+	return nil
+}
+func (s *prServiceStub) PostThreadReply(_ context.Context, _ domain.Repository, _, _ string) error {
 	return nil
 }
 func (s *prServiceStub) ApprovePR(_ context.Context, _ domain.Repository, _, _ string) error {

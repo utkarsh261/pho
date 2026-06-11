@@ -293,6 +293,167 @@ func makeDetailWithGoldenComments() *domain.PRPreviewSnapshot {
 	}
 }
 
+func makeDetailWithGoldenThreads() *domain.PRPreviewSnapshot {
+	t1 := time.Date(2024, 3, 10, 0, 0, 0, 0, time.UTC)
+	t2 := time.Date(2024, 3, 11, 0, 0, 0, 0, time.UTC)
+	return &domain.PRPreviewSnapshot{
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "thread1", Path: "a.go", Line: 5,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "alice", Body: "Should we rename this?", CreatedAt: t1},
+					{ID: "c2", Login: "bob", Body: "I think `handleErr` is clearer.", CreatedAt: t2},
+				},
+			},
+		},
+	}
+}
+
+// ── comments section with threads golden ──────────────────────────────────────
+
+func TestCommentsLinesWithThreadsGolden(t *testing.T) {
+	for _, w := range composeGoldenWidths {
+		w := w
+		t.Run(fmt.Sprintf("w%d", w), func(t *testing.T) {
+			t.Parallel()
+			m := makePRDetail(w, 40, nil, nil)
+			m.Detail = makeDetailWithGoldenThreads()
+			m.SetTheme(theme.Default())
+			cw := m.contentW()
+			lines := m.commentLines(cw, -1)
+			got := descStripANSI(strings.Join(lines, "\n"))
+			checkGolden(t, got, fmt.Sprintf("comments_threads_w%d.txt", w))
+		})
+	}
+}
+
+func TestComposeViewThreadReplyGolden(t *testing.T) {
+	th := theme.Default()
+	for _, w := range composeGoldenWidths {
+		w := w
+		t.Run(fmt.Sprintf("w%d", w), func(t *testing.T) {
+			t.Parallel()
+			c := newComposeModel(th)
+			c.Open(composeModeReply, commentEntry{login: "alice", threadID: "thread1", path: "a.go", line: 5}, 0)
+			got := descStripANSI(c.View(w))
+			checkGolden(t, got, fmt.Sprintf("compose_thread_reply_w%d.txt", w))
+		})
+	}
+}
+
+// ── screenshot-matching test ──────────────────────────────────────────────────
+
+func TestCommentsLinesScreenshotExample(t *testing.T) {
+	t.Parallel()
+	// Models the exact data from the GitHub PR screenshot:
+	// - A review summary "test latest"
+	// - Thread on handlers.go:103: parent "test" + reply "test inline"
+	// - Thread on handlers.go:110: parent "test new"
+	t1 := time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC)
+	t2 := time.Date(2026, 6, 4, 0, 0, 0, 0, time.UTC)
+	t3 := time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC)
+
+	m := makePRDetail(80, 40, nil, nil)
+	m.Detail = &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{Login: "utkarsh261", State: "COMMENTED", Body: "test latest", SubmittedAt: t1},
+		},
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID:   "thread1",
+				Path: "internal/adapters/telegram/handlers.go",
+				Line: 103,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "utkarsh261", Body: "test", CreatedAt: t1},
+					{ID: "c2", Login: "utkarsh261", Body: "test inline", CreatedAt: t2},
+				},
+			},
+			{
+				ID:   "thread2",
+				Path: "internal/adapters/telegram/handlers.go",
+				Line: 110,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c3", Login: "utkarsh261", Body: "test new", CreatedAt: t3},
+				},
+			},
+		},
+	}
+	m.SetTheme(theme.Default())
+	cw := m.contentW()
+	lines := m.commentLines(cw, -1)
+	got := descStripANSI(strings.Join(lines, "\n"))
+	checkGolden(t, got, "comments_screenshot_w80.txt")
+
+	// Thread1 is a 2-entry thread (one shared box), thread2 is a 1-entry thread
+	// (standalone), and review summary is standalone. Total: 3 boxes.
+	borderTops := strings.Count(got, "╭")
+	if borderTops != 3 {
+		t.Errorf("expected 3 top borders (review + thread1 + thread2), got %d", borderTops)
+	}
+	borderBottoms := strings.Count(got, "╰")
+	if borderBottoms != 3 {
+		t.Errorf("expected 3 bottom borders, got %d", borderBottoms)
+	}
+	// Verify no │ prefix on replies (just 2-space indent).
+	if strings.Contains(got, "│ @") || strings.Contains(got, "││") {
+		t.Error("expected no │ prefix on reply lines")
+	}
+	// Verify reply is indented by 2 spaces.
+	if !strings.Contains(got, "  @utkarsh261") {
+		t.Error("expected reply header to be indented by 2 spaces")
+	}
+	// Verify correct order: review summary first.
+	reviewIdx := strings.Index(got, "test latest")
+	threadIdx := strings.Index(got, "test inline")
+	if reviewIdx < 0 || threadIdx < 0 {
+		t.Fatal("expected both review summary and thread in output")
+	}
+	if reviewIdx > threadIdx {
+		t.Error("expected review summary before threads")
+	}
+}
+
+func TestCommentsLinesScreenshotExampleActive(t *testing.T) {
+	t.Parallel()
+	t1 := time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC)
+	t2 := time.Date(2026, 6, 4, 0, 0, 0, 0, time.UTC)
+	t3 := time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC)
+
+	m := makePRDetail(80, 40, nil, nil)
+	m.Detail = &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{Login: "utkarsh261", State: "COMMENTED", Body: "test latest", SubmittedAt: t1},
+		},
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID:   "thread1",
+				Path: "internal/adapters/telegram/handlers.go",
+				Line: 103,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "utkarsh261", Body: "test", CreatedAt: t1},
+					{ID: "c2", Login: "utkarsh261", Body: "test inline", CreatedAt: t2},
+				},
+			},
+			{
+				ID:   "thread2",
+				Path: "internal/adapters/telegram/handlers.go",
+				Line: 110,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c3", Login: "utkarsh261", Body: "test new", CreatedAt: t3},
+				},
+			},
+		},
+	}
+	m.SetTheme(theme.Default())
+	cw := m.contentW()
+	// Cursor on the reply (index 3: draft0, draft0(none), review_summary(0), thread1_parent(1), thread1_reply(2), thread2_parent(3))
+	// Actually: review_summary=index0, thread1_parent=index1, thread1_reply=index2, thread2_parent=index3
+	// Cursor on thread1_reply (index 2) — the reply "test inline"
+	lines := m.commentLines(cw, 2)
+	got := descStripANSI(strings.Join(lines, "\n"))
+	checkGolden(t, got, "comments_screenshot_active_w80.txt")
+}
+
 // checkGolden compares got against testdata/golden/<name>, writing the file when -update is set.
 func checkGolden(t *testing.T, got, name string) {
 	t.Helper()

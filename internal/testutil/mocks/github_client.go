@@ -20,7 +20,9 @@ type MockGitHubClient struct {
 	FetchPreviewFn             func(ctx context.Context, repo domain.Repository, number int) (domain.PRPreviewSnapshot, error)
 	FetchCommitsFn             func(ctx context.Context, repo domain.Repository, number int) ([]domain.Commit, error)
 	PostCommentFn              func(ctx context.Context, host, pullRequestID, body string) error
+	PostCommentReplyFn         func(ctx context.Context, host, pullRequestID, commentID, body string) error
 	PostReviewCommentFn        func(ctx context.Context, host, pullRequestID, body string) error
+	PostThreadReplyFn          func(ctx context.Context, host, threadID, body string) error
 	ApprovePullRequestFn       func(ctx context.Context, host, pullRequestID, body string) error
 	SubmitReviewWithCommentsFn func(ctx context.Context, host, pullRequestID, body, event string, comments []domain.DraftInlineComment) error
 	FetchAllPRsFn              func(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
@@ -89,11 +91,25 @@ func (m *MockGitHubClient) PostComment(ctx context.Context, host, pullRequestID,
 	return m.PostCommentFn(ctx, host, pullRequestID, body)
 }
 
+func (m *MockGitHubClient) PostCommentReply(ctx context.Context, host, pullRequestID, commentID, body string) error {
+	if m.PostCommentReplyFn == nil {
+		panic("MockGitHubClient.PostCommentReply called but PostCommentReplyFn is nil")
+	}
+	return m.PostCommentReplyFn(ctx, host, pullRequestID, commentID, body)
+}
+
 func (m *MockGitHubClient) PostReviewComment(ctx context.Context, host, pullRequestID, body string) error {
 	if m.PostReviewCommentFn == nil {
 		panic("MockGitHubClient.PostReviewComment called but PostReviewCommentFn is nil")
 	}
 	return m.PostReviewCommentFn(ctx, host, pullRequestID, body)
+}
+
+func (m *MockGitHubClient) PostThreadReply(ctx context.Context, host, threadID, body string) error {
+	if m.PostThreadReplyFn == nil {
+		panic("MockGitHubClient.PostThreadReply called but PostThreadReplyFn is nil")
+	}
+	return m.PostThreadReplyFn(ctx, host, threadID, body)
 }
 
 func (m *MockGitHubClient) ApprovePullRequest(ctx context.Context, host, pullRequestID, body string) error {

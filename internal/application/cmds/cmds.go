@@ -40,7 +40,9 @@ type PRService interface {
 	LoadPRCommits(ctx context.Context, repo domain.Repository, number int, force bool) ([]domain.Commit, error)
 	LoadCommitDiff(ctx context.Context, repo domain.Repository, sha string, force bool) (model.DiffModel, error)
 	PostComment(ctx context.Context, repo domain.Repository, prID string, body string) error
+	PostCommentReply(ctx context.Context, repo domain.Repository, prID, commentID, body string) error
 	PostReviewComment(ctx context.Context, repo domain.Repository, prID string, body string) error
+	PostThreadReply(ctx context.Context, repo domain.Repository, threadID, body string) error
 	ApprovePR(ctx context.Context, repo domain.Repository, prID string, body string) error
 	SubmitReviewWithComments(ctx context.Context, repo domain.Repository, prID, body, event string, comments []domain.DraftInlineComment) error
 	SaveDraftComments(ctx context.Context, repo domain.Repository, number int, headSHA string, drafts []domain.DraftInlineComment) error
@@ -299,6 +301,24 @@ func PostReviewCommentCmd(svc PRService, repo domain.Repository, prID, body stri
 func PostCommentCmd(svc PRService, repo domain.Repository, prID, body string) tea.Cmd {
 	return func() tea.Msg {
 		if err := svc.PostComment(context.Background(), repo, prID, body); err != nil {
+			return CommentFailed{Err: err}
+		}
+		return CommentPosted{}
+	}
+}
+
+func PostCommentReplyCmd(svc PRService, repo domain.Repository, prID, commentID, body string) tea.Cmd {
+	return func() tea.Msg {
+		if err := svc.PostCommentReply(context.Background(), repo, prID, commentID, body); err != nil {
+			return CommentFailed{Err: err}
+		}
+		return CommentPosted{}
+	}
+}
+
+func PostThreadReplyCmd(svc PRService, repo domain.Repository, threadID, body string) tea.Cmd {
+	return func() tea.Msg {
+		if err := svc.PostThreadReply(context.Background(), repo, threadID, body); err != nil {
 			return CommentFailed{Err: err}
 		}
 		return CommentPosted{}

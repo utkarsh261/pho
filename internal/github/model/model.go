@@ -48,6 +48,14 @@ type AddPullRequestReviewData struct {
 	} `json:"addPullRequestReview"`
 }
 
+type AddPullRequestReviewThreadReplyData struct {
+	AddPullRequestReviewThreadReply struct {
+		Comment struct {
+			ID string `json:"id"`
+		} `json:"comment"`
+	} `json:"addPullRequestReviewThreadReply"`
+}
+
 type MergePullRequestData struct {
 	MergePullRequest struct {
 		PullRequest struct {
@@ -133,7 +141,6 @@ type PullRequestNode struct {
 	Deletions                int                         `json:"deletions"`
 	ChangedFiles             int                         `json:"changedFiles"`
 	Comments                 IssueCommentConnection      `json:"comments"`
-	ReviewThreads            CountNode                   `json:"reviewThreads"`
 	ReviewDecision           *string                     `json:"reviewDecision"`
 	Mergeable                string                      `json:"mergeable,omitempty"`
 	MergeState               string                      `json:"mergeStateStatus,omitempty"`
@@ -145,6 +152,7 @@ type PullRequestNode struct {
 	StatusCheckRollup        *StatusCheckRollup          `json:"statusCheckRollup,omitempty"`
 	Commits                  CommitConnection            `json:"commits"`
 	Reviews                  ReviewConnection            `json:"reviews"`
+	ReviewThreads            ReviewThreadConnection      `json:"reviewThreads"`
 	Files                    FileConnection              `json:"files"`
 	TimelineItems            TimelineItemConnection      `json:"timelineItems"`
 	Repository               *RepositoryRef              `json:"repository,omitempty"`
@@ -164,6 +172,7 @@ type CountNode struct {
 }
 
 type IssueCommentNode struct {
+	ID        string     `json:"id"`
 	Author    *ActorNode `json:"author"`
 	Body      string     `json:"body,omitempty"`
 	CreatedAt string     `json:"createdAt,omitempty"`
@@ -298,6 +307,31 @@ type FileNode struct {
 	Path      string `json:"path"`
 	Additions int    `json:"additions"`
 	Deletions int    `json:"deletions"`
+}
+
+type ReviewThreadConnection struct {
+	TotalCount int                `json:"totalCount"`
+	Nodes      []ReviewThreadNode `json:"nodes"`
+}
+
+type ReviewThreadNode struct {
+	ID           string                        `json:"id"`
+	Path         string                        `json:"path"`
+	Line         *int                          `json:"line"`
+	OriginalLine *int                          `json:"originalLine"`
+	IsResolved   bool                          `json:"isResolved"`
+	Comments     ReviewThreadCommentConnection `json:"comments"`
+}
+
+type ReviewThreadCommentConnection struct {
+	Nodes []ReviewThreadCommentNode `json:"nodes"`
+}
+
+type ReviewThreadCommentNode struct {
+	ID        string     `json:"id"`
+	Author    *ActorNode `json:"author"`
+	Body      string     `json:"body"`
+	CreatedAt string     `json:"createdAt"`
 }
 
 type TimelineItemConnection struct {

@@ -220,7 +220,9 @@ func (c *ComposeModel) View(width int) string {
 		var hint string
 		switch c.mode {
 		case composeModeReply:
-			if c.target.login != "" {
+			if c.target.threadID != "" && c.target.path != "" && c.target.line > 0 {
+				prefix = fmt.Sprintf("Reply to thread on %s:%d ▸ ", c.target.path, c.target.line)
+			} else if c.target.login != "" {
 				prefix = "Reply to @" + c.target.login + " ▸ "
 			} else {
 				prefix = "New comment ▸ "

@@ -175,3 +175,85 @@ func TestCoordinatorReturnsStaleAndSchedulesRefresh(t *testing.T) {
 		t.Fatalf("expected refresh for key %q, got %q", key, scheduled)
 	}
 }
+
+func TestCoordinatorPreviewSnapshotRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	l1 := &countingStore{inner: memorycache.NewJSONStore(1024 * 1024)}
+	l2 := &countingStore{inner: newSQLiteStore(t)}
+	c := NewCoordinator(l1, l2, nil)
+
+	key := "preview:v4:host=github.com:repo=acme/api:pr=42"
+	meta := domain.CacheMeta{
+		Key:       key,
+		Kind:      "preview",
+		Version:   1,
+		Host:      "github.com",
+		Repo:      "acme/api",
+		PRNumber:  intPtr(42),
+		FetchedAt: time.Now().UTC(),
+		ExpiresAt: time.Now().UTC().Add(2 * time.Minute),
+	}
+
+	ts := time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC)
+	snap := domain.PRPreviewSnapshot{
+		ID:     "PR_1",
+		Repo:   "acme/api",
+		Number: 42,
+		Title:  "Test PR",
+		Reviewers: []domain.PreviewReviewer{
+			{Login: "bob", State: "COMMENTED", Body: "test latest", SubmittedAt: ts},
+		},
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID:   "thread1",
+				Path: "handlers.go",
+				Line: 103,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "bob", Body: "test", CreatedAt: ts},
+					{ID: "c2", Login: "alice", Body: "test inline", CreatedAt: ts.Add(24 * time.Hour)},
+				},
+			},
+		},
+	}
+
+	if err := c.Write(ctx, key, snap, meta); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	var loaded domain.PRPreviewSnapshot
+	_, _, found, err := c.StaleWhileRevalidate(ctx, key, &loaded, nil)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if !found {
+		t.Fatalf("expected cache hit after write")
+	}
+	if len(loaded.ReviewThreads) != 1 {
+		t.Fatalf("expected 1 ReviewThread after round-trip, got %d", len(loaded.ReviewThreads))
+	}
+	if loaded.ReviewThreads[0].ID != "thread1" {
+		t.Errorf("expected thread ID 'thread1', got %q", loaded.ReviewThreads[0].ID)
+	}
+	if loaded.ReviewThreads[0].Path != "handlers.go" {
+		t.Errorf("expected path 'handlers.go', got %q", loaded.ReviewThreads[0].Path)
+	}
+	if loaded.ReviewThreads[0].Line != 103 {
+		t.Errorf("expected line 103, got %d", loaded.ReviewThreads[0].Line)
+	}
+	if len(loaded.ReviewThreads[0].Comments) != 2 {
+		t.Fatalf("expected 2 comments, got %d", len(loaded.ReviewThreads[0].Comments))
+	}
+	if loaded.ReviewThreads[0].Comments[0].Login != "bob" {
+		t.Errorf("expected first comment login 'bob', got %q", loaded.ReviewThreads[0].Comments[0].Login)
+	}
+	if loaded.ReviewThreads[0].Comments[1].Login != "alice" {
+		t.Errorf("expected second comment login 'alice', got %q", loaded.ReviewThreads[0].Comments[1].Login)
+	}
+	if len(loaded.Reviewers) != 1 || loaded.Reviewers[0].Login != "bob" {
+		t.Errorf("expected reviewer bob, got %+v", loaded.Reviewers)
+	}
+}
+
+func intPtr(i int) *int { return &i }

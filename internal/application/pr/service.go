@@ -99,12 +99,36 @@ func (s *PRService) PostComment(ctx context.Context, repo domain.Repository, prI
 	return nil
 }
 
+// PostCommentReply posts a reply to a PR-level comment. Falls back to a new
+// top-level comment because GitHub's GraphQL API doesn't support threaded
+// replies for issue comments.
+func (s *PRService) PostCommentReply(ctx context.Context, repo domain.Repository, prID, commentID, body string) error {
+	defer s.logTimer("pr post comment reply", "prID", prID, "commentID", commentID, pholog.FieldHost, repo.Host)()
+	s.logDebug("post comment reply", "prID", prID, "commentID", commentID, "host", repo.Host)
+	if err := s.Client.PostCommentReply(ctx, repo.Host, prID, commentID, body); err != nil {
+		s.logWarn("post comment reply failed", "prID", prID, "commentID", commentID, "err", err)
+		return err
+	}
+	return nil
+}
+
 // PostReviewComment submits a PR review with COMMENT decision via the GitHub client.
 func (s *PRService) PostReviewComment(ctx context.Context, repo domain.Repository, prID string, body string) error {
 	defer s.logTimer("pr post review comment", "prID", prID, pholog.FieldHost, repo.Host)()
 	s.logDebug("post review comment", "prID", prID, "host", repo.Host)
 	if err := s.Client.PostReviewComment(ctx, repo.Host, prID, body); err != nil {
 		s.logWarn("post review comment failed", "prID", prID, "err", err)
+		return err
+	}
+	return nil
+}
+
+// PostThreadReply posts a reply to a review thread via the GitHub client.
+func (s *PRService) PostThreadReply(ctx context.Context, repo domain.Repository, threadID, body string) error {
+	defer s.logTimer("pr post thread reply", "threadID", threadID, pholog.FieldHost, repo.Host)()
+	s.logDebug("post thread reply", "threadID", threadID, "host", repo.Host)
+	if err := s.Client.PostThreadReply(ctx, repo.Host, threadID, body); err != nil {
+		s.logWarn("post thread reply failed", "threadID", threadID, "err", err)
 		return err
 	}
 	return nil
@@ -544,7 +568,7 @@ func repoFullName(repo domain.Repository) string {
 }
 
 func previewCacheKey(host, repo string, number int) string {
-	return fmt.Sprintf("preview:v2:host=%s:repo=%s:pr=%d", host, repo, number)
+	return fmt.Sprintf("preview:v4:host=%s:repo=%s:pr=%d", host, repo, number)
 }
 
 func diffCacheKey(host, repo string, number int, sha string) string {

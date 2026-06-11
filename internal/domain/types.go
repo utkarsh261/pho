@@ -152,6 +152,23 @@ type PreviewInlineComment struct {
 	Line  int // 0 if unknown
 }
 
+// PreviewThreadComment is a single comment within a review thread.
+type PreviewThreadComment struct {
+	ID        string
+	Login     string
+	Body      string
+	CreatedAt time.Time
+}
+
+// PreviewReviewThread is a thread of inline review comments on a PR diff.
+type PreviewReviewThread struct {
+	ID         string
+	Path       string
+	Line       int
+	IsResolved bool
+	Comments   []PreviewThreadComment
+}
+
 // DraftInlineComment is a user-created inline comment that has not been
 // submitted to GitHub yet. It persists across app restarts via cache.
 type DraftInlineComment struct {
@@ -177,6 +194,7 @@ type PreviewReviewer struct {
 }
 
 type PreviewComment struct {
+	ID        string
 	Login     string
 	Body      string
 	CreatedAt time.Time
@@ -209,6 +227,7 @@ type PRPreviewSnapshot struct {
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 	Reviewers      []PreviewReviewer
+	ReviewThreads  []PreviewReviewThread
 	Checks         []PreviewCheckRow
 	FileCount      int
 	Additions      int

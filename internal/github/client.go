@@ -15,7 +15,9 @@ type GitHubClient interface {
 	FetchPreview(ctx context.Context, repo domain.Repository, number int) (domain.PRPreviewSnapshot, error)
 	FetchCommits(ctx context.Context, repo domain.Repository, number int) ([]domain.Commit, error)
 	PostComment(ctx context.Context, host, pullRequestID, body string) error
+	PostCommentReply(ctx context.Context, host, pullRequestID, commentID, body string) error
 	PostReviewComment(ctx context.Context, host, pullRequestID, body string) error
+	PostThreadReply(ctx context.Context, host, threadID, body string) error
 	ApprovePullRequest(ctx context.Context, host, pullRequestID, body string) error
 	SubmitReviewWithComments(ctx context.Context, host, pullRequestID, body, event string, comments []domain.DraftInlineComment) error
 	// FetchAllPRs fetches a page of all PRs (any state) for the jump index.
