@@ -124,9 +124,9 @@ type PRDetailModel struct {
 	searchCursor  int
 	searchCommit  bool
 
-	commentCursor       int  // -1 = none, 0..n-1 = index of focused comment entry
-	postedComment        bool
-	postedCommentTarget  commentEntry // remember what was replied to, for scroll-to
+	commentCursor       int // -1 = none, 0..n-1 = index of focused comment entry
+	postedComment       bool
+	postedCommentTarget commentEntry // remember what was replied to, for scroll-to
 
 	compose ComposeModel
 
@@ -699,19 +699,19 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 			return composeSuccessDismissMsg{}
 		}))
 
-case composeSuccessDismissMsg:
-	wasEdit := m.compose.mode == composeModeEditTitle || m.compose.mode == composeModeEditBody
-	target := m.compose.target
-	m.compose.Close()
-	if wasEdit {
+	case composeSuccessDismissMsg:
+		wasEdit := m.compose.mode == composeModeEditTitle || m.compose.mode == composeModeEditBody
+		target := m.compose.target
+		m.compose.Close()
+		if wasEdit {
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		m.postedComment = true
+		m.postedCommentTarget = target
+		if m.PRService != nil {
+			return m, tea.Batch(spinCmd, composeCmd, cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true))
+		}
 		return m, tea.Batch(spinCmd, composeCmd)
-	}
-	m.postedComment = true
-	m.postedCommentTarget = target
-	if m.PRService != nil {
-		return m, tea.Batch(spinCmd, composeCmd, cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true))
-	}
-	return m, tea.Batch(spinCmd, composeCmd)
 
 	case composeClosedMsg:
 		// Compose closed itself (e.g. Esc). No action needed here; the same-cycle

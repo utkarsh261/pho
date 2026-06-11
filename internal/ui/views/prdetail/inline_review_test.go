@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	diffmodel "github.com/utkarsh261/pho/internal/diff/model"
 	"github.com/utkarsh261/pho/internal/application/cmds"
+	diffmodel "github.com/utkarsh261/pho/internal/diff/model"
 	"github.com/utkarsh261/pho/internal/domain"
 	"github.com/utkarsh261/pho/internal/ui/theme"
 )
@@ -2410,6 +2410,63 @@ func TestSort_PRCommentNotReorderedBeforeUnassociatedThread(t *testing.T) {
 	}
 	if prIdx < threadIdx {
 		t.Errorf("PR comment at 10:04 (idx %d) should NOT sort before unassociated thread at 10:00 (idx %d)", prIdx, threadIdx)
+	}
+}
+
+func TestSort_TwoReviewsTwoThreads_NoCorruption(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	thread1Time := time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC)
+	thread2Time := time.Date(2024, 1, 1, 10, 4, 0, 0, time.UTC)
+	review1Time := time.Date(2024, 1, 1, 10, 2, 0, 0, time.UTC)
+	review2Time := time.Date(2024, 1, 1, 10, 6, 0, 0, time.UTC)
+	m.Detail = &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{Login: "alice", State: "COMMENTED", Body: "review A", SubmittedAt: review1Time},
+			{Login: "bob", State: "APPROVED", Body: "review B", SubmittedAt: review2Time},
+		},
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "t1", Path: "a.go", Line: 1,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "carol", Body: "thread1 comment", CreatedAt: thread1Time},
+				},
+			},
+			{
+				ID: "t2", Path: "b.go", Line: 10,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c2", Login: "dave", Body: "thread2 comment", CreatedAt: thread2Time},
+				},
+			},
+		},
+	}
+	entries := m.commentEntries()
+	reviewAIdx := -1
+	reviewBIdx := -1
+	thread1Idx := -1
+	thread2Idx := -1
+	for i, e := range entries {
+		if e.body == "review A" && e.state == "COMMENTED" {
+			reviewAIdx = i
+		}
+		if e.body == "review B" && e.state == "APPROVED" {
+			reviewBIdx = i
+		}
+		if e.threadID == "t1" && !e.isThreadReply {
+			thread1Idx = i
+		}
+		if e.threadID == "t2" && !e.isThreadReply {
+			thread2Idx = i
+		}
+	}
+	if reviewAIdx == -1 || reviewBIdx == -1 || thread1Idx == -1 || thread2Idx == -1 {
+		t.Fatalf("missing entries: reviewA=%d reviewB=%d thread1=%d thread2=%d", reviewAIdx, reviewBIdx, thread1Idx, thread2Idx)
+	}
+	if reviewAIdx != thread1Idx-1 {
+		t.Errorf("review A (idx %d) should immediately precede thread 1 (idx %d)", reviewAIdx, thread1Idx)
+	}
+	if reviewBIdx != thread2Idx-1 {
+		t.Errorf("review B (idx %d) should immediately precede thread 2 (idx %d)", reviewBIdx, thread2Idx)
 	}
 }
 

@@ -228,19 +228,24 @@ func (m *PRDetailModel) commentEntries() []commentEntry {
 				}
 			}
 		}
-		// Apply insertions in reverse order to preserve indices.
-		sort.Slice(insertions, func(i, j int) bool {
-			return insertions[i].reviewIdx > insertions[j].reviewIdx
-		})
+		floatBefore := map[int]int{}
 		for _, ins := range insertions {
-			reviewUnit := units[ins.reviewIdx]
-			units = append(units[:ins.reviewIdx], units[ins.reviewIdx+1:]...)
-			insertAt := ins.insertBeforeIdx
-			if ins.reviewIdx < ins.insertBeforeIdx {
-				insertAt--
-			}
-			units = append(units[:insertAt], append([]unit{reviewUnit}, units[insertAt:]...)...)
+			floatBefore[ins.insertBeforeIdx] = ins.reviewIdx
 		}
+		placed := map[int]bool{}
+		var orderedUnits []unit
+		for i := range units {
+			if placed[i] {
+				continue
+			}
+			if revIdx, ok := floatBefore[i]; ok && !placed[revIdx] {
+				orderedUnits = append(orderedUnits, units[revIdx])
+				placed[revIdx] = true
+			}
+			orderedUnits = append(orderedUnits, units[i])
+			placed[i] = true
+		}
+		units = orderedUnits
 		pos := draftCount
 		for _, u := range units {
 			copy(entries[pos:], u.entries)
