@@ -1,6 +1,7 @@
 package prdetail
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -1832,4 +1833,538 @@ func mustTime(s string) time.Time {
 		panic(err)
 	}
 	return t
+}
+
+// ── Parent review association tests ────────────────────────────────────────────
+
+func TestParentReviewAssociation_WithinWindow(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	threadTime := mustTime("2026-06-03T19:09:50Z")
+	reviewTime := mustTime("2026-06-03T19:10:00Z")
+	m.Detail = &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{Login: "alice", State: "COMMENTED", Body: "review body", SubmittedAt: reviewTime},
+		},
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "t1", Path: "a.go", Line: 1,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "bob", Body: "thread comment", CreatedAt: threadTime},
+				},
+			},
+		},
+	}
+	entries := m.commentEntries()
+	found := false
+	for _, e := range entries {
+		if e.threadID == "t1" && e.indentByParentReview {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected thread t1 to be marked indentByParentReview (review 10s after thread)")
+	}
+}
+
+func TestParentReviewAssociation_ExactSameTime(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	ts := mustTime("2026-06-03T19:10:00Z")
+	m.Detail = &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{Login: "alice", State: "COMMENTED", Body: "review body", SubmittedAt: ts},
+		},
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "t1", Path: "a.go", Line: 1,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "bob", Body: "thread comment", CreatedAt: ts},
+				},
+			},
+		},
+	}
+	entries := m.commentEntries()
+	for _, e := range entries {
+		if e.threadID == "t1" && e.indentByParentReview {
+			t.Error("thread should NOT be marked when review and thread have same timestamp (not strictly after)")
+		}
+	}
+}
+
+func TestParentReviewAssociation_OutsideWindow(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	threadTime := mustTime("2026-06-03T19:00:00Z")
+	reviewTime := mustTime("2026-06-03T19:10:00Z") // 10 min after thread
+	m.Detail = &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{Login: "alice", State: "COMMENTED", Body: "review body", SubmittedAt: reviewTime},
+		},
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "t1", Path: "a.go", Line: 1,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "bob", Body: "thread comment", CreatedAt: threadTime},
+				},
+			},
+		},
+	}
+	entries := m.commentEntries()
+	for _, e := range entries {
+		if e.threadID == "t1" && e.indentByParentReview {
+			t.Error("thread should NOT be marked when review is >5 minutes after thread")
+		}
+	}
+}
+
+func TestParentReviewAssociation_ThreadAfterReview(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	reviewTime := mustTime("2026-06-03T19:00:00Z")
+	threadTime := mustTime("2026-06-03T19:01:00Z") // thread AFTER review
+	m.Detail = &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{Login: "alice", State: "COMMENTED", Body: "review body", SubmittedAt: reviewTime},
+		},
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "t1", Path: "a.go", Line: 1,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "bob", Body: "thread comment", CreatedAt: threadTime},
+				},
+			},
+		},
+	}
+	entries := m.commentEntries()
+	for _, e := range entries {
+		if e.threadID == "t1" && e.indentByParentReview {
+			t.Error("thread should NOT be marked when thread is after review")
+		}
+	}
+}
+
+func TestParentReviewAssociation_NoReviewSummaries(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.Detail = &domain.PRPreviewSnapshot{
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "t1", Path: "a.go", Line: 1,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "bob", Body: "thread comment", CreatedAt: time.Now()},
+				},
+			},
+		},
+	}
+	entries := m.commentEntries()
+	for _, e := range entries {
+		if e.indentByParentReview {
+			t.Error("no thread should be indented when there are no review summaries")
+		}
+	}
+}
+
+func TestParentReviewAssociation_EmptyCommentedReviewNotParent(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	threadTime := mustTime("2026-06-03T19:09:50Z")
+	emptyReviewTime := mustTime("2026-06-03T19:10:00Z")
+	m.Detail = &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{Login: "alice", State: "COMMENTED", Body: "", SubmittedAt: emptyReviewTime},
+		},
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "t1", Path: "a.go", Line: 1,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "bob", Body: "thread comment", CreatedAt: threadTime},
+				},
+			},
+		},
+	}
+	entries := m.commentEntries()
+	for _, e := range entries {
+		if e.threadID == "t1" && e.indentByParentReview {
+			t.Error("empty COMMENTED review is filtered out and should not be a parent")
+		}
+	}
+}
+
+func TestParentReviewAssociation_NearestReviewMatches(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	threadTime := mustTime("2026-06-03T19:09:50Z")
+	nearReviewTime := mustTime("2026-06-03T19:10:00Z")
+	farReviewTime := mustTime("2026-06-03T19:30:00Z")
+	m.Detail = &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{Login: "alice", State: "APPROVED", Body: "far review", SubmittedAt: farReviewTime},
+			{Login: "bob", State: "COMMENTED", Body: "near review", SubmittedAt: nearReviewTime},
+		},
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "t1", Path: "a.go", Line: 1,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "carol", Body: "thread comment", CreatedAt: threadTime},
+				},
+			},
+		},
+	}
+	entries := m.commentEntries()
+	found := false
+	for _, e := range entries {
+		if e.threadID == "t1" && e.indentByParentReview {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected thread to be marked as indented (nearReview is within 5-min window)")
+	}
+}
+
+func TestParentReviewAssociation_ApprovedWithNoBody(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	threadTime := mustTime("2026-06-03T19:09:50Z")
+	reviewTime := mustTime("2026-06-03T19:10:00Z")
+	m.Detail = &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{Login: "alice", State: "APPROVED", Body: "", SubmittedAt: reviewTime},
+		},
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "t1", Path: "a.go", Line: 1,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "bob", Body: "thread comment", CreatedAt: threadTime},
+				},
+			},
+		},
+	}
+	entries := m.commentEntries()
+	found := false
+	for _, e := range entries {
+		if e.threadID == "t1" && e.indentByParentReview {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("APPROVED review with no body should still be parent candidate")
+	}
+}
+
+func TestParentReviewAssociation_MultipleThreadsSameParent(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	thread1Time := mustTime("2026-06-03T19:09:50Z")
+	thread2Time := mustTime("2026-06-03T19:09:56Z")
+	reviewTime := mustTime("2026-06-03T19:10:00Z")
+	m.Detail = &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{Login: "alice", State: "COMMENTED", Body: "review body", SubmittedAt: reviewTime},
+		},
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "t1", Path: "a.go", Line: 1,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "bob", Body: "thread1", CreatedAt: thread1Time},
+				},
+			},
+			{
+				ID: "t2", Path: "a.go", Line: 2,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c2", Login: "carol", Body: "thread2", CreatedAt: thread2Time},
+				},
+			},
+		},
+	}
+	entries := m.commentEntries()
+	t1Indented := false
+	t2Indented := false
+	for _, e := range entries {
+		if e.threadID == "t1" && e.indentByParentReview {
+			t1Indented = true
+		}
+		if e.threadID == "t2" && e.indentByParentReview {
+			t2Indented = true
+		}
+	}
+	if !t1Indented {
+		t.Error("expected thread t1 to be indented (within 5-min window)")
+	}
+	if !t2Indented {
+		t.Error("expected thread t2 to be indented (within 5-min window)")
+	}
+}
+
+// ── Indented rendering tests ──────────────────────────────────────────────────
+
+func TestThreadIndentedUnderParentReview(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(80, 40)
+	threadTime := mustTime("2026-06-03T19:09:50Z")
+	replyTime := mustTime("2026-06-04T19:22:11Z")
+	reviewTime := mustTime("2026-06-03T19:10:00Z")
+	m.Detail = &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{Login: "alice", State: "COMMENTED", Body: "review body", SubmittedAt: reviewTime},
+		},
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "t1", Path: "handlers.go", Line: 103,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "bob", Body: "thread root", CreatedAt: threadTime},
+					{ID: "c2", Login: "carol", Body: "thread reply", CreatedAt: replyTime},
+				},
+			},
+		},
+	}
+	m.SetTheme(theme.Default())
+	cw := m.contentW()
+	lines := m.commentLines(cw, -1)
+	plain := descStripANSI(strings.Join(lines, "\n"))
+
+	if !strings.Contains(plain, "review body") {
+		t.Error("expected review body in output")
+	}
+	if !strings.Contains(plain, "thread root") {
+		t.Error("expected 'thread root' in output")
+	}
+	if !strings.Contains(plain, "thread reply") {
+		t.Error("expected 'thread reply' in output")
+	}
+
+	borderTops := strings.Count(plain, "╭")
+	borderBottoms := strings.Count(plain, "╰")
+	if borderTops != 2 {
+		t.Errorf("expected 2 top borders (review + thread), got %d", borderTops)
+	}
+	if borderBottoms != 2 {
+		t.Errorf("expected 2 bottom borders, got %d", borderBottoms)
+	}
+
+	linesWithIndent := 0
+	for _, line := range strings.Split(plain, "\n") {
+		if strings.HasPrefix(line, "  ╭") || strings.HasPrefix(line, "  │") || strings.HasPrefix(line, "  ╰") {
+			linesWithIndent++
+		}
+	}
+	if linesWithIndent == 0 {
+		t.Error("expected thread box border lines to be indented by 2 spaces")
+	}
+}
+
+func TestThreadNotIndentedWithoutParent(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(80, 40)
+	threadTime := mustTime("2026-06-03T19:09:50Z")
+	m.Detail = &domain.PRPreviewSnapshot{
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "t1", Path: "a.go", Line: 1,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "bob", Body: "thread root", CreatedAt: threadTime},
+				},
+			},
+		},
+	}
+	m.SetTheme(theme.Default())
+	cw := m.contentW()
+	lines := m.commentLines(cw, -1)
+	plain := descStripANSI(strings.Join(lines, "\n"))
+
+	for _, line := range strings.Split(plain, "\n") {
+		if strings.HasPrefix(line, "  ╭") || strings.HasPrefix(line, "  │") || strings.HasPrefix(line, "  ╰") {
+			t.Errorf("expected no indented border lines without parent review, got: %q", line)
+			break
+		}
+	}
+}
+
+func TestReviewSummaryNotIndented(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(80, 40)
+	threadTime := mustTime("2026-06-03T19:09:50Z")
+	reviewTime := mustTime("2026-06-03T19:10:00Z")
+	m.Detail = &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{Login: "alice", State: "COMMENTED", Body: "review body", SubmittedAt: reviewTime},
+		},
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "t1", Path: "a.go", Line: 1,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "bob", Body: "thread root", CreatedAt: threadTime},
+				},
+			},
+		},
+	}
+	m.SetTheme(theme.Default())
+	cw := m.contentW()
+	lines := m.commentLines(cw, -1)
+	plain := descStripANSI(strings.Join(lines, "\n"))
+
+	for _, line := range strings.Split(plain, "\n") {
+		trimmed := strings.TrimLeft(line, " ")
+		if strings.Contains(trimmed, "review body") {
+			if strings.HasPrefix(line, "  ") && (strings.HasPrefix(line, "  ╭") || strings.HasPrefix(line, "  │")) {
+				t.Errorf("review summary should NOT be indented, got: %q", line)
+			}
+		}
+	}
+}
+
+func TestThreadBoxNarrowerUnderParent(t *testing.T) {
+	t.Parallel()
+	m := makePRDetail(120, 40, nil, nil)
+	threadTime := mustTime("2026-06-03T19:09:50Z")
+	reviewTime := mustTime("2026-06-03T19:10:00Z")
+	m.Detail = &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{Login: "alice", State: "COMMENTED", Body: "review body here", SubmittedAt: reviewTime},
+		},
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "t1", Path: "a.go", Line: 1,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "bob", Body: "thread root", CreatedAt: threadTime},
+				},
+			},
+		},
+	}
+	m.SetTheme(theme.Default())
+	cw := m.contentW()
+	entries := m.commentEntries()
+
+	var reviewEntry, threadEntry commentEntry
+	for _, e := range entries {
+		if e.state != "" && e.body == "review body here" {
+			reviewEntry = e
+		}
+		if e.threadID == "t1" && !e.isThreadReply {
+			threadEntry = e
+		}
+	}
+
+	reviewRows := m.entryRowCount(reviewEntry, cw)
+	threadRows := m.entryRowCount(threadEntry, cw)
+
+	if !threadEntry.indentByParentReview {
+		t.Error("expected thread entry to be marked indentByParentReview")
+	}
+
+	if threadRows < reviewRows {
+		reason := "narrower width should cause more line wrapping for thread"
+		if reviewEntry.body != "" && threadEntry.body != "" && len(reviewEntry.body) == len(threadEntry.body) {
+			t.Errorf("thread rows (%d) should be >= review rows (%d) due to %s", threadRows, reviewRows, reason)
+		}
+	}
+}
+
+// ── Golden snapshot test for indented rendering ───────────────────────────────
+
+func TestCommentsLinesWithParentReviewIndent(t *testing.T) {
+	threadTime := mustTime("2026-06-03T19:09:50Z")
+	replyTime := mustTime("2026-06-04T19:22:11Z")
+	thread2Time := mustTime("2026-06-03T19:09:56Z")
+	reviewTime := mustTime("2026-06-03T19:10:00Z")
+
+	snapshot := &domain.PRPreviewSnapshot{
+		Reviewers: []domain.PreviewReviewer{
+			{Login: "utkarsh261", State: "COMMENTED", Body: "test latest", SubmittedAt: reviewTime},
+		},
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID: "PRRT_1", Path: "internal/adapters/telegram/handlers.go", Line: 103,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "utkarsh261", Body: "test", CreatedAt: threadTime},
+					{ID: "c2", Login: "utkarsh261", Body: "test inline", CreatedAt: replyTime},
+				},
+			},
+			{
+				ID: "PRRT_2", Path: "internal/adapters/telegram/handlers.go", Line: 110,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c3", Login: "utkarsh261", Body: "test new", CreatedAt: thread2Time},
+				},
+			},
+		},
+	}
+
+	for _, w := range composeGoldenWidths {
+		w := w
+		t.Run(fmt.Sprintf("w%d", w), func(t *testing.T) {
+			t.Parallel()
+			m := makePRDetail(w, 40, nil, nil)
+			m.Detail = snapshot
+			m.SetTheme(theme.Default())
+			m.DiffLoading = false
+			m.DetailLoading = false
+			cw := m.contentW()
+			lines := m.commentLines(cw, -1)
+			got := descStripANSI(strings.Join(lines, "\n"))
+			checkGolden(t, got, fmt.Sprintf("comments_parent_indent_w%d.txt", w))
+		})
+	}
+}
+
+func TestCommentEntryStartRowsSyncWithIndentedThread(t *testing.T) {
+	t.Parallel()
+	threadTime := mustTime("2026-06-03T19:09:50Z")
+	replyTime := mustTime("2026-06-04T19:22:11Z")
+	reviewTime := mustTime("2026-06-03T19:10:00Z")
+
+	for _, termW := range []int{80, 100, 120} {
+		termW := termW
+		t.Run(fmt.Sprintf("w%d", termW), func(t *testing.T) {
+			t.Parallel()
+			m := makePRDetail(termW, 40, nil, nil)
+			m.Detail = &domain.PRPreviewSnapshot{
+				Reviewers: []domain.PreviewReviewer{
+					{Login: "alice", State: "COMMENTED", Body: "review body", SubmittedAt: reviewTime},
+				},
+				ReviewThreads: []domain.PreviewReviewThread{
+					{
+						ID: "t1", Path: "a.go", Line: 5,
+						Comments: []domain.PreviewThreadComment{
+							{ID: "c1", Login: "bob", Body: "thread root", CreatedAt: threadTime},
+							{ID: "c2", Login: "carol", Body: "thread reply", CreatedAt: replyTime},
+						},
+					},
+				},
+			}
+			m.SetTheme(theme.Default())
+			m.DiffLoading = false
+			m.DetailLoading = false
+			cw := m.contentW()
+			entries := m.commentEntries()
+
+			if !entries[1].indentByParentReview {
+				t.Fatal("expected thread entries to be indented")
+			}
+
+			startRows := m.commentEntryStartRows(cw)
+			if len(startRows) != len(entries) {
+				t.Fatalf("startRows length %d != entries length %d", len(startRows), len(entries))
+			}
+
+			allLines := m.commentLines(cw, -1)
+
+			for i, sr := range startRows {
+				if sr < 3 || sr >= len(allLines) {
+					t.Errorf("startRows[%d]=%d out of bounds [3,%d)", i, sr, len(allLines))
+					continue
+				}
+				line := descStripANSI(allLines[sr])
+				if line == "" {
+					t.Errorf("startRows[%d]=%d points to empty line", i, sr)
+				}
+			}
+
+			reviewRow := startRows[0]
+			threadRow := startRows[1]
+			if threadRow <= reviewRow {
+				t.Errorf("thread should start after review: reviewRow=%d threadRow=%d", reviewRow, threadRow)
+			}
+		})
+	}
 }

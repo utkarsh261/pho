@@ -10,17 +10,18 @@ import (
 
 // commentEntry is a single comment or review entry in the Comments section.
 type commentEntry struct {
-	login         string
-	state         string // review state ("APPROVED", "COMMENTED", etc.) or "" for plain comments
-	ts            time.Time
-	body          string
-	path          string // empty for PR-level comments
-	line          int    // 0 for PR-level comments
-	contextLine   string // the raw diff line text
-	isDraft       bool
-	isThreadReply bool   // true for replies inside a review thread (not the root comment)
-	threadID      string // non-empty for review thread comments; used for threaded replies
-	commentID     string // non-empty for PR-level comments; used for comment replies
+	login                string
+	state                string // review state ("APPROVED", "COMMENTED", etc.) or "" for plain comments
+	ts                   time.Time
+	body                 string
+	path                 string // empty for PR-level comments
+	line                 int    // 0 for PR-level comments
+	contextLine          string // the raw diff line text
+	isDraft              bool
+	isThreadReply        bool   // true for replies inside a review thread (not the root comment)
+	threadID             string // non-empty for review thread comments; used for threaded replies
+	commentID            string // non-empty for PR-level comments; used for comment replies
+	indentByParentReview bool   // true when this thread belongs to a parent review summary
 }
 
 // commentEntries returns the sorted slice of comment/review entries for the current PR.
@@ -219,6 +220,48 @@ func (m *PRDetailModel) commentEntries() []commentEntry {
 			pos += len(u.entries)
 		}
 	}
+	// Mark thread groups whose earliest comment falls within 5 minutes before
+	// a review summary. These threads are visually indented under their parent.
+	const indentWindow = 5 * time.Minute
+	type reviewInfo struct {
+		ts time.Time
+	}
+	var reviews []reviewInfo
+	for _, e := range entries[draftCount:] {
+		if e.state != "" && e.threadID == "" {
+			reviews = append(reviews, reviewInfo{ts: e.ts})
+		}
+	}
+	i := draftCount
+	for i < len(entries) {
+		if entries[i].threadID != "" {
+			tid := entries[i].threadID
+			j := i + 1
+			for j < len(entries) && entries[j].threadID == tid {
+				j++
+			}
+			var earliest time.Time
+			for k := i; k < j; k++ {
+				if !entries[k].ts.IsZero() && (earliest.IsZero() || entries[k].ts.Before(earliest)) {
+					earliest = entries[k].ts
+				}
+			}
+			if !earliest.IsZero() {
+				for _, rev := range reviews {
+					if !rev.ts.IsZero() && rev.ts.After(earliest) && rev.ts.Sub(earliest) <= indentWindow {
+						for k := i; k < j; k++ {
+							entries[k].indentByParentReview = true
+						}
+						break
+					}
+				}
+			}
+			i = j
+		} else {
+			i++
+		}
+	}
+
 	m.cachedCommentEntries = entries
 	m.commentEntriesDirty = false
 	return entries
@@ -240,6 +283,9 @@ func (m *PRDetailModel) entryRowCount(e commentEntry, cw int) int {
 		innerW := max(cw-2, 1)
 		if e.isThreadReply {
 			innerW = max(cw-4, 1) // account for "  " indent inside the box
+		}
+		if e.indentByParentReview {
+			innerW = max(innerW-2, 1) // narrower box under parent review
 		}
 		if m.mdRenderer != nil {
 			rows += len(m.mdRenderer.Render(e.body, innerW))
@@ -399,21 +445,37 @@ func (m *PRDetailModel) commentLines(contentWidth int, activeIdx int) []string {
 			i := g.start
 			e := entries[i]
 			active := i == activeIdx
-			inner := m.buildCommentEntryInner(e, innerW, active)
+			indented := e.indentByParentReview
+			entryInnerW := innerW
+			if indented {
+				entryInnerW = max(innerW-2, 1)
+			}
+			inner := m.buildCommentEntryInner(e, entryInnerW, active)
 			bc := m.theme.Border
 			if active {
 				bc = m.theme.Primary
 			}
 			borderStyle := lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
-				Width(innerW).
+				Width(entryInnerW).
 				BorderForeground(bc)
 			block := borderStyle.Render(strings.Join(inner, "\n"))
-			lines = append(lines, strings.Split(block, "\n")...)
+			blockLines := strings.Split(block, "\n")
+			if indented {
+				for i := range blockLines {
+					blockLines[i] = "  " + blockLines[i]
+				}
+			}
+			lines = append(lines, blockLines...)
 			continue
 		}
 
 		// Thread group: shared rounded box.
+		indented := entries[g.start].indentByParentReview
+		boxW := innerW
+		if indented {
+			boxW = max(innerW-2, 1)
+		}
 		var allInner []string
 		groupActive := false
 		for j := g.start; j < g.end; j++ {
@@ -422,9 +484,9 @@ func (m *PRDetailModel) commentLines(contentWidth int, activeIdx int) []string {
 			if active {
 				groupActive = true
 			}
-			effectiveW := innerW
+			effectiveW := boxW
 			if e.isThreadReply {
-				effectiveW = max(innerW-2, 1)
+				effectiveW = max(boxW-2, 1)
 			}
 			entryInner := m.buildCommentEntryInner(e, effectiveW, active)
 			if e.isThreadReply {
@@ -441,10 +503,16 @@ func (m *PRDetailModel) commentLines(contentWidth int, activeIdx int) []string {
 		}
 		borderStyle := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			Width(innerW).
+			Width(boxW).
 			BorderForeground(bc)
 		block := borderStyle.Render(strings.Join(allInner, "\n"))
-		lines = append(lines, strings.Split(block, "\n")...)
+		blockLines := strings.Split(block, "\n")
+		if indented {
+			for i := range blockLines {
+				blockLines[i] = "  " + blockLines[i]
+			}
+		}
+		lines = append(lines, blockLines...)
 	}
 	lines = append(lines, "")
 	return lines
