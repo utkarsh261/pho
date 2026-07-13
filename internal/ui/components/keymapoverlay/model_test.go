@@ -329,3 +329,95 @@ func assertContains(t *testing.T, got, want string) {
 		t.Fatalf("expected %q in output, got:\n%s", want, got)
 	}
 }
+
+func TestOverlay_MergeBindingIsShiftM(t *testing.T) {
+	groups := BuildBindings(Context{
+		View:    domain.PrimaryViewPRDetail,
+		Focus:   domain.FocusPRDetail,
+		Tab:     prdetail.TabDiff,
+		PRState: domain.PRStateOpen,
+	})
+
+	for _, g := range groups {
+		if g.Name == "Actions" {
+			for _, b := range g.Bindings {
+				if b.Key == "m" && b.Description == "Merge" {
+					t.Fatal("expected m: Merge to be removed, found in Actions group")
+				}
+			}
+			found := false
+			for _, b := range g.Bindings {
+				if b.Key == "M" && b.Description == "Merge" {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatal("expected M: Merge in Actions group")
+			}
+		}
+	}
+}
+
+func TestOverlay_ResolveBindingInCommentsTab(t *testing.T) {
+	groups := BuildBindings(Context{
+		View:    domain.PrimaryViewPRDetail,
+		Focus:   domain.FocusPRDetail,
+		Tab:     prdetail.TabComments,
+		PRState: domain.PRStateOpen,
+	})
+
+	found := false
+	for _, g := range groups {
+		if g.Name == "Comments" {
+			for _, b := range g.Bindings {
+				if b.Key == "m" && b.Description == "Resolve/Unresolve" {
+					found = true
+				}
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected m: Resolve/Unresolve in Comments group")
+	}
+}
+
+func TestOverlay_ResolveBindingNotInOtherTabs(t *testing.T) {
+	for _, tab := range []prdetail.ContentTab{prdetail.TabDiff, prdetail.TabDescription, prdetail.TabCommits} {
+		groups := BuildBindings(Context{
+			View:    domain.PrimaryViewPRDetail,
+			Focus:   domain.FocusPRDetail,
+			Tab:     tab,
+			PRState: domain.PRStateOpen,
+		})
+		for _, g := range groups {
+			for _, b := range g.Bindings {
+				if b.Key == "m" && b.Description == "Resolve/Unresolve" {
+					t.Fatalf("expected m: Resolve/Unresolve NOT in tab %v", tab)
+				}
+			}
+		}
+	}
+}
+
+func TestOverlay_JumpUnresolvedBindingInComments(t *testing.T) {
+	groups := BuildBindings(Context{
+		View:    domain.PrimaryViewPRDetail,
+		Focus:   domain.FocusPRDetail,
+		Tab:     prdetail.TabComments,
+		PRState: domain.PRStateOpen,
+	})
+
+	found := false
+	for _, g := range groups {
+		if g.Name == "Comments" {
+			for _, b := range g.Bindings {
+				if b.Key == "[/]" && b.Description == "Prev/Next unresolved" {
+					found = true
+				}
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected [/: Prev/Next unresolved in Comments group")
+	}
+}

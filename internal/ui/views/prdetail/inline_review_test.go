@@ -2549,3 +2549,221 @@ func TestPostedCommentReplyToPRCommentScrollsToEnd(t *testing.T) {
 		t.Errorf("expected cursor at last entry (%d), got %d", len(m.commentEntries())-1, m.commentCursor)
 	}
 }
+
+// ── Golden snapshot tests for resolved thread rendering ──────────────────────
+
+func TestGoldenResolvedCollapsed(t *testing.T) {
+	threadTime := mustTime("2026-06-03T19:09:50Z")
+	replyTime := mustTime("2026-06-04T19:22:11Z")
+
+	snapshot := &domain.PRPreviewSnapshot{
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID:         "PRRT_1",
+				Path:       "handlers.go",
+				Line:       103,
+				IsResolved: true,
+				ResolvedBy: "bob",
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "utkarsh261", Body: "test", CreatedAt: threadTime},
+					{ID: "c2", Login: "utkarsh261", Body: "test inline", CreatedAt: replyTime},
+				},
+			},
+		},
+	}
+
+	for _, w := range composeGoldenWidths {
+		w := w
+		t.Run(fmt.Sprintf("w%d", w), func(t *testing.T) {
+			t.Parallel()
+			m := makePRDetail(w, 40, nil, nil)
+			m.Detail = snapshot
+			m.SetTheme(theme.Default())
+			m.DiffLoading = false
+			m.DetailLoading = false
+			cw := m.contentW()
+			lines := m.commentLines(cw, -1)
+			got := descStripANSI(strings.Join(lines, "\n"))
+			checkGolden(t, got, fmt.Sprintf("comments_resolved_collapsed_w%d.txt", w))
+		})
+	}
+}
+
+func TestGoldenResolvedCollapsedActive(t *testing.T) {
+	threadTime := mustTime("2026-06-03T19:09:50Z")
+	replyTime := mustTime("2026-06-04T19:22:11Z")
+
+	snapshot := &domain.PRPreviewSnapshot{
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID:         "PRRT_1",
+				Path:       "handlers.go",
+				Line:       103,
+				IsResolved: true,
+				ResolvedBy: "bob",
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "utkarsh261", Body: "test", CreatedAt: threadTime},
+					{ID: "c2", Login: "utkarsh261", Body: "test inline", CreatedAt: replyTime},
+				},
+			},
+		},
+	}
+
+	// Test at width-gate boundaries (59, 60, 80) to verify the m: hint appears/disappears.
+	for _, w := range []int{59, 60, 80} {
+		w := w
+		t.Run(fmt.Sprintf("w%d", w), func(t *testing.T) {
+			t.Parallel()
+			m := makePRDetail(w, 40, nil, nil)
+			m.Detail = snapshot
+			m.SetTheme(theme.Default())
+			m.DiffLoading = false
+			m.DetailLoading = false
+			m.activeTab = TabComments
+			m.leftPanel.Focus = FocusContent
+			cw := m.contentW()
+			entries := m.commentEntries()
+			// Find the summary entry index.
+			activeIdx := -1
+			for i, e := range entries {
+				if e.isResolvedSummary {
+					activeIdx = i
+					break
+				}
+			}
+			lines := m.commentLines(cw, activeIdx)
+			got := descStripANSI(strings.Join(lines, "\n"))
+			checkGolden(t, got, fmt.Sprintf("comments_resolved_collapsed_active_w%d.txt", w))
+		})
+	}
+}
+
+func TestGoldenResolvedExpanded(t *testing.T) {
+	threadTime := mustTime("2026-06-03T19:09:50Z")
+	replyTime := mustTime("2026-06-04T19:22:11Z")
+
+	snapshot := &domain.PRPreviewSnapshot{
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID:         "PRRT_1",
+				Path:       "handlers.go",
+				Line:       103,
+				IsResolved: true,
+				ResolvedBy: "bob",
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "utkarsh261", Body: "test", CreatedAt: threadTime},
+					{ID: "c2", Login: "utkarsh261", Body: "test inline", CreatedAt: replyTime},
+				},
+			},
+		},
+	}
+
+	for _, w := range composeGoldenWidths {
+		w := w
+		t.Run(fmt.Sprintf("w%d", w), func(t *testing.T) {
+			t.Parallel()
+			m := makePRDetail(w, 40, nil, nil)
+			m.Detail = snapshot
+			m.SetTheme(theme.Default())
+			m.DiffLoading = false
+			m.DetailLoading = false
+			m.expandedResolved = map[string]bool{"PRRT_1": true}
+			cw := m.contentW()
+			lines := m.commentLines(cw, -1)
+			got := descStripANSI(strings.Join(lines, "\n"))
+			checkGolden(t, got, fmt.Sprintf("comments_resolved_expanded_w%d.txt", w))
+		})
+	}
+}
+
+func TestGoldenResolvedExpandedActive(t *testing.T) {
+	threadTime := mustTime("2026-06-03T19:09:50Z")
+	replyTime := mustTime("2026-06-04T19:22:11Z")
+
+	snapshot := &domain.PRPreviewSnapshot{
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID:         "PRRT_1",
+				Path:       "handlers.go",
+				Line:       103,
+				IsResolved: true,
+				ResolvedBy: "bob",
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "utkarsh261", Body: "test", CreatedAt: threadTime},
+					{ID: "c2", Login: "utkarsh261", Body: "test inline", CreatedAt: replyTime},
+				},
+			},
+		},
+	}
+
+	for _, w := range []int{59, 60, 80} {
+		w := w
+		t.Run(fmt.Sprintf("w%d", w), func(t *testing.T) {
+			t.Parallel()
+			m := makePRDetail(w, 40, nil, nil)
+			m.Detail = snapshot
+			m.SetTheme(theme.Default())
+			m.DiffLoading = false
+			m.DetailLoading = false
+			m.activeTab = TabComments
+			m.leftPanel.Focus = FocusContent
+			m.expandedResolved = map[string]bool{"PRRT_1": true}
+			cw := m.contentW()
+			entries := m.commentEntries()
+			// Active cursor on the first entry of the expanded resolved thread.
+			activeIdx := -1
+			for i, e := range entries {
+				if e.threadID == "PRRT_1" && !e.isThreadReply {
+					activeIdx = i
+					break
+				}
+			}
+			lines := m.commentLines(cw, activeIdx)
+			got := descStripANSI(strings.Join(lines, "\n"))
+			checkGolden(t, got, fmt.Sprintf("comments_resolved_expanded_active_w%d.txt", w))
+		})
+	}
+}
+
+func TestGoldenUnresolvedThreadActive(t *testing.T) {
+	threadTime := mustTime("2026-06-03T19:09:50Z")
+
+	snapshot := &domain.PRPreviewSnapshot{
+		ReviewThreads: []domain.PreviewReviewThread{
+			{
+				ID:   "PRRT_1",
+				Path: "handlers.go",
+				Line: 103,
+				Comments: []domain.PreviewThreadComment{
+					{ID: "c1", Login: "utkarsh261", Body: "test", CreatedAt: threadTime},
+				},
+			},
+		},
+	}
+
+	for _, w := range []int{59, 60, 80} {
+		w := w
+		t.Run(fmt.Sprintf("w%d", w), func(t *testing.T) {
+			t.Parallel()
+			m := makePRDetail(w, 40, nil, nil)
+			m.Detail = snapshot
+			m.SetTheme(theme.Default())
+			m.DiffLoading = false
+			m.DetailLoading = false
+			m.activeTab = TabComments
+			m.leftPanel.Focus = FocusContent
+			cw := m.contentW()
+			entries := m.commentEntries()
+			activeIdx := -1
+			for i, e := range entries {
+				if e.threadID == "PRRT_1" && !e.isThreadReply {
+					activeIdx = i
+					break
+				}
+			}
+			lines := m.commentLines(cw, activeIdx)
+			got := descStripANSI(strings.Join(lines, "\n"))
+			checkGolden(t, got, fmt.Sprintf("comments_unresolved_active_w%d.txt", w))
+		})
+	}
+}

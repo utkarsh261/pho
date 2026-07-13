@@ -31,6 +31,8 @@ type MockGitHubClient struct {
 	ClosePullRequestFn         func(ctx context.Context, host, pullRequestID string) error
 	ReopenPullRequestFn        func(ctx context.Context, host, pullRequestID string) error
 	UpdatePullRequestFn        func(ctx context.Context, host, pullRequestID, title, body string) error
+	ResolveReviewThreadFn      func(ctx context.Context, host, threadID string) error
+	UnresolveReviewThreadFn    func(ctx context.Context, host, threadID string) error
 
 	// Call counters — incremented on each call.
 	FetchDashboardPRsCalls        int
@@ -43,6 +45,8 @@ type MockGitHubClient struct {
 	CheckMergeableCalls           int
 	ClosePullRequestCalls         int
 	ReopenPullRequestCalls        int
+	ResolveReviewThreadCalls      int
+	UnresolveReviewThreadCalls    int
 }
 
 func (m *MockGitHubClient) FetchViewer(ctx context.Context, host string) (string, error) {
@@ -172,4 +176,20 @@ func (m *MockGitHubClient) UpdatePullRequest(ctx context.Context, host, pullRequ
 		panic("MockGitHubClient.UpdatePullRequest called but UpdatePullRequestFn is nil")
 	}
 	return m.UpdatePullRequestFn(ctx, host, pullRequestID, title, body)
+}
+
+func (m *MockGitHubClient) ResolveReviewThread(ctx context.Context, host, threadID string) error {
+	if m.ResolveReviewThreadFn == nil {
+		panic("MockGitHubClient.ResolveReviewThread called but ResolveReviewThreadFn is nil")
+	}
+	m.ResolveReviewThreadCalls++
+	return m.ResolveReviewThreadFn(ctx, host, threadID)
+}
+
+func (m *MockGitHubClient) UnresolveReviewThread(ctx context.Context, host, threadID string) error {
+	if m.UnresolveReviewThreadFn == nil {
+		panic("MockGitHubClient.UnresolveReviewThread called but UnresolveReviewThreadFn is nil")
+	}
+	m.UnresolveReviewThreadCalls++
+	return m.UnresolveReviewThreadFn(ctx, host, threadID)
 }

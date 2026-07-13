@@ -730,6 +730,9 @@ func (m *Model) handleViewerResolved(msg cmds.ViewerResolved) tea.Cmd {
 	}
 	m.clearErrors()
 	m.state.Session.ViewerByHost[msg.Host] = msg.Login
+	if m.prDetail != nil && m.prDetail.Repo.Host == msg.Host {
+		m.prDetail.ViewerLogin = msg.Login
+	}
 	m.logDebug("viewer resolved", "host", msg.Host, "login", msg.Login)
 	m.rebuildDashboardTabs()
 	if repo, ok := m.selectedRepo(); ok && repo.Host == msg.Host && msg.Login != "" && m.deps.Dashboard != nil {
@@ -1637,6 +1640,7 @@ func (m *Model) openPRDetailForSummary(summary domain.PullRequestSummary, repo d
 	m.prDetail = prdetail.NewModel(summary, repo, m.deps.PR)
 	m.prDetail.Log = m.log
 	m.prDetail.SetTheme(m.theme)
+	m.prDetail.ViewerLogin = m.state.Session.ViewerByHost[repo.Host]
 	m.prDetail.Width = m.layout.Current.Width
 	m.prDetail.Height = m.layout.Current.Height - 2
 	m.pushView(domain.PrimaryViewPRDetail)
@@ -1661,6 +1665,7 @@ func (m *Model) openPRDetailForJump(summary domain.PullRequestSummary) tea.Cmd {
 	m.prDetail = prdetail.NewModel(summary, repo, m.deps.PR)
 	m.prDetail.Log = m.log
 	m.prDetail.SetTheme(m.theme)
+	m.prDetail.ViewerLogin = m.state.Session.ViewerByHost[repo.Host]
 	m.prDetail.Width = m.layout.Current.Width
 	m.prDetail.Height = m.layout.Current.Height - 2
 	m.pushView(domain.PrimaryViewPRDetail)
@@ -1705,6 +1710,7 @@ func (m *Model) openPRDetail() tea.Cmd {
 	m.prDetail = prdetail.NewModel(current, repo, m.deps.PR)
 	m.prDetail.Log = m.log
 	m.prDetail.SetTheme(m.theme)
+	m.prDetail.ViewerLogin = m.state.Session.ViewerByHost[repo.Host]
 	m.prDetail.Width = m.layout.Current.Width
 	m.prDetail.Height = m.layout.Current.Height - 2 // minus status bar
 	m.pushView(domain.PrimaryViewPRDetail)

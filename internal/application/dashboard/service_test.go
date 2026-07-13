@@ -68,6 +68,8 @@ func (f *fakeGitHubClient) FetchCommits(_ context.Context, _ domain.Repository, 
 }
 
 func (f *fakeGitHubClient) UpdatePullRequest(_ context.Context, _, _, _, _ string) error { return nil }
+func (f *fakeGitHubClient) ResolveReviewThread(_ context.Context, _, _ string) error     { return nil }
+func (f *fakeGitHubClient) UnresolveReviewThread(_ context.Context, _, _ string) error   { return nil }
 
 func newTestCoordinator(t *testing.T) *cache.Coordinator {
 	t.Helper()

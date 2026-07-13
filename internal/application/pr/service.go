@@ -214,6 +214,36 @@ func (s *PRService) ReopenPR(ctx context.Context, repo domain.Repository, number
 	return nil
 }
 
+// ResolveThread resolves a review thread and invalidates the preview cache.
+func (s *PRService) ResolveThread(ctx context.Context, repo domain.Repository, number int, threadID string) error {
+	defer s.logTimer("pr resolve thread", pholog.FieldRepo, repo.FullName, pholog.FieldPRNumber, number)()
+	s.logDebug("resolve thread", "repo", repo.FullName, "number", number, "thread", threadID)
+	if err := s.Client.ResolveReviewThread(ctx, repo.Host, threadID); err != nil {
+		s.logWarn("resolve thread failed", "repo", repo.FullName, "number", number, "thread", threadID, "err", err)
+		return err
+	}
+	previewKey := previewCacheKey(repo.Host, repoFullName(repo), number)
+	if delErr := s.Cache.Delete(ctx, previewKey); delErr != nil {
+		s.logWarn("resolve thread cache delete failed", "key", previewKey, "err", delErr)
+	}
+	return nil
+}
+
+// UnresolveThread unresolves a review thread and invalidates the preview cache.
+func (s *PRService) UnresolveThread(ctx context.Context, repo domain.Repository, number int, threadID string) error {
+	defer s.logTimer("pr unresolve thread", pholog.FieldRepo, repo.FullName, pholog.FieldPRNumber, number)()
+	s.logDebug("unresolve thread", "repo", repo.FullName, "number", number, "thread", threadID)
+	if err := s.Client.UnresolveReviewThread(ctx, repo.Host, threadID); err != nil {
+		s.logWarn("unresolve thread failed", "repo", repo.FullName, "number", number, "thread", threadID, "err", err)
+		return err
+	}
+	previewKey := previewCacheKey(repo.Host, repoFullName(repo), number)
+	if delErr := s.Cache.Delete(ctx, previewKey); delErr != nil {
+		s.logWarn("unresolve thread cache delete failed", "key", previewKey, "err", delErr)
+	}
+	return nil
+}
+
 // FetchRepoInfo retrieves repository metadata via the REST API.
 func (s *PRService) FetchRepoInfo(ctx context.Context, repo domain.Repository) (domain.RepoInfo, error) {
 	defer s.logTimer("pr fetch repo info", pholog.FieldRepo, repo.FullName)()

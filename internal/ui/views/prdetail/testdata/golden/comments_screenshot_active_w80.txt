@@ -18,7 +18,7 @@ Comments
 │test                          │
 │                              │
 │  @utkarsh261 · Jun 04 [Enter │
-│| r: Reply]                   │
+│| r: Reply | m: Resolve]      │
 │                              │
 │  test inline                 │
 │                              │

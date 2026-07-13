@@ -577,6 +577,12 @@ func (s *prService) CreatePR(_ context.Context, _ domain.CreatePRParams) (domain
 func (s *prService) FetchRepoInfo(_ context.Context, _ domain.Repository) (domain.RepoInfo, error) {
 	return domain.RepoInfo{}, nil
 }
+func (s *prService) ResolveThread(_ context.Context, _ domain.Repository, _ int, _ string) error {
+	return nil
+}
+func (s *prService) UnresolveThread(_ context.Context, _ domain.Repository, _ int, _ string) error {
+	return nil
+}
 
 func splitRepo(full string) (string, string, bool) {
 	for i := 0; i < len(full); i++ {

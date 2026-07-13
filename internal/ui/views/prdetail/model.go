@@ -203,6 +203,15 @@ type PRDetailModel struct {
 	editPosting bool
 	editErr     string
 
+	// Resolve/unresolve thread state
+	expandedResolved map[string]bool // threadID → expanded (resolved threads only)
+	pendingToggle    pendingToggleState
+	resolveErr       string
+
+	// ViewerLogin is the authenticated user's login, used for optimistic
+	// resolver display. May be empty if viewer resolution hasn't completed.
+	ViewerLogin string
+
 	// Commit mode: when true, this model shows a single commit diff instead of
 	// a full PR. Only the Diff tab is shown, no Desc/Comments/Commits tabs,
 	// no CI section, and the header shows commit info.
@@ -362,9 +371,40 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		m.Detail = &msg.Detail
 		m.DetailFromCache = msg.FromCache
 		m.commentEntriesDirty = true
+
+		// Replication-lag mitigation: when a toggle is pending, force the
+		// optimistic state for the toggled thread over the reload payload.
+		if m.pendingToggle.active() {
+			thread := m.findThreadByID(m.pendingToggle.ThreadID)
+			if thread != nil {
+				thread.IsResolved = m.pendingToggle.TargetResolved
+				thread.ResolvedBy = m.pendingToggle.TargetResolver
+			}
+		}
+
 		m.resetCommentCursor()
 		// Sync checks into left panel.
 		m.leftPanel.Checks = msg.Detail.Checks
+
+		// Re-anchor cursor to the toggled thread after a resolve/unresolve reload.
+		if m.pendingToggle.active() {
+			toggleThreadID := m.pendingToggle.ThreadID
+			m.pendingToggle = pendingToggleState{}
+			entries := m.commentEntries()
+			if m.activeTab == TabComments && len(entries) > 0 {
+				idx := -1
+				for i, e := range entries {
+					if e.threadID == toggleThreadID {
+						idx = i
+						break
+					}
+				}
+				if idx >= 0 {
+					m.commentCursor = idx
+					m.scrollToCommentCursor()
+				}
+			}
+		}
 
 		// Auto-scroll to the newly posted comment after a successful post.
 		if m.postedComment {
@@ -577,6 +617,17 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 
 	case cmds.CommentPosted:
 		m.compose.status = composeStatusSuccess
+		// Auto-expand resolved thread when replying to it (Q20).
+		if m.compose.target.threadID != "" {
+			thread := m.findThreadByID(m.compose.target.threadID)
+			if thread != nil && thread.IsResolved {
+				if m.expandedResolved == nil {
+					m.expandedResolved = make(map[string]bool)
+				}
+				m.expandedResolved[thread.ID] = true
+				m.commentEntriesDirty = true
+			}
+		}
 		return m, tea.Batch(spinCmd, composeCmd, tea.Tick(1500*time.Millisecond, func(time.Time) tea.Msg {
 			return composeSuccessDismissMsg{}
 		}))
@@ -699,6 +750,48 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 			return composeSuccessDismissMsg{}
 		}))
 
+	case cmds.ThreadResolvedMsg:
+		if !m.pendingToggle.active() || m.pendingToggle.ThreadID != msg.ThreadID {
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		m.pendingToggle = pendingToggleState{}
+		var refreshCmd tea.Cmd
+		if m.PRService != nil {
+			refreshCmd = cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true)
+		}
+		return m, tea.Batch(spinCmd, composeCmd, refreshCmd)
+
+	case cmds.ThreadUnresolvedMsg:
+		if !m.pendingToggle.active() || m.pendingToggle.ThreadID != msg.ThreadID {
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		m.pendingToggle = pendingToggleState{}
+		var refreshCmd tea.Cmd
+		if m.PRService != nil {
+			refreshCmd = cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true)
+		}
+		return m, tea.Batch(spinCmd, composeCmd, refreshCmd)
+
+	case cmds.ThreadResolveFailed:
+		if !m.pendingToggle.active() || m.pendingToggle.ThreadID != msg.ThreadID {
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		// Revert optimistic state.
+		thread := m.findThreadByID(msg.ThreadID)
+		if thread != nil {
+			thread.IsResolved = m.pendingToggle.PrevResolved
+			thread.ResolvedBy = m.pendingToggle.PrevResolver
+		}
+		m.resolveErr = "Failed: " + msg.Err.Error()
+		m.pendingToggle = pendingToggleState{}
+		m.commentEntriesDirty = true
+		// Reload to reconcile against fresh GitHub state.
+		var refreshCmd tea.Cmd
+		if m.PRService != nil {
+			refreshCmd = cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true)
+		}
+		return m, tea.Batch(spinCmd, composeCmd, refreshCmd)
+
 	case composeSuccessDismissMsg:
 		wasEdit := m.compose.mode == composeModeEditTitle || m.compose.mode == composeModeEditBody
 		target := m.compose.target
@@ -745,6 +838,10 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		return m, tea.Batch(spinCmd, composeCmd)
 
 	case tea.KeyMsg:
+		// Clear resolve error on any key (mirrors mergeErr/closeErr behavior).
+		if m.resolveErr != "" && !m.pendingToggle.active() {
+			m.resolveErr = ""
+		}
 		if m.compose.active && m.compose.status == composeStatusIdle {
 			// Key already routed to compose.Update above; skip handleKey.
 			return m, tea.Batch(spinCmd, composeCmd)

@@ -33,4 +33,8 @@ type GitHubClient interface {
 	UpdatePullRequest(ctx context.Context, host, pullRequestID, title, body string) error
 	// ReopenPullRequest reopens a closed PR.
 	ReopenPullRequest(ctx context.Context, host, pullRequestID string) error
+	// ResolveReviewThread resolves a review thread.
+	ResolveReviewThread(ctx context.Context, host, threadID string) error
+	// UnresolveReviewThread unresolves a review thread.
+	UnresolveReviewThread(ctx context.Context, host, threadID string) error
 }

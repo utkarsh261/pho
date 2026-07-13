@@ -247,6 +247,12 @@ func (f *fakePRService) CreatePR(_ context.Context, _ domain.CreatePRParams) (do
 func (f *fakePRService) FetchRepoInfo(_ context.Context, _ domain.Repository) (domain.RepoInfo, error) {
 	return domain.RepoInfo{}, nil
 }
+func (f *fakePRService) ResolveThread(_ context.Context, _ domain.Repository, _ int, _ string) error {
+	return nil
+}
+func (f *fakePRService) UnresolveThread(_ context.Context, _ domain.Repository, _ int, _ string) error {
+	return nil
+}
 
 func TestCommitDetailGoldenLoading(t *testing.T) {
 	t.Parallel()

@@ -86,6 +86,12 @@ func (s *mergePRService) CreatePR(_ context.Context, _ domain.CreatePRParams) (d
 func (s *mergePRService) FetchRepoInfo(_ context.Context, _ domain.Repository) (domain.RepoInfo, error) {
 	return domain.RepoInfo{}, nil
 }
+func (s *mergePRService) ResolveThread(_ context.Context, _ domain.Repository, _ int, _ string) error {
+	return nil
+}
+func (s *mergePRService) UnresolveThread(_ context.Context, _ domain.Repository, _ int, _ string) error {
+	return nil
+}
 
 func newMergeModel(mergeable, mergeState string) *PRDetailModel {
 	repo := testutil.Repo("acme/api")
@@ -112,7 +118,7 @@ func newMergeModel(mergeable, mergeState string) *PRDetailModel {
 
 func TestMergeKeyNonMergeable(t *testing.T) {
 	m := newMergeModel("CONFLICTING", "CONFLICTING")
-	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'M'}})
 	if m.mergeErr == "" {
 		t.Fatal("expected mergeErr to be set for non-mergeable PR")
 	}
@@ -129,7 +135,7 @@ func TestMergeFlowSuccess(t *testing.T) {
 	m := newMergeModel("MERGEABLE", "CLEAN")
 
 	// m -> s -> y
-	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'M'}})
 	if m.mergeStep != mergeStepSelectMethod {
 		t.Fatalf("expected select method, got %d", m.mergeStep)
 	}
@@ -160,7 +166,7 @@ func TestMergeFlowSuccess(t *testing.T) {
 
 func TestMergeFlowCancelAtSelect(t *testing.T) {
 	m := newMergeModel("MERGEABLE", "CLEAN")
-	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'M'}})
 	m.Update(tea.KeyMsg{Type: tea.KeyEscape})
 	if m.mergeStep != mergeStepNone {
 		t.Fatalf("expected mergeStepNone after cancel, got %d", m.mergeStep)
@@ -169,7 +175,7 @@ func TestMergeFlowCancelAtSelect(t *testing.T) {
 
 func TestMergeFlowCancelAtConfirm(t *testing.T) {
 	m := newMergeModel("MERGEABLE", "CLEAN")
-	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'M'}})
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 	if m.mergeStep != mergeStepNone {
@@ -179,7 +185,7 @@ func TestMergeFlowCancelAtConfirm(t *testing.T) {
 
 func TestMergeFlowPreCheckFails(t *testing.T) {
 	m := newMergeModel("MERGEABLE", "CLEAN")
-	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'M'}})
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
 	m.Update(cmds.MergeableChecked{Repo: "acme/api", Number: 42, State: domain.MergeableState{Mergeable: "CONFLICTING", MergeStateStatus: "CONFLICTING"}})
@@ -193,7 +199,7 @@ func TestMergeFlowPreCheckFails(t *testing.T) {
 
 func TestMergeFlowNetworkError(t *testing.T) {
 	m := newMergeModel("MERGEABLE", "CLEAN")
-	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'M'}})
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
 	m.Update(cmds.MergeableChecked{Repo: "acme/api", Number: 42, Err: errors.New("timeout")})
@@ -220,7 +226,7 @@ func TestMergeFlowMergeError(t *testing.T) {
 func TestMergeEscBehavior(t *testing.T) {
 	m := newMergeModel("MERGEABLE", "CLEAN")
 	// First esc during select method resets flow.
-	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'M'}})
 	m.Update(tea.KeyMsg{Type: tea.KeyEscape})
 	if m.mergeStep != mergeStepNone {
 		t.Fatalf("expected mergeStepNone after first esc, got %d", m.mergeStep)
@@ -230,7 +236,7 @@ func TestMergeEscBehavior(t *testing.T) {
 func TestMergeDraftsSurvive(t *testing.T) {
 	m := newMergeModel("MERGEABLE", "CLEAN")
 	m.drafts = []domain.DraftInlineComment{{Path: "main.go", Line: 10, Body: "fix this"}}
-	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'M'}})
 	m.Update(tea.KeyMsg{Type: tea.KeyEscape})
 	if len(m.drafts) != 1 {
 		t.Fatalf("expected drafts to survive, got %d", len(m.drafts))
@@ -240,7 +246,7 @@ func TestMergeDraftsSurvive(t *testing.T) {
 func TestMergeVisualModeIgnored(t *testing.T) {
 	m := newMergeModel("MERGEABLE", "CLEAN")
 	m.visual.Active = true
-	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'M'}})
 	if m.mergeStep != mergeStepNone {
 		t.Fatal("expected merge to be ignored while in visual mode")
 	}

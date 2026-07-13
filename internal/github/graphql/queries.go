@@ -28,6 +28,28 @@ func buildAddPullRequestReviewThreadReplyMutation() string {
 }`
 }
 
+func buildResolveReviewThreadMutation() string {
+	return `mutation ResolveReviewThread($threadId: ID!) {
+  resolveReviewThread(input: {threadId: $threadId}) {
+    thread {
+      id
+      isResolved
+    }
+  }
+}`
+}
+
+func buildUnresolveReviewThreadMutation() string {
+	return `mutation UnresolveReviewThread($threadId: ID!) {
+  unresolveReviewThread(input: {threadId: $threadId}) {
+    thread {
+      id
+      isResolved
+    }
+  }
+}`
+}
+
 func buildSubmitReviewMutation(event string) string {
 	return fmt.Sprintf(`mutation SubmitReview($pullRequestId: ID!, $body: String) {
   addPullRequestReview(input: {pullRequestId: $pullRequestId, event: %s, body: $body}) {
@@ -241,7 +263,7 @@ func pullRequestPreviewSelection(profile githubpkg.GitHubHostProfile) string {
 		"author { login }",
 		"assignees(first: 10) { nodes { login } }",
 		"reviews(first: 20) { nodes { author { login avatarUrl } state submittedAt body } }",
-		"reviewThreads(first: 50) { nodes { id path line originalLine isResolved comments(first: 50) { nodes { id author { login } body createdAt } } } }",
+		"reviewThreads(first: 50) { nodes { id path line originalLine isResolved resolvedBy { login } comments(first: 50) { nodes { id author { login } body createdAt } } } }",
 		"comments(first: 20) { nodes { id author { login } body createdAt } }",
 		"files(first: 20) { nodes { path additions deletions } }",
 		"timelineItems(last: 1, itemTypes: [PULL_REQUEST_COMMIT, ISSUE_COMMENT, PULL_REQUEST_REVIEW, MERGED_EVENT]) { nodes { ... on PullRequestCommit { __typename id commit { oid messageHeadline committedDate author { user { login } name } } } ... on IssueComment { __typename id body createdAt author { login } } ... on PullRequestReview { __typename id state body submittedAt author { login } } ... on MergedEvent { __typename id createdAt actor { login } commit { oid } mergeRefName } } }",

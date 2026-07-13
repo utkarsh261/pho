@@ -95,6 +95,26 @@ func (c *Client) PostThreadReply(ctx context.Context, host, threadID, body strin
 	return err
 }
 
+// ResolveReviewThread resolves a review thread via GraphQL.
+func (c *Client) ResolveReviewThread(ctx context.Context, host, threadID string) error {
+	_, err := queryGraphQL[model.ResolveReviewThreadData](c, ctx, host, func(_ githubpkg.GitHubHostProfile) string {
+		return buildResolveReviewThreadMutation()
+	}, map[string]any{
+		"threadId": threadID,
+	})
+	return err
+}
+
+// UnresolveReviewThread unresolves a review thread via GraphQL.
+func (c *Client) UnresolveReviewThread(ctx context.Context, host, threadID string) error {
+	_, err := queryGraphQL[model.UnresolveReviewThreadData](c, ctx, host, func(_ githubpkg.GitHubHostProfile) string {
+		return buildUnresolveReviewThreadMutation()
+	}, map[string]any{
+		"threadId": threadID,
+	})
+	return err
+}
+
 // PostReviewComment submits a PR review with COMMENT decision via GraphQL.
 func (c *Client) PostReviewComment(ctx context.Context, host, pullRequestID, body string) error {
 	vars := map[string]any{

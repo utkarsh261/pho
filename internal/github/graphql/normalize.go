@@ -296,6 +296,7 @@ func previewReviewThreads(conn model.ReviewThreadConnection) []domain.PreviewRev
 			Path:       node.Path,
 			Line:       line,
 			IsResolved: node.IsResolved,
+			ResolvedBy: actorLogin(node.ResolvedBy),
 			Comments:   comments,
 		})
 	}

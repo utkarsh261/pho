@@ -65,6 +65,12 @@ func (m *PRDetailModel) renderHeader() string {
 	if m.Detail != nil && m.Detail.Mergeable != "" && m.Detail.Mergeable != "MERGEABLE" && m.Detail.Mergeable != "UNKNOWN" {
 		mergeSuffix = " · " + humanizeMergeState(m.Detail.MergeState)
 	}
+	// Unresolved thread count badge — gated at Width >= 80 to protect the title budget.
+	if m.Detail != nil && m.Width >= 80 {
+		if n := m.unresolvedThreadCount(); n > 0 {
+			mergeSuffix += fmt.Sprintf(" · %d unresolved", n)
+		}
+	}
 	if m.theme != nil {
 		authorStr = m.theme.PrimaryTxt.Render(author)
 		switch state {

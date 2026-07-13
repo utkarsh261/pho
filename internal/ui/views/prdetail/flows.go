@@ -20,7 +20,7 @@ func (m *PRDetailModel) StatusHint() string {
 	}
 	switch m.mergeStep {
 	case mergeStepSelectMethod:
-		return fmt.Sprintf("Merge #%d: [s]quash [r]ebase [m]erge [esc]cancel", m.Summary.Number)
+		return fmt.Sprintf("Merge #%d: [s]quash [r]ebase [M]erge [esc]cancel", m.Summary.Number)
 	case mergeStepConfirm:
 		return fmt.Sprintf("%s and merge #%d? (y/n)", strings.ToLower(m.mergeMethod), m.Summary.Number)
 	case mergeStepChecking:
@@ -30,6 +30,9 @@ func (m *PRDetailModel) StatusHint() string {
 	}
 	if m.mergeErr != "" {
 		return m.mergeErr
+	}
+	if m.resolveErr != "" {
+		return m.resolveErr
 	}
 	switch m.closeStep {
 	case closeStepConfirm:
@@ -93,7 +96,7 @@ func (m *PRDetailModel) handleMergeKey(msg tea.KeyMsg) tea.Cmd {
 		case "r":
 			m.mergeMethod = "REBASE"
 			m.mergeStep = mergeStepConfirm
-		case "m":
+		case "M":
 			m.mergeMethod = "MERGE"
 			m.mergeStep = mergeStepConfirm
 		case "esc", "n":
@@ -120,7 +123,7 @@ func (m *PRDetailModel) handleMergeKey(msg tea.KeyMsg) tea.Cmd {
 		// User already confirmed with 'y'; commit is in progress.
 		return func() tea.Msg { return nil }
 	case mergeStepNone:
-		if msg.String() == "m" {
+		if msg.String() == "M" {
 			if m.PRService == nil {
 				return func() tea.Msg { return nil }
 			}
@@ -162,7 +165,8 @@ func (m *PRDetailModel) isAnyActionInProgress() bool {
 		m.checkoutInFlight ||
 		m.editPosting ||
 		m.editPrompt != "" ||
-		m.confirmDiscardAll
+		m.confirmDiscardAll ||
+		m.pendingToggle.ThreadID != ""
 }
 
 // handleCloseStart initiates the close/reopen flow when x is pressed.
@@ -313,4 +317,53 @@ func (m *PRDetailModel) handleCheckout() tea.Cmd {
 	}
 	m.checkoutInFlight = true
 	return cmds.CheckoutBranchCmd(m.Repo, m.Summary.Number, m.Summary.HeadRefName, m.Summary.IsCrossRepository)
+}
+
+// pendingToggleState tracks an in-flight resolve/unresolve mutation so the
+// UI can optimistically flip the thread state and reconcile after reload.
+type pendingToggleState struct {
+	ThreadID       string
+	PrevResolved   bool
+	PrevResolver   string
+	TargetResolved bool
+	TargetResolver string
+}
+
+func (p pendingToggleState) active() bool {
+	return p.ThreadID != ""
+}
+
+// findThreadByID returns a pointer to the thread with the given ID, or nil.
+func (m *PRDetailModel) findThreadByID(threadID string) *domain.PreviewReviewThread {
+	if m.Detail == nil {
+		return nil
+	}
+	for i := range m.Detail.ReviewThreads {
+		if m.Detail.ReviewThreads[i].ID == threadID {
+			return &m.Detail.ReviewThreads[i]
+		}
+	}
+	return nil
+}
+
+// unresolvedThreadCount returns the number of unresolved review threads.
+func (m *PRDetailModel) unresolvedThreadCount() int {
+	if m.Detail == nil {
+		return 0
+	}
+	count := 0
+	for _, t := range m.Detail.ReviewThreads {
+		if !t.IsResolved {
+			count++
+		}
+	}
+	return count
+}
+
+// isThreadExpanded returns true if a resolved thread should render expanded.
+func (m *PRDetailModel) isThreadExpanded(threadID string, isResolved bool) bool {
+	if !isResolved {
+		return true // Unresolved threads are always expanded.
+	}
+	return m.expandedResolved[threadID]
 }
