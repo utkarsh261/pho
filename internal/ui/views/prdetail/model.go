@@ -754,7 +754,8 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		if !m.pendingToggle.active() || m.pendingToggle.ThreadID != msg.ThreadID {
 			return m, tea.Batch(spinCmd, composeCmd)
 		}
-		m.pendingToggle = pendingToggleState{}
+		// Don't clear pendingToggle here — PRDetailLoaded uses it for
+		// replication-lag mitigation and cursor re-anchor, then clears it.
 		var refreshCmd tea.Cmd
 		if m.PRService != nil {
 			refreshCmd = cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true)
@@ -765,7 +766,8 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		if !m.pendingToggle.active() || m.pendingToggle.ThreadID != msg.ThreadID {
 			return m, tea.Batch(spinCmd, composeCmd)
 		}
-		m.pendingToggle = pendingToggleState{}
+		// Don't clear pendingToggle here — PRDetailLoaded uses it for
+		// replication-lag mitigation and cursor re-anchor, then clears it.
 		var refreshCmd tea.Cmd
 		if m.PRService != nil {
 			refreshCmd = cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true)

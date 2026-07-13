@@ -166,7 +166,7 @@ func (m *PRDetailModel) isAnyActionInProgress() bool {
 		m.editPosting ||
 		m.editPrompt != "" ||
 		m.confirmDiscardAll ||
-		m.pendingToggle.ThreadID != ""
+		m.pendingToggle.active()
 }
 
 // handleCloseStart initiates the close/reopen flow when x is pressed.

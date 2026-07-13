@@ -541,6 +541,23 @@ func (m *PRDetailModel) handleResolveToggle() tea.Cmd {
 	m.commentEntriesDirty = true
 	m.resolveErr = ""
 
+	// Adjust cursor after optimistic flip so it lands on the right entry.
+	// On resolve: thread collapses to a summary → cursor on the summary.
+	// On unresolve: thread expands → cursor on the first comment.
+	entries = m.commentEntries()
+	for i, e := range entries {
+		if e.threadID == thread.ID {
+			if m.pendingToggle.TargetResolved && e.isResolvedSummary {
+				m.commentCursor = i
+				break
+			}
+			if !m.pendingToggle.TargetResolved && e.isThreadStart {
+				m.commentCursor = i
+				break
+			}
+		}
+	}
+
 	if m.pendingToggle.TargetResolved {
 		return cmds.ResolveThreadCmd(m.PRService, m.Repo, m.Summary.Number, thread.ID)
 	}

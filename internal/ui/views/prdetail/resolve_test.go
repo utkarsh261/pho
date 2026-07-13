@@ -571,7 +571,7 @@ func TestBracket_SkipsResolvedSummary(t *testing.T) {
 
 // ── ThreadResolved/Unresolved/Failed handlers ───────────────────────────────
 
-func TestThreadResolvedMsg_ClearsPending(t *testing.T) {
+func TestThreadResolvedMsg_KeepsPendingForReload(t *testing.T) {
 	thread := makeUnresolvedThread("t1", "a.go", 5, threadComment("c1", "alice", "first", time.Now()))
 	m := makeResolveModel(thread)
 	m.commentCursor = 0
@@ -583,8 +583,32 @@ func TestThreadResolvedMsg_ClearsPending(t *testing.T) {
 
 	m.Update(cmds.ThreadResolvedMsg{ThreadID: "t1"})
 
+	// pendingToggle must remain active so PRDetailLoaded can use it for
+	// mitigation and re-anchor.
+	if !m.pendingToggle.active() {
+		t.Error("expected pendingToggle still active after ThreadResolvedMsg (cleared by PRDetailLoaded)")
+	}
+}
+
+func TestThreadResolvedMsg_ClearedAfterReload(t *testing.T) {
+	thread := makeUnresolvedThread("t1", "a.go", 5, threadComment("c1", "alice", "first", time.Now()))
+	m := makeResolveModel(thread)
+	m.commentCursor = 0
+	m, _ = pressM(m)
+
+	m.Update(cmds.ThreadResolvedMsg{ThreadID: "t1"})
+	m.Update(cmds.PRDetailLoaded{
+		Detail: domain.PRPreviewSnapshot{
+			State: "OPEN",
+			ReviewThreads: []domain.PreviewReviewThread{
+				makeResolvedThread("t1", "a.go", 5, "octocat",
+					threadComment("c1", "alice", "first", time.Now())),
+			},
+		},
+	})
+
 	if m.pendingToggle.active() {
-		t.Error("expected pendingToggle cleared after ThreadResolvedMsg")
+		t.Error("expected pendingToggle cleared after PRDetailLoaded")
 	}
 }
 
@@ -718,5 +742,72 @@ func TestUnresolvedThreadCount_Zero(t *testing.T) {
 
 	if count := m.unresolvedThreadCount(); count != 0 {
 		t.Errorf("expected 0 unresolved, got %d", count)
+	}
+}
+
+// ── End-to-end flow: m → ThreadResolvedMsg → PRDetailLoaded ──────────────────
+
+func TestE2E_Resolve_ReanchorAfterReload(t *testing.T) {
+	t1 := makeUnresolvedThread("t1", "a.go", 5, threadComment("c1", "alice", "first", time.Now()))
+	t2 := makeUnresolvedThread("t2", "b.go", 10, threadComment("c2", "carol", "second", time.Now().Add(time.Hour)))
+	m := makeResolveModel(t1, t2)
+	m.commentCursor = 0
+	m, _ = pressM(m) // resolve t1
+
+	// Simulate the real flow: ThreadResolvedMsg → PRDetailLoaded.
+	m.Update(cmds.ThreadResolvedMsg{ThreadID: "t1"})
+	m.Update(cmds.PRDetailLoaded{
+		Detail: domain.PRPreviewSnapshot{
+			State: "OPEN",
+			ReviewThreads: []domain.PreviewReviewThread{
+				makeResolvedThread("t1", "a.go", 5, "octocat",
+					threadComment("c1", "alice", "first", time.Now())),
+				t2,
+			},
+		},
+	})
+
+	// Cursor should be re-anchored to t1 (now a collapsed summary).
+	if m.commentCursor < 0 {
+		t.Fatal("expected cursor re-anchored, got -1")
+	}
+	entries := m.commentEntries()
+	if m.commentCursor >= len(entries) {
+		t.Fatalf("cursor %d out of range (len=%d)", m.commentCursor, len(entries))
+	}
+	if entries[m.commentCursor].threadID != "t1" {
+		t.Errorf("expected cursor on t1 after reload, got threadID %q", entries[m.commentCursor].threadID)
+	}
+	// pendingToggle should be cleared after PRDetailLoaded.
+	if m.pendingToggle.active() {
+		t.Error("expected pendingToggle cleared after PRDetailLoaded")
+	}
+}
+
+func TestE2E_Resolve_MitigationOnStaleReload(t *testing.T) {
+	t1 := makeUnresolvedThread("t1", "a.go", 5, threadComment("c1", "alice", "first", time.Now()))
+	m := makeResolveModel(t1)
+	m.commentCursor = 0
+	m, _ = pressM(m) // optimistic resolve
+
+	// Real flow: ThreadResolvedMsg → stale PRDetailLoaded (replication lag).
+	m.Update(cmds.ThreadResolvedMsg{ThreadID: "t1"})
+	m.Update(cmds.PRDetailLoaded{
+		Detail: domain.PRPreviewSnapshot{
+			State: "OPEN",
+			ReviewThreads: []domain.PreviewReviewThread{
+				// Stale: still unresolved.
+				makeUnresolvedThread("t1", "a.go", 5, threadComment("c1", "alice", "first", time.Now())),
+			},
+		},
+	})
+
+	// Mitigation should force the optimistic value over the stale payload.
+	th := m.Detail.ReviewThreads[0]
+	if !th.IsResolved {
+		t.Error("expected mitigation to force IsResolved=true over stale payload")
+	}
+	if th.ResolvedBy != "octocat" {
+		t.Errorf("expected mitigation to force ResolvedBy=octocat, got %q", th.ResolvedBy)
 	}
 }

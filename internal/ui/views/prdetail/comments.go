@@ -328,6 +328,15 @@ func (m *PRDetailModel) commentEntries() []commentEntry {
 // (if body: 1 blank + bodyLines) + 1 trailing blank.
 // Must exactly mirror what commentLines() generates for each entry.
 func (m *PRDetailModel) entryRowCount(e commentEntry, cw int) int {
+	// Resolved summary entries render as 1-2 wrapped lines + trailing blank.
+	if e.isResolvedSummary {
+		innerW := max(cw-2, 1)
+		summaryText := m.buildResolvedSummaryText(e)
+		rows := len(wrapParagraph(summaryText, innerW))
+		rows++ // trailing blank
+		return rows
+	}
+
 	rows := 1 // header line
 	if !e.isThreadReply && e.path != "" && e.line > 0 {
 		rows++ // blank after header
@@ -708,6 +717,21 @@ func (m *PRDetailModel) buildEntryHint(e commentEntry) string {
 		return ""
 	}
 	return "[" + strings.Join(parts, " | ") + "]"
+}
+
+// buildResolvedSummaryText returns the plain-text summary string for a collapsed
+// resolved thread (without ANSI styling or hint), used for row-count computation.
+func (m *PRDetailModel) buildResolvedSummaryText(e commentEntry) string {
+	var parts []string
+	parts = append(parts, "✓ Resolved")
+	parts = append(parts, fmt.Sprintf("%d", e.replyCount))
+	if e.path != "" && e.line > 0 {
+		parts = append(parts, fmt.Sprintf("%s:%d", e.path, e.line))
+	}
+	if e.resolverLogin != "" {
+		parts = append(parts, "@"+e.resolverLogin)
+	}
+	return strings.Join(parts, " · ")
 }
 
 // buildResolvedSummaryInner renders a collapsed resolved thread as a single

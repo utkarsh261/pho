@@ -157,9 +157,6 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		}
 		return m, nil
 	case "m":
-		if m.CommitMode {
-			return m, nil
-		}
 		return m, m.handleResolveToggle()
 	case "r":
 		if m.CommitMode {
