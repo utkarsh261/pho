@@ -156,6 +156,8 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 			m.compose.Open(composeModeReviewComment, commentEntry{}, len(m.drafts))
 		}
 		return m, nil
+	case "m":
+		return m, m.handleResolveToggle()
 	case "r":
 		if m.CommitMode {
 			return m, nil
@@ -274,6 +276,12 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		} else if m.leftPanel.Focus == FocusCI {
 			return m, m.emitOpenBrowserCI()
 		} else if m.leftPanel.Focus == FocusContent && m.activeTab == TabComments && m.commentCursor >= 0 {
+			// Enter on a collapsed resolved summary expands it; otherwise jump to code.
+			entries := m.commentEntries()
+			if m.commentCursor < len(entries) && entries[m.commentCursor].isResolvedSummary {
+				m.expandResolvedThread(entries[m.commentCursor].threadID)
+				return m, nil
+			}
 			m.jumpToCommentCode()
 		} else if m.leftPanel.Focus == FocusContent && m.activeTab == TabCommits {
 			return m, m.emitOpenCommitDetail()
@@ -286,6 +294,10 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		m.jumpPrevFile()
 	case "shift+l":
 		m.jumpNextFile()
+	case "[", "]":
+		if m.isInCommentsSection() {
+			m.jumpUnresolvedThread(msg.String() == "]")
+		}
 	case "1":
 		if !m.CommitMode {
 			m.switchTab(TabDescription)

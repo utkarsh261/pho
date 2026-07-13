@@ -222,6 +222,12 @@ func (s *stubPRService) CreatePR(_ context.Context, _ domain.CreatePRParams) (do
 func (s *stubPRService) FetchRepoInfo(_ context.Context, _ domain.Repository) (domain.RepoInfo, error) {
 	return domain.RepoInfo{}, nil
 }
+func (s *stubPRService) ResolveThread(_ context.Context, _ domain.Repository, _ int, _ string) error {
+	return nil
+}
+func (s *stubPRService) UnresolveThread(_ context.Context, _ domain.Repository, _ int, _ string) error {
+	return nil
+}
 
 func TestColdStartThenDashboardLoadedPopulates(t *testing.T) {
 	t.Parallel()

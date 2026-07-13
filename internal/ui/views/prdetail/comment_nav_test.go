@@ -482,3 +482,9 @@ func (s *prServiceStub) CreatePR(_ context.Context, _ domain.CreatePRParams) (do
 func (s *prServiceStub) FetchRepoInfo(_ context.Context, _ domain.Repository) (domain.RepoInfo, error) {
 	return domain.RepoInfo{}, nil
 }
+func (s *prServiceStub) ResolveThread(_ context.Context, _ domain.Repository, _ int, _ string) error {
+	return nil
+}
+func (s *prServiceStub) UnresolveThread(_ context.Context, _ domain.Repository, _ int, _ string) error {
+	return nil
+}

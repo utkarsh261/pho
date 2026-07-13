@@ -81,6 +81,12 @@ func (s *editPRService) CreatePR(_ context.Context, _ domain.CreatePRParams) (do
 func (s *editPRService) FetchRepoInfo(_ context.Context, _ domain.Repository) (domain.RepoInfo, error) {
 	return domain.RepoInfo{}, nil
 }
+func (s *editPRService) ResolveThread(_ context.Context, _ domain.Repository, _ int, _ string) error {
+	return nil
+}
+func (s *editPRService) UnresolveThread(_ context.Context, _ domain.Repository, _ int, _ string) error {
+	return nil
+}
 
 func newEditModel() *PRDetailModel {
 	repo := testutil.Repo("acme/api")

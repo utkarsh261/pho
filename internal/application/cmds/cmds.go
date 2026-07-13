@@ -52,6 +52,8 @@ type PRService interface {
 	CheckMergeable(ctx context.Context, repo domain.Repository, number int) (domain.MergeableState, error)
 	ClosePR(ctx context.Context, repo domain.Repository, number int, prID string) error
 	ReopenPR(ctx context.Context, repo domain.Repository, number int, prID string) error
+	ResolveThread(ctx context.Context, repo domain.Repository, number int, threadID string) error
+	UnresolveThread(ctx context.Context, repo domain.Repository, number int, threadID string) error
 	UpdatePR(ctx context.Context, repo domain.Repository, number int, prID string, title string, body string) error
 	CreatePR(ctx context.Context, params domain.CreatePRParams) (domain.PullRequestSummary, error)
 	FetchRepoInfo(ctx context.Context, repo domain.Repository) (domain.RepoInfo, error)
@@ -146,6 +148,21 @@ type ApprovalFailed struct{ Err error }
 type ReviewPosted struct{}
 
 type ReviewFailed struct{ Err error }
+
+type ThreadResolvedMsg struct {
+	ThreadID string
+	Err      error
+}
+
+type ThreadUnresolvedMsg struct {
+	ThreadID string
+	Err      error
+}
+
+type ThreadResolveFailed struct {
+	ThreadID string
+	Err      error
+}
 
 type MergeableChecked struct {
 	Repo   string
@@ -322,6 +339,24 @@ func PostThreadReplyCmd(svc PRService, repo domain.Repository, threadID, body st
 			return CommentFailed{Err: err}
 		}
 		return CommentPosted{}
+	}
+}
+
+func ResolveThreadCmd(svc PRService, repo domain.Repository, number int, threadID string) tea.Cmd {
+	return func() tea.Msg {
+		if err := svc.ResolveThread(context.Background(), repo, number, threadID); err != nil {
+			return ThreadResolveFailed{ThreadID: threadID, Err: err}
+		}
+		return ThreadResolvedMsg{ThreadID: threadID}
+	}
+}
+
+func UnresolveThreadCmd(svc PRService, repo domain.Repository, number int, threadID string) tea.Cmd {
+	return func() tea.Msg {
+		if err := svc.UnresolveThread(context.Background(), repo, number, threadID); err != nil {
+			return ThreadResolveFailed{ThreadID: threadID, Err: err}
+		}
+		return ThreadUnresolvedMsg{ThreadID: threadID}
 	}
 }
 

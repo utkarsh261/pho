@@ -23,6 +23,11 @@ type commentEntry struct {
 	threadID             string // non-empty for review thread comments; used for threaded replies
 	commentID            string // non-empty for PR-level comments; used for comment replies
 	indentByParentReview bool   // true when this thread belongs to a parent review summary
+	isResolved           bool   // true for entries in a resolved thread
+	isResolvedSummary    bool   // true for the collapsed summary row of a resolved thread
+	isThreadStart        bool   // true for the first comment of a thread (root)
+	resolverLogin        string // who resolved the thread (empty if unresolved)
+	replyCount           int    // number of comments in the thread (for summary)
 }
 
 // commentEntries returns the sorted slice of comment/review entries for the current PR.
@@ -94,24 +99,43 @@ func (m *PRDetailModel) commentEntries() []commentEntry {
 		if thread.ID == "" {
 			continue
 		}
+		// Resolved + collapsed → emit a single summary entry.
+		if thread.IsResolved && !m.isThreadExpanded(thread.ID, true) {
+			summary := commentEntry{
+				threadID:          thread.ID,
+				path:              thread.Path,
+				line:              thread.Line,
+				isResolved:        true,
+				isResolvedSummary: true,
+				resolverLogin:     thread.ResolvedBy,
+				replyCount:        len(thread.Comments),
+			}
+			if len(thread.Comments) > 0 {
+				summary.ts = thread.Comments[0].CreatedAt
+			}
+			entries = append(entries, summary)
+			continue
+		}
 		for i, c := range thread.Comments {
 			if c.Login == "" {
 				continue
 			}
 			entry := commentEntry{
-				login:     c.Login,
-				ts:        c.CreatedAt,
-				body:      c.Body,
-				path:      thread.Path,
-				line:      thread.Line,
-				threadID:  thread.ID,
-				commentID: c.ID,
+				login:         c.Login,
+				ts:            c.CreatedAt,
+				body:          c.Body,
+				path:          thread.Path,
+				line:          thread.Line,
+				threadID:      thread.ID,
+				commentID:     c.ID,
+				isResolved:    thread.IsResolved,
+				resolverLogin: thread.ResolvedBy,
 			}
-			// First comment is the root; replies are indented in the UI.
 			if i > 0 {
 				entry.isThreadReply = true
 			}
 			if i == 0 {
+				entry.isThreadStart = true
 				entry.contextLine = m.lookupDiffLine(thread.Path, thread.Line)
 			}
 			entries = append(entries, entry)
@@ -304,6 +328,15 @@ func (m *PRDetailModel) commentEntries() []commentEntry {
 // (if body: 1 blank + bodyLines) + 1 trailing blank.
 // Must exactly mirror what commentLines() generates for each entry.
 func (m *PRDetailModel) entryRowCount(e commentEntry, cw int) int {
+	// Resolved summary entries render as 1-2 wrapped lines + trailing blank.
+	if e.isResolvedSummary {
+		innerW := max(cw-2, 1)
+		summaryText := m.buildResolvedSummaryText(e)
+		rows := len(wrapParagraph(summaryText, innerW))
+		rows++ // trailing blank
+		return rows
+	}
+
 	rows := 1 // header line
 	if !e.isThreadReply && e.path != "" && e.line > 0 {
 		rows++ // blank after header
@@ -553,6 +586,11 @@ func (m *PRDetailModel) commentLines(contentWidth int, activeIdx int) []string {
 // buildCommentEntryInner builds the content lines for a single comment entry
 // (header, optional path/context, body, trailing blank) without any border or prefix.
 func (m *PRDetailModel) buildCommentEntryInner(e commentEntry, innerW int, active bool) []string {
+	// Resolved collapsed summary: one-line entry.
+	if e.isResolvedSummary {
+		return m.buildResolvedSummaryInner(e, innerW, active)
+	}
+
 	var inner []string
 
 	ts := ""
@@ -583,13 +621,27 @@ func (m *PRDetailModel) buildCommentEntryInner(e commentEntry, innerW int, activ
 		}
 	}
 
-	if active {
-		var hint string
-		if e.path != "" && e.line > 0 {
-			hint = "[Enter | r: Reply]"
-		} else if !e.isDraft {
-			hint = "[r: Reply]"
+	// Resolved badge on expanded thread start.
+	if e.isResolved && e.isThreadStart && e.resolverLogin != "" {
+		badge := "Resolved ✓ by @" + e.resolverLogin
+		if m.theme != nil {
+			badge = m.theme.MutedTxt.Render(" · " + badge)
+		} else {
+			badge = " · " + badge
 		}
+		headerText += badge
+	} else if e.isResolved && e.isThreadStart {
+		badge := "Resolved ✓"
+		if m.theme != nil {
+			badge = m.theme.MutedTxt.Render(" · " + badge)
+		} else {
+			badge = " · " + badge
+		}
+		headerText += badge
+	}
+
+	if active {
+		hint := m.buildEntryHint(e)
 		if hint != "" {
 			if m.theme != nil {
 				hint = m.theme.MutedTxt.Render(hint)
@@ -634,6 +686,107 @@ func (m *PRDetailModel) buildCommentEntryInner(e commentEntry, innerW int, activ
 	}
 	inner = append(inner, "")
 	return inner
+}
+
+// buildEntryHint returns the active-entry hint string for the given entry,
+// or "" if no hint applies. The m: Resolve/Unresolve portion is gated at
+// m.Width >= 60 to protect the header layout on narrow terminals.
+func (m *PRDetailModel) buildEntryHint(e commentEntry) string {
+	var parts []string
+
+	if e.isResolvedSummary {
+		parts = append(parts, "Enter: Expand")
+		parts = append(parts, "r: Reply")
+	} else if e.path != "" && e.line > 0 {
+		parts = append(parts, "Enter")
+		parts = append(parts, "r: Reply")
+	} else if !e.isDraft {
+		parts = append(parts, "r: Reply")
+	}
+
+	// The m: Resolve/Unresolve portion only for thread entries.
+	if e.threadID != "" && m.Width >= 60 {
+		if e.isResolved {
+			parts = append(parts, "m: Unresolve")
+		} else {
+			parts = append(parts, "m: Resolve")
+		}
+	}
+
+	if len(parts) == 0 {
+		return ""
+	}
+	return "[" + strings.Join(parts, " | ") + "]"
+}
+
+// buildResolvedSummaryText returns the plain-text summary string for a collapsed
+// resolved thread (without ANSI styling or hint), used for row-count computation.
+func (m *PRDetailModel) buildResolvedSummaryText(e commentEntry) string {
+	var parts []string
+	parts = append(parts, "✓ Resolved")
+	parts = append(parts, fmt.Sprintf("%d", e.replyCount))
+	if e.path != "" && e.line > 0 {
+		parts = append(parts, fmt.Sprintf("%s:%d", e.path, e.line))
+	}
+	if e.resolverLogin != "" {
+		parts = append(parts, "@"+e.resolverLogin)
+	}
+	return strings.Join(parts, " · ")
+}
+
+// buildResolvedSummaryInner renders a collapsed resolved thread as a single
+// one-line summary: ✓ Resolved · N · path:line · @resolver
+func (m *PRDetailModel) buildResolvedSummaryInner(e commentEntry, innerW int, active bool) []string {
+	var parts []string
+
+	check := "✓ Resolved"
+	if m.theme != nil {
+		style := m.theme.MutedTxt
+		if active {
+			style = m.theme.MutedTxt.Bold(true)
+		}
+		check = style.Render(check)
+	}
+	parts = append(parts, check)
+
+	count := fmt.Sprintf("%d", e.replyCount)
+	if m.theme != nil {
+		count = m.theme.MutedTxt.Render(count)
+	}
+	parts = append(parts, count)
+
+	if e.path != "" && e.line > 0 {
+		loc := fmt.Sprintf("%s:%d", e.path, e.line)
+		if m.theme != nil {
+			loc = m.theme.MutedTxt.Render(loc)
+		}
+		parts = append(parts, loc)
+	}
+
+	if e.resolverLogin != "" {
+		resolver := "@" + e.resolverLogin
+		if m.theme != nil {
+			resolver = m.theme.MutedTxt.Render(resolver)
+		}
+		parts = append(parts, resolver)
+	}
+
+	summaryText := strings.Join(parts, " · ")
+
+	hint := m.buildEntryHint(e)
+	if active && hint != "" {
+		if m.theme != nil {
+			hint = m.theme.MutedTxt.Render(hint)
+		}
+		pad := innerW - lipgloss.Width(summaryText) - lipgloss.Width(hint)
+		if pad > 0 {
+			summaryText += strings.Repeat(" ", pad) + hint
+		} else {
+			summaryText += " " + hint
+		}
+	}
+
+	return []string{summaryText, ""}
 }
 
 // renderCommentsTab renders the Comments tab content at the given scroll and

@@ -166,6 +166,7 @@ type PreviewReviewThread struct {
 	Path       string
 	Line       int
 	IsResolved bool
+	ResolvedBy string
 	Comments   []PreviewThreadComment
 }
 

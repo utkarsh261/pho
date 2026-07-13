@@ -56,6 +56,24 @@ type AddPullRequestReviewThreadReplyData struct {
 	} `json:"addPullRequestReviewThreadReply"`
 }
 
+type ResolveReviewThreadData struct {
+	ResolveReviewThread struct {
+		Thread struct {
+			ID         string `json:"id"`
+			IsResolved bool   `json:"isResolved"`
+		} `json:"thread"`
+	} `json:"resolveReviewThread"`
+}
+
+type UnresolveReviewThreadData struct {
+	UnresolveReviewThread struct {
+		Thread struct {
+			ID         string `json:"id"`
+			IsResolved bool   `json:"isResolved"`
+		} `json:"thread"`
+	} `json:"unresolveReviewThread"`
+}
+
 type MergePullRequestData struct {
 	MergePullRequest struct {
 		PullRequest struct {
@@ -320,6 +338,7 @@ type ReviewThreadNode struct {
 	Line         *int                          `json:"line"`
 	OriginalLine *int                          `json:"originalLine"`
 	IsResolved   bool                          `json:"isResolved"`
+	ResolvedBy   *ActorNode                    `json:"resolvedBy"`
 	Comments     ReviewThreadCommentConnection `json:"comments"`
 }
 

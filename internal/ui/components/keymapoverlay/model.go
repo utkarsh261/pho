@@ -393,7 +393,7 @@ func buildPRDetailBindings(ctx Context) []Group {
 					{Key: "a", Description: "Approve"},
 					{Key: "v", Description: "Review"},
 					{Key: "e", Description: "Edit title/body"},
-					{Key: "m", Description: "Merge"},
+					{Key: "M", Description: "Merge"},
 				}
 				if ctx.PRState == domain.PRStateOpen {
 					b = append(b, Binding{Key: "x", Description: "Close"})
@@ -432,8 +432,10 @@ func buildPRDetailBindings(ctx Context) []Group {
 			Name: "Comments",
 			Bindings: []Binding{
 				{Key: "j/k", Description: "Next/prev comment"},
-				{Key: "enter", Description: "Jump to code"},
+				{Key: "enter", Description: "Expand resolved / Jump to code"},
 				{Key: "r", Description: "Reply"},
+				{Key: "m", Description: "Resolve/Unresolve"},
+				{Key: "[/]", Description: "Prev/Next unresolved"},
 			},
 		})
 	}

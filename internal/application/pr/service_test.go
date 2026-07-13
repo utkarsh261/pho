@@ -88,6 +88,8 @@ func (f *fakeGitHubClient) FetchCommits(ctx context.Context, repo domain.Reposit
 }
 
 func (f *fakeGitHubClient) UpdatePullRequest(_ context.Context, _, _, _, _ string) error { return nil }
+func (f *fakeGitHubClient) ResolveReviewThread(_ context.Context, _, _ string) error     { return nil }
+func (f *fakeGitHubClient) UnresolveReviewThread(_ context.Context, _, _ string) error   { return nil }
 
 // frozenNow is the fixed time used for both service.Now and coord.Now in tests.
 // Entries seeded at this time with a 2-minute TTL are fresh; entries seeded

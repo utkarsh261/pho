@@ -490,3 +490,150 @@ func (m *PRDetailModel) handleCommitRefresh() (*PRDetailModel, tea.Cmd) {
 	m.refreshSearchMatches()
 	return m, cmds.LoadCommitDiffCmd(m.PRService, m.Repo, m.Commit.SHA, true)
 }
+
+// handleResolveToggle toggles the resolved state of the thread at the current
+// comment cursor. No-op if not in the Comments tab, cursor is inactive, or
+// the active entry is not part of a review thread.
+func (m *PRDetailModel) handleResolveToggle() tea.Cmd {
+	if !m.isInCommentsSection() || m.commentCursor < 0 {
+		return nil
+	}
+	if m.isAnyActionInProgress() {
+		return nil
+	}
+	if m.PRService == nil || m.Detail == nil {
+		return nil
+	}
+	entries := m.commentEntries()
+	if m.commentCursor >= len(entries) {
+		return nil
+	}
+	entry := entries[m.commentCursor]
+	if entry.threadID == "" {
+		return nil
+	}
+
+	thread := m.findThreadByID(entry.threadID)
+	if thread == nil {
+		return nil
+	}
+
+	// Stash previous state for revert-on-failure and reload reconciliation.
+	m.pendingToggle = pendingToggleState{
+		ThreadID:       thread.ID,
+		PrevResolved:   thread.IsResolved,
+		PrevResolver:   thread.ResolvedBy,
+		TargetResolved: !thread.IsResolved,
+	}
+
+	if m.pendingToggle.TargetResolved {
+		m.pendingToggle.TargetResolver = m.ViewerLogin
+		// Optimistic flip: resolve → collapse (remove from expandedResolved).
+		thread.IsResolved = true
+		thread.ResolvedBy = m.pendingToggle.TargetResolver
+		delete(m.expandedResolved, thread.ID)
+	} else {
+		// Optimistic flip: unresolve → expand (unresolved threads ignore the map).
+		thread.IsResolved = false
+		thread.ResolvedBy = ""
+	}
+
+	m.commentEntriesDirty = true
+	m.resolveErr = ""
+
+	// Adjust cursor after optimistic flip so it lands on the right entry.
+	// On resolve: thread collapses to a summary → cursor on the summary.
+	// On unresolve: thread expands → cursor on the first comment.
+	entries = m.commentEntries()
+	for i, e := range entries {
+		if e.threadID == thread.ID {
+			if m.pendingToggle.TargetResolved && e.isResolvedSummary {
+				m.commentCursor = i
+				break
+			}
+			if !m.pendingToggle.TargetResolved && e.isThreadStart {
+				m.commentCursor = i
+				break
+			}
+		}
+	}
+
+	if m.pendingToggle.TargetResolved {
+		return cmds.ResolveThreadCmd(m.PRService, m.Repo, m.Summary.Number, thread.ID)
+	}
+	return cmds.UnresolveThreadCmd(m.PRService, m.Repo, m.Summary.Number, thread.ID)
+}
+
+// expandResolvedThread expands a collapsed resolved thread so its comments
+// are visible. The cursor is moved to the first comment of the thread.
+func (m *PRDetailModel) expandResolvedThread(threadID string) {
+	if m.expandedResolved == nil {
+		m.expandedResolved = make(map[string]bool)
+	}
+	m.expandedResolved[threadID] = true
+	m.commentEntriesDirty = true
+
+	// Move cursor to the first comment of the now-expanded thread.
+	entries := m.commentEntries()
+	for i, e := range entries {
+		if e.threadID == threadID && !e.isResolvedSummary {
+			m.commentCursor = i
+			m.scrollToCommentCursor()
+			return
+		}
+	}
+}
+
+// jumpUnresolvedThread moves the comment cursor to the first comment of the
+// next (or previous) unresolved thread. No-op if there are no unresolved
+// threads. Stops silently at boundaries.
+func (m *PRDetailModel) jumpUnresolvedThread(forward bool) {
+	entries := m.commentEntries()
+	if len(entries) == 0 {
+		return
+	}
+
+	// Build a list of unresolved thread-start entry indices.
+	var unresolvedStarts []int
+	seen := make(map[string]bool)
+	for i, e := range entries {
+		if e.threadID == "" || e.isResolvedSummary || e.isThreadReply {
+			continue
+		}
+		if seen[e.threadID] {
+			continue
+		}
+		seen[e.threadID] = true
+		// Check if the thread is unresolved.
+		thread := m.findThreadByID(e.threadID)
+		if thread != nil && !thread.IsResolved {
+			unresolvedStarts = append(unresolvedStarts, i)
+		}
+	}
+
+	if len(unresolvedStarts) == 0 {
+		return
+	}
+
+	cur := m.commentCursor
+	if forward {
+		for _, idx := range unresolvedStarts {
+			if idx > cur {
+				m.commentCursor = idx
+				m.scrollToCommentCursor()
+				return
+			}
+		}
+		// Stop silently at the last unresolved thread.
+	} else {
+		for i := len(unresolvedStarts) - 1; i >= 0; i-- {
+			idx := unresolvedStarts[i]
+			if idx < cur {
+				m.commentCursor = idx
+				m.scrollToCommentCursor()
+				return
+			}
+		}
+		// Stop silently at the first unresolved thread.
+	}
+}
