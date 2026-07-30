@@ -307,6 +307,9 @@ func (s *closeReopenPRService) ClosePR(_ context.Context, _ domain.Repository, _
 func (s *closeReopenPRService) ReopenPR(_ context.Context, _ domain.Repository, _ int, _ string) error {
 	return nil
 }
+func (s *closeReopenPRService) UpdateBranch(_ context.Context, _ domain.Repository, _ int, _ string) error {
+	return nil
+}
 
 func (s *closeReopenPRService) UpdatePR(_ context.Context, _ domain.Repository, _ int, _ string, _ string, _ string) error {
 	return nil

@@ -592,6 +592,7 @@ func (m *Model) toggleKeymapOverlay() tea.Cmd {
 		ctx.Tab = m.prDetail.ActiveTab()
 		if m.prDetail.Detail != nil {
 			ctx.PRState = m.prDetail.Detail.State
+			ctx.Behind = m.prDetail.Detail.MergeState == "BEHIND"
 		}
 		ctx.DraftCount = m.prDetail.DraftCount()
 	}

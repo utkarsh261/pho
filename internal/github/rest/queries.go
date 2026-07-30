@@ -29,3 +29,10 @@ func buildRepoURL(baseURL, owner, repo string) string {
 func buildCreatePRURL(baseURL, owner, repo string) string {
 	return fmt.Sprintf("%s/repos/%s/%s/pulls", baseURL, owner, repo)
 }
+
+// buildUpdateBranchURL constructs the REST API URL for updating a PR branch.
+//
+// Format: {baseURL}/repos/{owner}/{repo}/pulls/{number}/update-branch
+func buildUpdateBranchURL(baseURL, owner, repo string, number int) string {
+	return fmt.Sprintf("%s/repos/%s/%s/pulls/%d/update-branch", baseURL, owner, repo, number)
+}

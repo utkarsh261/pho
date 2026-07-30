@@ -64,6 +64,11 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		return m, cmd
 	}
 
+	// Update-branch flow state machine.
+	if cmd := m.handleUpdateKey(msg); cmd != nil {
+		return m, cmd
+	}
+
 	// Edit prompt state — waiting for t/b/esc.
 	if m.editPrompt != "" {
 		switch msg.String() {

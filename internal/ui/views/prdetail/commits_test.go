@@ -225,6 +225,9 @@ func (f *fakePRService) ClosePR(ctx context.Context, repo domain.Repository, num
 func (f *fakePRService) ReopenPR(ctx context.Context, repo domain.Repository, number int, prID string) error {
 	return nil
 }
+func (f *fakePRService) UpdateBranch(_ context.Context, _ domain.Repository, _ int, _ string) error {
+	return nil
+}
 
 func (f *fakePRService) UpdatePR(_ context.Context, _ domain.Repository, _ int, _ string, _ string, _ string) error {
 	return nil

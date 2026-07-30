@@ -69,6 +69,9 @@ func (s *resolvePRService) ClosePR(_ context.Context, _ domain.Repository, _ int
 func (s *resolvePRService) ReopenPR(_ context.Context, _ domain.Repository, _ int, _ string) error {
 	return nil
 }
+func (s *resolvePRService) UpdateBranch(_ context.Context, _ domain.Repository, _ int, _ string) error {
+	return nil
+}
 func (s *resolvePRService) ResolveThread(_ context.Context, _ domain.Repository, _ int, threadID string) error {
 	if s.resolveFn != nil {
 		return s.resolveFn(context.Background(), domain.Repository{}, 0, threadID)

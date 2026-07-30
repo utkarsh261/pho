@@ -184,6 +184,21 @@ func (s *PRService) MergePR(ctx context.Context, repo domain.Repository, number 
 	return nil
 }
 
+// UpdateBranch merges base into the PR head branch and invalidates the preview cache.
+func (s *PRService) UpdateBranch(ctx context.Context, repo domain.Repository, number int, expectedHeadSHA string) error {
+	defer s.logTimer("pr update branch", pholog.FieldRepo, repo.FullName, pholog.FieldPRNumber, number)()
+	s.logDebug("update branch", "repo", repo.FullName, "number", number)
+	if err := s.REST.UpdateBranch(ctx, s.ownerName(repo), s.RepoName(repo), number, expectedHeadSHA); err != nil {
+		s.logWarn("update branch failed", "repo", repo.FullName, "number", number, "err", err)
+		return err
+	}
+	previewKey := previewCacheKey(repo.Host, repoFullName(repo), number)
+	if delErr := s.Cache.Delete(ctx, previewKey); delErr != nil {
+		s.logWarn("update branch cache delete failed", "key", previewKey, "err", delErr)
+	}
+	return nil
+}
+
 // ClosePR closes a PR and invalidates related caches.
 func (s *PRService) ClosePR(ctx context.Context, repo domain.Repository, number int, prID string) error {
 	defer s.logTimer("pr close", pholog.FieldRepo, repo.FullName, pholog.FieldPRNumber, number)()

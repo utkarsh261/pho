@@ -206,6 +206,9 @@ func (s *stubPRService) ClosePR(_ context.Context, _ domain.Repository, _ int, _
 func (s *stubPRService) ReopenPR(_ context.Context, _ domain.Repository, _ int, _ string) error {
 	return nil
 }
+func (s *stubPRService) UpdateBranch(_ context.Context, _ domain.Repository, _ int, _ string) error {
+	return nil
+}
 
 func (s *stubPRService) UpdatePR(_ context.Context, _ domain.Repository, _ int, _ string, _ string, _ string) error {
 	return nil

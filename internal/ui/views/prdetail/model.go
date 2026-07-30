@@ -188,6 +188,11 @@ type PRDetailModel struct {
 	mergeRepo   domain.Repository
 	mergePRID   string
 
+	// Update-branch flow state
+	updateStep updateStep
+	updateErr  string
+	updateRepo domain.Repository
+
 	// Close/reopen flow state
 	closeStep   closeStep
 	closeTarget string // "CLOSE" or "REOPEN"
@@ -228,6 +233,15 @@ const (
 	mergeStepConfirm
 	mergeStepChecking
 	mergeStepExecuting
+)
+
+// updateStep tracks the "Update branch" workflow state.
+type updateStep int
+
+const (
+	updateStepNone updateStep = iota
+	updateStepConfirm
+	updateStepExecuting
 )
 
 // closeStep tracks the close/reopen workflow state.
@@ -698,6 +712,23 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 			m.Detail.State = "MERGED"
 		}
 		// Refresh detail to show merged state.
+		var refreshCmd tea.Cmd
+		if m.PRService != nil {
+			refreshCmd = cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true)
+		}
+		return m, tea.Batch(spinCmd, composeCmd, refreshCmd)
+
+	case cmds.UpdateBranchMsg:
+		if m.updateStep != updateStepExecuting {
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		m.updateStep = updateStepNone
+		if msg.Err != nil {
+			m.updateErr = "Update branch failed: " + msg.Err.Error()
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		m.updateErr = ""
+		// Refresh detail to pick up the new head SHA + merge state.
 		var refreshCmd tea.Cmd
 		if m.PRService != nil {
 			refreshCmd = cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true)

@@ -57,6 +57,8 @@ type PRService interface {
 	UpdatePR(ctx context.Context, repo domain.Repository, number int, prID string, title string, body string) error
 	CreatePR(ctx context.Context, params domain.CreatePRParams) (domain.PullRequestSummary, error)
 	FetchRepoInfo(ctx context.Context, repo domain.Repository) (domain.RepoInfo, error)
+	// UpdateBranch merges base into the PR head branch via the REST update-branch endpoint.
+	UpdateBranch(ctx context.Context, repo domain.Repository, number int, expectedHeadSHA string) error
 }
 
 type PRDetailLoaded struct {
@@ -175,6 +177,13 @@ type MergePRMsg struct {
 	Repo   string
 	Number int
 	Method string
+	Err    error
+}
+
+// UpdateBranchMsg is emitted when an "Update branch" request completes.
+type UpdateBranchMsg struct {
+	Repo   string
+	Number int
 	Err    error
 }
 
@@ -446,6 +455,16 @@ func MergePRCmd(svc PRService, repo domain.Repository, number int, prID string, 
 			return MergePRMsg{Repo: repoKey(repo), Number: number, Method: method, Err: err}
 		}
 		return MergePRMsg{Repo: repoKey(repo), Number: number, Method: method}
+	}
+}
+
+// UpdateBranchCmd fires the REST "Update branch" mutation.
+func UpdateBranchCmd(svc PRService, repo domain.Repository, number int, expectedHeadSHA string) tea.Cmd {
+	return func() tea.Msg {
+		if err := svc.UpdateBranch(context.Background(), repo, number, expectedHeadSHA); err != nil {
+			return UpdateBranchMsg{Repo: repoKey(repo), Number: number, Err: err}
+		}
+		return UpdateBranchMsg{Repo: repoKey(repo), Number: number}
 	}
 }
 

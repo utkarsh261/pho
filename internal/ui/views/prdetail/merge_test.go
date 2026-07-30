@@ -76,6 +76,9 @@ func (s *mergePRService) ClosePR(_ context.Context, _ domain.Repository, _ int, 
 func (s *mergePRService) ReopenPR(_ context.Context, _ domain.Repository, _ int, _ string) error {
 	return nil
 }
+func (s *mergePRService) UpdateBranch(_ context.Context, _ domain.Repository, _ int, _ string) error {
+	return nil
+}
 
 func (s *mergePRService) UpdatePR(_ context.Context, _ domain.Repository, _ int, _ string, _ string, _ string) error {
 	return nil
