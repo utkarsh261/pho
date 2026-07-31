@@ -211,8 +211,17 @@ func main() {
 	restClient := rest.NewClient(profiles[0].RESTURL, profiles[0].Token, logger)
 	restClient.HTTPClient = &http.Client{Timeout: 30 * time.Second}
 
+	// Per-host REST clients so mutations route to the right GitHub host
+	// (e.g. a GHES PR's update-branch lands on the GHES instance, not github.com).
+	restByHost := make(map[string]*rest.Client, len(profiles))
+	for _, p := range profiles {
+		c := rest.NewClient(p.RESTURL, p.Token, logger)
+		c.HTTPClient = &http.Client{Timeout: 30 * time.Second}
+		restByHost[p.Host] = c
+	}
+
 	// PR detail service: loads PR metadata (GraphQL) and diffs (REST).
-	prSvc := apppr.NewService(coordinator, ghClient, restClient)
+	prSvc := apppr.NewService(coordinator, ghClient, restClient, restByHost)
 	prSvc.Log = logger
 
 	deps := app.Dependencies{

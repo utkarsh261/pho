@@ -1328,3 +1328,93 @@ func (failingStore) Delete(context.Context, string) error                     { 
 func (failingStore) DeleteByRepo(context.Context, string, string) error {
 	return errors.New("disk full")
 }
+
+func TestUpdateBranchRoutesToHostSpecificRESTClient(t *testing.T) {
+	t.Parallel()
+
+	// Two fake GitHub hosts with distinct tokens and expect distinct mutation targets.
+	var ghHost, gheHost string
+	var ghHits, gheHits int
+
+	ghSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ghHits++
+		if r.Header.Get("Authorization") != "token gh-token" {
+			t.Errorf("gh host: expected token gh-token, got %q", r.Header.Get("Authorization"))
+		}
+		if r.URL.Path != "/repos/owner/repo/pulls/42/update-branch" {
+			t.Errorf("gh host: unexpected path %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer ghSrv.Close()
+	ghHost = "github.com"
+
+	gheSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gheHits++
+		if r.Header.Get("Authorization") != "token ghe-token" {
+			t.Errorf("ghe host: expected token ghe-token, got %q", r.Header.Get("Authorization"))
+		}
+		if r.URL.Path != "/repos/owner/repo/pulls/42/update-branch" {
+			t.Errorf("ghe host: unexpected path %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer gheSrv.Close()
+	gheHost = "github.example.com"
+
+	ghClient := &rest.Client{BaseURL: ghSrv.URL, Token: "gh-token"}
+	gheClient := &rest.Client{BaseURL: gheSrv.URL, Token: "ghe-token"}
+	restByHost := map[string]*rest.Client{
+		ghHost:  ghClient,
+		gheHost: gheClient,
+	}
+
+	svc := &PRService{
+		Cache:      newTestCoordinator(t),
+		REST:       ghClient, // default fallback
+		RESTByHost: restByHost,
+		Now:        func() time.Time { return frozenNow },
+		Log:        pholog.NewNop(),
+	}
+
+	// Update a PR whose repo.Host is the GHES instance — must hit gheSrv, NOT ghSrv.
+	gheRepo := domain.Repository{
+		Host: gheHost, Owner: "owner", Name: "repo", FullName: "owner/repo",
+	}
+	if err := svc.UpdateBranch(context.Background(), gheRepo, 42, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gheHits != 1 {
+		t.Fatalf("expected exactly 1 hit on ghe host, got %d", gheHits)
+	}
+	if ghHits != 0 {
+		t.Fatalf("expected 0 hits on github.com host for a GHES PR, got %d", ghHits)
+	}
+}
+
+func TestUpdateBranchFallsBackToDefaultREST(t *testing.T) {
+	t.Parallel()
+
+	var hits int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer srv.Close()
+
+	defaultClient := &rest.Client{BaseURL: srv.URL, Token: "default-token"}
+	// RESTByHost is nil → every host falls back to defaultClient.
+	svc := &PRService{
+		Cache: newTestCoordinator(t),
+		REST:  defaultClient,
+		Now:   func() time.Time { return frozenNow },
+		Log:   pholog.NewNop(),
+	}
+	repo := domain.Repository{Host: "some-unknown-host", Owner: "owner", Name: "repo", FullName: "owner/repo"}
+	if err := svc.UpdateBranch(context.Background(), repo, 1, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hits != 1 {
+		t.Fatalf("expected fallback client hit, got %d", hits)
+	}
+}

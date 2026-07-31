@@ -32,6 +32,7 @@ type PRService struct {
 	Cache        *cache.Coordinator
 	Client       githubclient.GitHubClient
 	REST         *rest.Client
+	RESTByHost   map[string]*rest.Client
 	Now          func() time.Time
 	Owner        string // repo owner
 	Repo         string // repo name
@@ -40,13 +41,24 @@ type PRService struct {
 }
 
 // NewService builds a PR service with sensible defaults.
-func NewService(cacheCoordinator *cache.Coordinator, client githubclient.GitHubClient, restClient *rest.Client) *PRService {
+func NewService(cacheCoordinator *cache.Coordinator, client githubclient.GitHubClient, restClient *rest.Client, restByHost map[string]*rest.Client) *PRService {
 	return &PRService{
-		Cache:  cacheCoordinator,
-		Client: client,
-		REST:   restClient,
-		Now:    time.Now,
+		Cache:      cacheCoordinator,
+		Client:     client,
+		REST:       restClient,
+		RESTByHost: restByHost,
+		Now:        time.Now,
 	}
+}
+
+// restFor returns the REST client configured for the given host, falling back
+// to the default client when no host-specific entry exists. Mirrors the
+// per-host routing the GraphQL client already performs via profileForHost.
+func (s *PRService) restFor(host string) *rest.Client {
+	if c, ok := s.RESTByHost[host]; ok && c != nil {
+		return c
+	}
+	return s.REST
 }
 
 func (s *PRService) LoadDetail(ctx context.Context, repo domain.Repository, number int, force bool) (domain.PRPreviewSnapshot, bool, error) {
@@ -188,7 +200,7 @@ func (s *PRService) MergePR(ctx context.Context, repo domain.Repository, number 
 func (s *PRService) UpdateBranch(ctx context.Context, repo domain.Repository, number int, expectedHeadSHA string) error {
 	defer s.logTimer("pr update branch", pholog.FieldRepo, repo.FullName, pholog.FieldPRNumber, number)()
 	s.logDebug("update branch", "repo", repo.FullName, "number", number)
-	if err := s.REST.UpdateBranch(ctx, s.ownerName(repo), s.RepoName(repo), number, expectedHeadSHA); err != nil {
+	if err := s.restFor(repo.Host).UpdateBranch(ctx, s.ownerName(repo), s.RepoName(repo), number, expectedHeadSHA); err != nil {
 		s.logWarn("update branch failed", "repo", repo.FullName, "number", number, "err", err)
 		return err
 	}
@@ -263,7 +275,7 @@ func (s *PRService) UnresolveThread(ctx context.Context, repo domain.Repository,
 func (s *PRService) FetchRepoInfo(ctx context.Context, repo domain.Repository) (domain.RepoInfo, error) {
 	defer s.logTimer("pr fetch repo info", pholog.FieldRepo, repo.FullName)()
 
-	info, err := s.REST.FetchRepoInfo(ctx, s.ownerName(repo), s.RepoName(repo))
+	info, err := s.restFor(repo.Host).FetchRepoInfo(ctx, s.ownerName(repo), s.RepoName(repo))
 	if err != nil {
 		s.logWarn("fetch repo info failed", "repo", repo.FullName, "err", err)
 		return domain.RepoInfo{}, err
@@ -288,7 +300,7 @@ func (s *PRService) CreatePR(ctx context.Context, params domain.CreatePRParams) 
 	targetRepo := s.RepoName(params.Repo)
 	repoFull := repoFullName(params.Repo)
 
-	pr, err := s.REST.CreatePullRequest(ctx, targetOwner, targetRepo, params)
+	pr, err := s.restFor(params.Repo.Host).CreatePullRequest(ctx, targetOwner, targetRepo, params)
 	if err != nil {
 		s.logWarn("create pr failed", "repo", repoFull, "err", err)
 		return domain.PullRequestSummary{}, err
@@ -410,7 +422,7 @@ func (s *PRService) loadDiffInner(ctx context.Context, repo domain.Repository, n
 
 	s.logDebug("fetching raw diff", "key", key, "number", number, "host", repo.Host)
 
-	rawDiff, err := s.REST.FetchRawDiff(ctx, s.ownerName(repo), s.RepoName(repo), number)
+	rawDiff, err := s.restFor(repo.Host).FetchRawDiff(ctx, s.ownerName(repo), s.RepoName(repo), number)
 	if err != nil {
 		if found && headSHA != "" {
 			s.logWarn("diff fetch failed, returning stale", "key", key, "number", number, "err", err)
@@ -515,7 +527,7 @@ func (s *PRService) LoadCommitDiff(ctx context.Context, repo domain.Repository, 
 
 	s.logDebug("commit diff cache miss, fetching", "key", key, "sha", sha)
 
-	rawDiff, err := s.REST.FetchCommitDiff(ctx, s.ownerName(repo), s.RepoName(repo), sha)
+	rawDiff, err := s.restFor(repo.Host).FetchCommitDiff(ctx, s.ownerName(repo), s.RepoName(repo), sha)
 	if err != nil {
 		if found {
 			s.logWarn("commit diff fetch failed, returning stale", "key", key, "sha", sha, "err", err)
