@@ -153,7 +153,7 @@ func TestCommitsTabHandlesCommitsLoaded(t *testing.T) {
 
 	next, _ := m.Update(cmds.CommitsLoaded{
 		Repo:   "owner/repo",
-		Number: 42,
+		Number: 1,
 		Commits: []domain.Commit{
 			{SHA: "abc1234", MessageHeadline: "Test commit"},
 		},
@@ -164,6 +164,26 @@ func TestCommitsTabHandlesCommitsLoaded(t *testing.T) {
 	}
 	if len(m.commits) != 1 {
 		t.Fatalf("expected 1 commit, got %d", len(m.commits))
+	}
+}
+
+func TestCommitsTabReloadsAfterResponseForPreviousHead(t *testing.T) {
+	t.Parallel()
+	m := makePRDetail(100, 30, nil, nil)
+	m.PRService = &fakePRService{}
+	m.Summary.HeadRefOID = "new-head"
+	m.commitsLoading = true
+	m.commits = []domain.Commit{{SHA: "current"}}
+
+	next, cmd := m.Update(cmds.CommitsLoaded{
+		Repo: "owner/repo", Number: 1, HeadSHA: "old-head",
+		Commits: []domain.Commit{{SHA: "stale"}},
+	})
+	if !next.commitsLoading || len(next.commits) != 1 || next.commits[0].SHA != "current" {
+		t.Fatalf("stale commits response overwrote current state: loading=%v commits=%+v", next.commitsLoading, next.commits)
+	}
+	if cmd == nil {
+		t.Fatal("expected stale commits response to trigger a current-head reload")
 	}
 }
 

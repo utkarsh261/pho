@@ -55,6 +55,9 @@ func (m *PRDetailModel) firstDiffLineAtOrBelow(targetRow int) (fileIdx, hunkIdx,
 // enterVisualMode activates visual mode anchored at the current diff cursor
 // position if valid, otherwise at the first diff line at or below ContentScroll.
 func (m *PRDetailModel) enterVisualMode() {
+	if m.draftsStale || m.DetailLoading || m.DiffLoading {
+		return
+	}
 	var fi, hi, li int
 	var ok bool
 	if m.validDiffCursor() {
@@ -125,6 +128,13 @@ func (m *PRDetailModel) buildDraftFromVisualSelection(body string) domain.DraftI
 
 // upsertDraft replaces an existing draft on the exact same range or appends a new one.
 func (m *PRDetailModel) upsertDraft(draft domain.DraftInlineComment) {
+	if len(m.drafts) == 0 {
+		m.draftHeadSHA = draft.HeadSHA
+		if m.draftHeadSHA == "" {
+			m.draftHeadSHA = m.headSHA()
+		}
+		m.draftsStale = false
+	}
 	for i, d := range m.drafts {
 		if d.Path == draft.Path && d.Line == draft.Line && d.Side == draft.Side &&
 			d.StartLine == draft.StartLine && d.StartSide == draft.StartSide {
@@ -233,7 +243,7 @@ func (m *PRDetailModel) findDraftForSelection() *domain.DraftInlineComment {
 // rebuildDraftCovered recomputes the draftCovered map from m.drafts.
 // Call this whenever drafts change (add, remove, load, clear).
 func (m *PRDetailModel) rebuildDraftCovered() {
-	if m.Diff == nil {
+	if m.Diff == nil || m.draftsStale {
 		m.draftCovered = nil
 		return
 	}
@@ -260,7 +270,7 @@ func (m *PRDetailModel) persistDrafts() {
 	if m.PRService == nil {
 		return
 	}
-	headSHA := m.headSHA()
+	headSHA := m.draftCacheHeadSHA()
 	if headSHA == "" {
 		return // no SHA to key drafts against; skip persistence to avoid collision
 	}
@@ -273,6 +283,12 @@ func (m *PRDetailModel) loadDrafts() {
 	if m.PRService == nil {
 		return
 	}
+	// Preserve drafts from the previous head until the user explicitly
+	// discards them. Loading the new head's cache here would silently hide the
+	// old drafts and make them appear lost.
+	if m.draftsStale && len(m.drafts) > 0 {
+		return
+	}
 	headSHA := m.headSHA()
 	if headSHA == "" {
 		return
@@ -280,8 +296,56 @@ func (m *PRDetailModel) loadDrafts() {
 	// Errors are logged by the service layer; missing cache entries are expected (not an error).
 	drafts, _ := m.PRService.LoadDraftComments(context.Background(), m.Repo, m.Summary.Number, headSHA)
 	m.drafts = drafts
+	m.draftHeadSHA = headSHA
+	m.draftsStale = false
 	m.rebuildDraftCovered()
 	m.commentEntriesDirty = true
+}
+
+// markDraftsStale preserves drafts across a head transition while preventing
+// their anchors from being applied or submitted against the new head.
+func (m *PRDetailModel) markDraftsStale(previousHead string) {
+	if len(m.drafts) == 0 || m.draftsStale {
+		return
+	}
+	if m.draftHeadSHA == "" {
+		for _, draft := range m.drafts {
+			if draft.HeadSHA != "" {
+				m.draftHeadSHA = draft.HeadSHA
+				break
+			}
+		}
+	}
+	if m.draftHeadSHA == "" {
+		m.draftHeadSHA = previousHead
+	}
+	m.draftsStale = true
+	m.rebuildDraftCovered()
+	m.commentEntriesDirty = true
+}
+
+// draftCacheHeadSHA returns the cache owner for the current draft set. Stale
+// drafts must continue to read and write their previous-head cache entry.
+func (m *PRDetailModel) draftCacheHeadSHA() string {
+	if m.draftHeadSHA != "" {
+		return m.draftHeadSHA
+	}
+	for _, draft := range m.drafts {
+		if draft.HeadSHA != "" {
+			return draft.HeadSHA
+		}
+	}
+	return m.headSHA()
+}
+
+func (m *PRDetailModel) draftSubmissionError() string {
+	if !m.draftsStale && !m.DetailLoading && !m.DiffLoading {
+		return ""
+	}
+	if m.draftsStale {
+		return "Inline drafts belong to the previous head; discard them before submitting a review"
+	}
+	return "Wait for the PR refresh to finish before submitting inline drafts"
 }
 
 func (m *PRDetailModel) headSHA() string {

@@ -77,6 +77,9 @@ func (m *PRDetailModel) StatusHint() string {
 	if m.editErr != "" {
 		return m.editErr
 	}
+	if m.draftsStale && len(m.drafts) > 0 {
+		return fmt.Sprintf("%d inline drafts belong to the previous head | D: Discard drafts", len(m.drafts))
+	}
 	if m.CommitMode {
 		if m.searchActive {
 			return fmt.Sprintf("Search: %s  (%d/%d)  | Enter: commit  | Esc: clear", m.searchQuery, m.searchCursor+1, len(m.searchMatches))
@@ -184,7 +187,7 @@ func (m *PRDetailModel) handleUpdateKey(msg tea.KeyMsg) tea.Cmd {
 		}
 		return func() tea.Msg { return nil }
 	case updateStepExecuting:
-		// Mutation is in flight; cannot be cancelled.
+		// The mutation is in flight and cannot be cancelled.
 		return func() tea.Msg { return nil }
 	case updateStepNone:
 		if msg.String() == "U" {
@@ -200,6 +203,13 @@ func (m *PRDetailModel) handleUpdateKey(msg tea.KeyMsg) tea.Cmd {
 			}
 			if m.Detail.MergeState != "BEHIND" {
 				m.updateErr = "PR is not behind base (" + humanizeMergeState(m.Detail.MergeState) + ")"
+				return func() tea.Msg { return nil }
+			}
+			if len(m.drafts) == 0 {
+				m.loadDrafts()
+			}
+			if len(m.drafts) > 0 {
+				m.updateErr = "Submit or discard inline drafts before updating the branch"
 				return func() tea.Msg { return nil }
 			}
 			m.updateErr = ""

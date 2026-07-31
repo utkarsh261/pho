@@ -602,6 +602,7 @@ func splitRepo(full string) (string, string, bool) {
 
 func TestUpdateBranchCmd(t *testing.T) {
 	r := repo("org/a")
+	r.Host = "github.example.com"
 
 	t.Run("success", func(t *testing.T) {
 		var gotRepo domain.Repository
@@ -624,6 +625,9 @@ func TestUpdateBranchCmd(t *testing.T) {
 		}
 		if upd.Repo != r.FullName {
 			t.Errorf("expected Repo=%q, got %q", r.FullName, upd.Repo)
+		}
+		if upd.Host != r.Host {
+			t.Errorf("expected Host=%q, got %q", r.Host, upd.Host)
 		}
 		if upd.Number != 42 {
 			t.Errorf("expected Number=42, got %d", upd.Number)
@@ -663,7 +667,7 @@ func TestUpdateBranchCmd(t *testing.T) {
 		if !errors.Is(upd.Err, wantErr) {
 			t.Fatalf("expected wrapped error, got %#v", upd.Err)
 		}
-		if upd.Repo != r.FullName || upd.Number != 42 {
+		if upd.Host != r.Host || upd.Repo != r.FullName || upd.Number != 42 {
 			t.Fatalf("expected identity fields preserved on error, got %#v", upd)
 		}
 	})

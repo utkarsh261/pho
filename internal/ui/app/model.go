@@ -334,7 +334,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			case cmds.UpdateBranchMsg:
 				if stateMsg.Err == nil {
-					if repo, ok := m.findRepoByFullName(stateMsg.Repo); ok && m.deps.Dashboard != nil {
+					if repo, ok := m.findRepoByHostAndFullName(stateMsg.Host, stateMsg.Repo); ok && m.deps.Dashboard != nil {
 						_ = m.deps.Dashboard.InvalidateRepo(context.Background(), repo)
 					}
 				}
@@ -1681,8 +1681,12 @@ func (m *Model) openPRDetailForJump(summary domain.PullRequestSummary) tea.Cmd {
 }
 
 func (m *Model) findRepoByFullName(fullName string) (domain.Repository, bool) {
+	return m.findRepoByHostAndFullName("", fullName)
+}
+
+func (m *Model) findRepoByHostAndFullName(host, fullName string) (domain.Repository, bool) {
 	for _, r := range m.state.Repos.Discovered {
-		if sameRepo(r.FullName, fullName) {
+		if sameRepo(r.FullName, fullName) && (host == "" || strings.EqualFold(r.Host, host)) {
 			return r, true
 		}
 	}

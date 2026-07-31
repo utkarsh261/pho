@@ -62,14 +62,17 @@ type PRService interface {
 }
 
 type PRDetailLoaded struct {
+	Host      string
 	Repo      string
 	Number    int
+	RequestID uint64
 	Detail    domain.PRPreviewSnapshot
 	FromCache bool
 	Err       error
 }
 
 type DiffLoaded struct {
+	Host      string
 	Repo      string
 	Number    int
 	Diff      model.DiffModel
@@ -78,8 +81,10 @@ type DiffLoaded struct {
 }
 
 type CommitsLoaded struct {
+	Host    string
 	Repo    string
 	Number  int
+	HeadSHA string
 	Commits []domain.Commit
 	Err     error
 }
@@ -182,6 +187,7 @@ type MergePRMsg struct {
 
 // UpdateBranchMsg is emitted when an "Update branch" request completes.
 type UpdateBranchMsg struct {
+	Host   string
 	Repo   string
 	Number int
 	Err    error
@@ -387,12 +393,14 @@ func SubmitReviewWithDraftsCmd(svc PRService, repo domain.Repository, prID, body
 	}
 }
 
-func LoadPRDetailCmd(svc PRService, repo domain.Repository, number int, force bool) tea.Cmd {
+func LoadPRDetailCmd(svc PRService, repo domain.Repository, number int, force bool, requestID uint64) tea.Cmd {
 	return func() tea.Msg {
 		detail, fromCache, err := svc.LoadDetail(context.Background(), repo, number, force)
 		return PRDetailLoaded{
+			Host:      repo.Host,
 			Repo:      repoKey(repo),
 			Number:    number,
+			RequestID: requestID,
 			Detail:    detail,
 			FromCache: fromCache,
 			Err:       err,
@@ -404,6 +412,7 @@ func LoadDiffCmd(svc PRService, repo domain.Repository, number int, headSHA stri
 	return func() tea.Msg {
 		diff, fromCache, err := svc.LoadDiff(context.Background(), repo, number, headSHA, force)
 		return DiffLoaded{
+			Host:      repo.Host,
 			Repo:      repoKey(repo),
 			Number:    number,
 			Diff:      diff,
@@ -413,12 +422,14 @@ func LoadDiffCmd(svc PRService, repo domain.Repository, number int, headSHA stri
 	}
 }
 
-func LoadPRCommitsCmd(svc PRService, repo domain.Repository, number int, force bool) tea.Cmd {
+func LoadPRCommitsCmd(svc PRService, repo domain.Repository, number int, headSHA string, force bool) tea.Cmd {
 	return func() tea.Msg {
 		commits, err := svc.LoadPRCommits(context.Background(), repo, number, force)
 		return CommitsLoaded{
+			Host:    repo.Host,
 			Repo:    repoKey(repo),
 			Number:  number,
+			HeadSHA: headSHA,
 			Commits: commits,
 			Err:     err,
 		}
@@ -462,9 +473,9 @@ func MergePRCmd(svc PRService, repo domain.Repository, number int, prID string, 
 func UpdateBranchCmd(svc PRService, repo domain.Repository, number int, expectedHeadSHA string) tea.Cmd {
 	return func() tea.Msg {
 		if err := svc.UpdateBranch(context.Background(), repo, number, expectedHeadSHA); err != nil {
-			return UpdateBranchMsg{Repo: repoKey(repo), Number: number, Err: err}
+			return UpdateBranchMsg{Host: repo.Host, Repo: repoKey(repo), Number: number, Err: err}
 		}
-		return UpdateBranchMsg{Repo: repoKey(repo), Number: number}
+		return UpdateBranchMsg{Host: repo.Host, Repo: repoKey(repo), Number: number}
 	}
 }
 

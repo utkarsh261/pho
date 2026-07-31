@@ -97,6 +97,24 @@ func TestNormalizePreviewResponse_Fixture(t *testing.T) {
 	}
 }
 
+func TestNormalizePreviewPreservesHeadRefOID(t *testing.T) {
+	t.Parallel()
+	node := model.PullRequestNode{
+		Number:     42,
+		State:      "OPEN",
+		CreatedAt:  "2026-07-30T12:00:00Z",
+		UpdatedAt:  "2026-07-31T12:00:00Z",
+		HeadRefOid: "def456",
+	}
+	snapshot, err := normalizePreviewNode(testRepo(), 42, node)
+	if err != nil {
+		t.Fatalf("normalize preview: %v", err)
+	}
+	if snapshot.HeadRefOID != "def456" {
+		t.Fatalf("HeadRefOID=%q, want def456", snapshot.HeadRefOID)
+	}
+}
+
 func TestPreviewReviewThreads(t *testing.T) {
 	t.Parallel()
 	five := 5

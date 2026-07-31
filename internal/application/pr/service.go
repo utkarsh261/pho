@@ -51,14 +51,24 @@ func NewService(cacheCoordinator *cache.Coordinator, client githubclient.GitHubC
 	}
 }
 
-// restFor returns the REST client configured for the given host, falling back
-// to the default client when no host-specific entry exists. Mirrors the
-// per-host routing the GraphQL client already performs via profileForHost.
-func (s *PRService) restFor(host string) *rest.Client {
-	if c, ok := s.RESTByHost[host]; ok && c != nil {
-		return c
+// restFor returns the REST client configured for the given host. A service
+// constructed with a host map must fail closed: falling back to another host's
+// authenticated client could send a mutation to the wrong GitHub instance.
+// The default-only path remains for tests and legacy embedders that do not
+// configure RESTByHost.
+func (s *PRService) restFor(host string) (*rest.Client, error) {
+	if len(s.RESTByHost) == 0 {
+		if s.REST == nil {
+			return nil, fmt.Errorf("no REST client configured for host %q", host)
+		}
+		return s.REST, nil
 	}
-	return s.REST
+	for configuredHost, client := range s.RESTByHost {
+		if strings.EqualFold(configuredHost, host) && client != nil {
+			return client, nil
+		}
+	}
+	return nil, fmt.Errorf("no REST client configured for host %q", host)
 }
 
 func (s *PRService) LoadDetail(ctx context.Context, repo domain.Repository, number int, force bool) (domain.PRPreviewSnapshot, bool, error) {
@@ -200,7 +210,11 @@ func (s *PRService) MergePR(ctx context.Context, repo domain.Repository, number 
 func (s *PRService) UpdateBranch(ctx context.Context, repo domain.Repository, number int, expectedHeadSHA string) error {
 	defer s.logTimer("pr update branch", pholog.FieldRepo, repo.FullName, pholog.FieldPRNumber, number)()
 	s.logDebug("update branch", "repo", repo.FullName, "number", number)
-	if err := s.restFor(repo.Host).UpdateBranch(ctx, s.ownerName(repo), s.RepoName(repo), number, expectedHeadSHA); err != nil {
+	restClient, err := s.restFor(repo.Host)
+	if err != nil {
+		return err
+	}
+	if err := restClient.UpdateBranch(ctx, s.ownerName(repo), s.RepoName(repo), number, expectedHeadSHA); err != nil {
 		s.logWarn("update branch failed", "repo", repo.FullName, "number", number, "err", err)
 		return err
 	}
@@ -275,7 +289,11 @@ func (s *PRService) UnresolveThread(ctx context.Context, repo domain.Repository,
 func (s *PRService) FetchRepoInfo(ctx context.Context, repo domain.Repository) (domain.RepoInfo, error) {
 	defer s.logTimer("pr fetch repo info", pholog.FieldRepo, repo.FullName)()
 
-	info, err := s.restFor(repo.Host).FetchRepoInfo(ctx, s.ownerName(repo), s.RepoName(repo))
+	restClient, err := s.restFor(repo.Host)
+	if err != nil {
+		return domain.RepoInfo{}, err
+	}
+	info, err := restClient.FetchRepoInfo(ctx, s.ownerName(repo), s.RepoName(repo))
 	if err != nil {
 		s.logWarn("fetch repo info failed", "repo", repo.FullName, "err", err)
 		return domain.RepoInfo{}, err
@@ -300,7 +318,11 @@ func (s *PRService) CreatePR(ctx context.Context, params domain.CreatePRParams) 
 	targetRepo := s.RepoName(params.Repo)
 	repoFull := repoFullName(params.Repo)
 
-	pr, err := s.restFor(params.Repo.Host).CreatePullRequest(ctx, targetOwner, targetRepo, params)
+	restClient, err := s.restFor(params.Repo.Host)
+	if err != nil {
+		return domain.PullRequestSummary{}, err
+	}
+	pr, err := restClient.CreatePullRequest(ctx, targetOwner, targetRepo, params)
 	if err != nil {
 		s.logWarn("create pr failed", "repo", repoFull, "err", err)
 		return domain.PullRequestSummary{}, err
@@ -422,7 +444,15 @@ func (s *PRService) loadDiffInner(ctx context.Context, repo domain.Repository, n
 
 	s.logDebug("fetching raw diff", "key", key, "number", number, "host", repo.Host)
 
-	rawDiff, err := s.restFor(repo.Host).FetchRawDiff(ctx, s.ownerName(repo), s.RepoName(repo), number)
+	restClient, err := s.restFor(repo.Host)
+	if err != nil {
+		if found && headSHA != "" {
+			anchor.Generate(&cached, headSHA)
+			return cached, true, fmt.Errorf("refresh diff %s: %w", repo.FullName, err)
+		}
+		return model.DiffModel{}, false, fmt.Errorf("fetch raw diff: %w", err)
+	}
+	rawDiff, err := restClient.FetchRawDiff(ctx, s.ownerName(repo), s.RepoName(repo), number)
 	if err != nil {
 		if found && headSHA != "" {
 			s.logWarn("diff fetch failed, returning stale", "key", key, "number", number, "err", err)
@@ -527,7 +557,14 @@ func (s *PRService) LoadCommitDiff(ctx context.Context, repo domain.Repository, 
 
 	s.logDebug("commit diff cache miss, fetching", "key", key, "sha", sha)
 
-	rawDiff, err := s.restFor(repo.Host).FetchCommitDiff(ctx, s.ownerName(repo), s.RepoName(repo), sha)
+	restClient, err := s.restFor(repo.Host)
+	if err != nil {
+		if found {
+			return cached, fmt.Errorf("fetch commit diff %s: %w", repo.FullName, err)
+		}
+		return model.DiffModel{}, fmt.Errorf("fetch commit diff: %w", err)
+	}
+	rawDiff, err := restClient.FetchCommitDiff(ctx, s.ownerName(repo), s.RepoName(repo), sha)
 	if err != nil {
 		if found {
 			s.logWarn("commit diff fetch failed, returning stale", "key", key, "sha", sha, "err", err)

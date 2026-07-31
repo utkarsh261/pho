@@ -203,6 +203,33 @@ func TestDraftCreationFromVisualMode(t *testing.T) {
 	}
 }
 
+func TestHeadChangeBlocksInProgressInlineDraft(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.PRService = &prServiceStub{}
+	m.Summary.HeadRefOID = "old-head"
+	m.Diff.HeadSHA = "old-head"
+	m = pressKey(m, " ")
+	m = pressKey(m, "c")
+	m.compose.SetText("work in progress")
+
+	m.Update(cmds.PRDetailLoaded{
+		Host: m.Repo.Host, Repo: m.Repo.FullName, Number: m.Summary.Number,
+		RequestID: m.detailRequestID + 1,
+		Detail: domain.PRPreviewSnapshot{
+			Repo: m.Repo.FullName, Number: m.Summary.Number, HeadRefOID: "new-head",
+		},
+	})
+	if !m.inlineDraftStale || m.visual.Active {
+		t.Fatalf("expected head change to invalidate the old selection, stale=%v visual=%v", m.inlineDraftStale, m.visual.Active)
+	}
+
+	m.Update(submitComposeMsg{body: "work in progress"})
+	if len(m.drafts) != 0 || m.compose.status != composeStatusError || !strings.Contains(m.compose.errMsg, "diff changed") {
+		t.Fatalf("in-progress old-head draft was accepted: drafts=%d status=%d err=%q", len(m.drafts), m.compose.status, m.compose.errMsg)
+	}
+}
+
 func TestDraftSaveAndReplace(t *testing.T) {
 	t.Parallel()
 	m := makeInlineReviewModel(100, 40)
@@ -1363,6 +1390,24 @@ func TestVWithDraftsEmitsBatchSubmit(t *testing.T) {
 	// The actual batch-submit command is inside the tea.Batch returned by Update.
 	// Synchronous model state does not change to posting here; that happens when
 	// the async command completes.
+}
+
+func TestRefreshBlocksDraftingAndDraftSubmissionUntilHeadIsKnown(t *testing.T) {
+	t.Parallel()
+	m := makeInlineReviewModel(100, 40)
+	m.PRService = &prServiceStub{}
+	m.drafts = []domain.DraftInlineComment{{Body: "draft", HeadSHA: "old-head"}}
+	m.DetailLoading = true
+
+	m.enterVisualMode()
+	if m.visual.Active {
+		t.Fatal("expected visual drafting to be disabled while detail refresh is pending")
+	}
+	m.compose.Open(composeModeReviewComment, commentEntry{}, len(m.drafts))
+	m.Update(submitComposeMsg{body: "review"})
+	if m.compose.status != composeStatusError || !strings.Contains(m.compose.errMsg, "refresh") {
+		t.Fatalf("expected pending refresh to block draft submission, status=%d err=%q", m.compose.status, m.compose.errMsg)
+	}
 }
 
 // ── Esc cancel during confirm discard ─────────────────────────────────────────

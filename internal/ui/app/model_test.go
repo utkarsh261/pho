@@ -2007,11 +2007,14 @@ func TestUpdateBranchMsgDeliveredToPRDetailAndInvalidatesDashboard(t *testing.T)
 	before := len(dash.invalidateRepoCalls)
 
 	// Deliver the completion message while the dashboard is the active view.
-	_, _ = m.Update(cmds.UpdateBranchMsg{Repo: repo.FullName, Number: 1})
+	_, refreshCmd := m.Update(cmds.UpdateBranchMsg{Host: repo.Host, Repo: repo.FullName, Number: 1})
 
-	// (1) prDetail state must have been reset — no stuck "Updating branch...".
+	// (1) prDetail must unlock and issue a one-shot detail refresh.
 	if got := m.prDetail.StatusHint(); got == "Updating branch..." {
-		t.Fatalf("UpdateBranchMsg was not delivered to prDetail: StatusHint still shows 'Updating branch...'")
+		t.Fatalf("UpdateBranchMsg was not delivered to prDetail: got status %q", got)
+	}
+	if refreshCmd == nil {
+		t.Fatal("expected one-shot detail refresh after accepted update")
 	}
 	// (2) Dashboard must have been invalidated on success.
 	if got := len(dash.invalidateRepoCalls); got != before+1 {

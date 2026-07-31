@@ -1418,3 +1418,17 @@ func TestUpdateBranchFallsBackToDefaultREST(t *testing.T) {
 		t.Fatalf("expected fallback client hit, got %d", hits)
 	}
 }
+
+func TestRESTForConfiguredHostsFailsClosed(t *testing.T) {
+	t.Parallel()
+	defaultClient := &rest.Client{BaseURL: "https://api.github.com", Token: "primary-token"}
+	svc := &PRService{
+		REST: defaultClient,
+		RESTByHost: map[string]*rest.Client{
+			"github.com": defaultClient,
+		},
+	}
+	if _, err := svc.restFor("github.example.com"); err == nil || !strings.Contains(err.Error(), "github.example.com") {
+		t.Fatalf("expected an unknown configured host to fail closed, got %v", err)
+	}
+}
