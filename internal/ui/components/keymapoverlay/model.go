@@ -39,6 +39,7 @@ type Context struct {
 	Tab        prdetail.ContentTab // only meaningful when View == PRDetail
 	PRState    domain.PRState      // only meaningful when View == PRDetail
 	DraftCount int                 // only meaningful when View == PRDetail
+	Behind     bool                // only meaningful when View == PRDetail
 }
 
 // Model is the keymap overlay state.
@@ -399,6 +400,9 @@ func buildPRDetailBindings(ctx Context) []Group {
 					b = append(b, Binding{Key: "x", Description: "Close"})
 				} else if ctx.PRState == domain.PRStateClosed {
 					b = append(b, Binding{Key: "x", Description: "Reopen"})
+				}
+				if ctx.PRState == domain.PRStateOpen && ctx.Behind {
+					b = append(b, Binding{Key: "U", Description: "Update branch"})
 				}
 				if ctx.DraftCount > 0 {
 					b = append(b, Binding{Key: "D", Description: "Discard all drafts"})

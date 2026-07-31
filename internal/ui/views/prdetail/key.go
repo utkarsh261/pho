@@ -22,6 +22,7 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		case "c":
 			if m.PRService != nil {
 				draft := m.findDraftForSelection()
+				m.inlineDraftStale = false
 				m.compose.Open(composeModeDraftInline, commentEntry{}, len(m.drafts))
 				if draft != nil {
 					m.compose.SetText(draft.Body)
@@ -42,10 +43,18 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 	if m.confirmDiscardAll {
 		switch msg.String() {
 		case "y":
+			wasStale := m.draftsStale
 			m.drafts = nil
 			m.rebuildDraftCovered()
 			m.commentEntriesDirty = true
 			m.persistDrafts()
+			m.draftHeadSHA = ""
+			m.draftsStale = false
+			if wasStale {
+				// A stale set prevented the new head's cache from loading. Once it
+				// is explicitly discarded, load any drafts owned by the new head.
+				m.loadDrafts()
+			}
 			m.confirmDiscardAll = false
 		case "n", "esc":
 			m.confirmDiscardAll = false
@@ -61,6 +70,11 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 
 	// Merge flow state machine.
 	if cmd := m.handleMergeKey(msg); cmd != nil {
+		return m, cmd
+	}
+
+	// Update-branch flow state machine.
+	if cmd := m.handleUpdateKey(msg); cmd != nil {
 		return m, cmd
 	}
 
@@ -167,7 +181,11 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 			if m.commentCursor < len(entries) {
 				entry := entries[m.commentCursor]
 				if entry.isDraft {
+					if m.draftsStale {
+						return m, nil
+					}
 					// Re-open draft inline for editing.
+					m.inlineDraftStale = false
 					m.compose.Open(composeModeDraftInline, commentEntry{}, len(m.drafts))
 					m.compose.SetText(entry.body)
 				} else {
@@ -313,7 +331,7 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 			needLoad := !m.commitsLoaded && !m.commitsLoading && m.PRService != nil
 			m.switchTab(TabCommits)
 			if needLoad {
-				return m, cmds.LoadPRCommitsCmd(m.PRService, m.Repo, m.Summary.Number, false)
+				return m, cmds.LoadPRCommitsCmd(m.PRService, m.Repo, m.Summary.Number, m.Summary.HeadRefOID, false)
 			}
 		}
 	case "g":

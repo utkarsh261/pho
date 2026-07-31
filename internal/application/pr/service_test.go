@@ -2,10 +2,12 @@ package pr
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -1199,5 +1201,234 @@ func TestCreatePRError(t *testing.T) {
 	_, err := svc.CreatePR(context.Background(), params)
 	if err == nil {
 		t.Fatal("expected error for validation failure")
+	}
+}
+
+func TestUpdateBranchInvalidatesPreviewCache(t *testing.T) {
+	t.Parallel()
+
+	repo := testRepo()
+	coord := newTestCoordinator(t)
+
+	// Seed the preview cache so we can confirm it's invalidated.
+	seeded := domain.PRPreviewSnapshot{
+		Repo:   repo.FullName,
+		Number: 42,
+		Title:  "Before update-branch",
+	}
+	key := previewCacheKey(repo.Host, repo.FullName, 42)
+	meta := previewMeta(key, repo, 42, frozenNow)
+	if err := coord.Write(context.Background(), key, seeded, meta); err != nil {
+		t.Fatalf("cache write: %v", err)
+	}
+
+	var cached domain.PRPreviewSnapshot
+	_, found, _ := coord.L2.Get(context.Background(), key, &cached)
+	if !found {
+		t.Fatal("expected preview cache to exist before update-branch")
+	}
+
+	// REST endpoint stub. Records the call and returns 202 Accepted.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			t.Errorf("expected method=PUT, got %s", r.Method)
+		}
+		if r.URL.Path != "/repos/owner/repo/pulls/42/update-branch" {
+			t.Errorf("expected path=/repos/owner/repo/pulls/42/update-branch, got %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer server.Close()
+
+	restClient := &rest.Client{
+		BaseURL: server.URL,
+		Token:   "test-token",
+	}
+	svc := &PRService{
+		Cache: coord,
+		REST:  restClient,
+		Now:   func() time.Time { return frozenNow },
+		Log:   pholog.NewNop(),
+	}
+
+	if err := svc.UpdateBranch(context.Background(), repo, 42, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify cache miss after update-branch.
+	_, found, _ = coord.L2.Get(context.Background(), key, &cached)
+	if found {
+		t.Fatal("expected preview cache to be deleted after update-branch")
+	}
+}
+
+func TestUpdateBranchPropagatesRESTError(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = w.Write([]byte(`{"message":"Validation Failed: branch is not behind base"}`))
+	}))
+	defer server.Close()
+
+	restClient := &rest.Client{
+		BaseURL: server.URL,
+		Token:   "test-token",
+	}
+	svc := &PRService{
+		Cache: newTestCoordinator(t),
+		REST:  restClient,
+		Now:   func() time.Time { return frozenNow },
+		Log:   pholog.NewNop(),
+	}
+
+	err := svc.UpdateBranch(context.Background(), testRepo(), 42, "")
+	if err == nil {
+		t.Fatal("expected error for 422 response")
+	}
+	if !strings.Contains(err.Error(), "422") {
+		t.Errorf("expected error to contain status code 422, got %v", err)
+	}
+}
+
+func TestUpdateBranchCacheDeleteErrorNonfatal(t *testing.T) {
+	t.Parallel()
+	repo := testRepo()
+	coord := newTestCoordinator(t)
+	// Replace L2 with a store that fails Delete: this drives the "log but
+	// don't propagate" branch in UpdateBranch.
+	coord.L2 = failingStore{}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer server.Close()
+
+	restClient := &rest.Client{BaseURL: server.URL, Token: "test-token"}
+	svc := &PRService{
+		Cache: coord,
+		REST:  restClient,
+		Now:   func() time.Time { return frozenNow },
+		Log:   pholog.NewNop(),
+	}
+
+	if err := svc.UpdateBranch(context.Background(), repo, 42, ""); err != nil {
+		t.Fatalf("expected nil return despite cache delete failure, got %v", err)
+	}
+}
+
+// failingStore is a cache.Store whose Delete always fails. Get/Put return
+// "not found"/no-op so the service treats cache as empty but Delete errors.
+type failingStore struct{}
+
+func (failingStore) Get(context.Context, string, any) (domain.CacheMeta, bool, error) {
+	return domain.CacheMeta{}, false, nil
+}
+func (failingStore) Put(context.Context, string, any, domain.CacheMeta) error { return nil }
+func (failingStore) Delete(context.Context, string) error                     { return errors.New("disk full") }
+func (failingStore) DeleteByRepo(context.Context, string, string) error {
+	return errors.New("disk full")
+}
+
+func TestUpdateBranchRoutesToHostSpecificRESTClient(t *testing.T) {
+	t.Parallel()
+
+	// Two fake GitHub hosts with distinct tokens and expect distinct mutation targets.
+	var ghHost, gheHost string
+	var ghHits, gheHits int
+
+	ghSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ghHits++
+		if r.Header.Get("Authorization") != "token gh-token" {
+			t.Errorf("gh host: expected token gh-token, got %q", r.Header.Get("Authorization"))
+		}
+		if r.URL.Path != "/repos/owner/repo/pulls/42/update-branch" {
+			t.Errorf("gh host: unexpected path %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer ghSrv.Close()
+	ghHost = "github.com"
+
+	gheSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gheHits++
+		if r.Header.Get("Authorization") != "token ghe-token" {
+			t.Errorf("ghe host: expected token ghe-token, got %q", r.Header.Get("Authorization"))
+		}
+		if r.URL.Path != "/repos/owner/repo/pulls/42/update-branch" {
+			t.Errorf("ghe host: unexpected path %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer gheSrv.Close()
+	gheHost = "github.example.com"
+
+	ghClient := &rest.Client{BaseURL: ghSrv.URL, Token: "gh-token"}
+	gheClient := &rest.Client{BaseURL: gheSrv.URL, Token: "ghe-token"}
+	restByHost := map[string]*rest.Client{
+		ghHost:  ghClient,
+		gheHost: gheClient,
+	}
+
+	svc := &PRService{
+		Cache:      newTestCoordinator(t),
+		REST:       ghClient, // default fallback
+		RESTByHost: restByHost,
+		Now:        func() time.Time { return frozenNow },
+		Log:        pholog.NewNop(),
+	}
+
+	// Update a PR whose repo.Host is the GHES instance — must hit gheSrv, NOT ghSrv.
+	gheRepo := domain.Repository{
+		Host: gheHost, Owner: "owner", Name: "repo", FullName: "owner/repo",
+	}
+	if err := svc.UpdateBranch(context.Background(), gheRepo, 42, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gheHits != 1 {
+		t.Fatalf("expected exactly 1 hit on ghe host, got %d", gheHits)
+	}
+	if ghHits != 0 {
+		t.Fatalf("expected 0 hits on github.com host for a GHES PR, got %d", ghHits)
+	}
+}
+
+func TestUpdateBranchFallsBackToDefaultREST(t *testing.T) {
+	t.Parallel()
+
+	var hits int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer srv.Close()
+
+	defaultClient := &rest.Client{BaseURL: srv.URL, Token: "default-token"}
+	// RESTByHost is nil → every host falls back to defaultClient.
+	svc := &PRService{
+		Cache: newTestCoordinator(t),
+		REST:  defaultClient,
+		Now:   func() time.Time { return frozenNow },
+		Log:   pholog.NewNop(),
+	}
+	repo := domain.Repository{Host: "some-unknown-host", Owner: "owner", Name: "repo", FullName: "owner/repo"}
+	if err := svc.UpdateBranch(context.Background(), repo, 1, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hits != 1 {
+		t.Fatalf("expected fallback client hit, got %d", hits)
+	}
+}
+
+func TestRESTForConfiguredHostsFailsClosed(t *testing.T) {
+	t.Parallel()
+	defaultClient := &rest.Client{BaseURL: "https://api.github.com", Token: "primary-token"}
+	svc := &PRService{
+		REST: defaultClient,
+		RESTByHost: map[string]*rest.Client{
+			"github.com": defaultClient,
+		},
+	}
+	if _, err := svc.restFor("github.example.com"); err == nil || !strings.Contains(err.Error(), "github.example.com") {
+		t.Fatalf("expected an unknown configured host to fail closed, got %v", err)
 	}
 }

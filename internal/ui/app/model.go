@@ -308,7 +308,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		return m, nil
-	case cmds.MergeableChecked, cmds.MergePRMsg, cmds.PRStateChangedMsg, cmds.PRUpdated:
+	case cmds.MergeableChecked, cmds.MergePRMsg, cmds.PRStateChangedMsg, cmds.PRUpdated, cmds.UpdateBranchMsg:
 		if m.prDetail != nil {
 			next, cmd := m.prDetail.Update(msg)
 			m.prDetail = next
@@ -329,6 +329,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case cmds.PRUpdated:
 				if stateMsg.Err == nil {
 					if repo, ok := m.findRepoByFullName(stateMsg.Repo); ok && m.deps.Dashboard != nil {
+						_ = m.deps.Dashboard.InvalidateRepo(context.Background(), repo)
+					}
+				}
+			case cmds.UpdateBranchMsg:
+				if stateMsg.Err == nil {
+					if repo, ok := m.findRepoByHostAndFullName(stateMsg.Host, stateMsg.Repo); ok && m.deps.Dashboard != nil {
 						_ = m.deps.Dashboard.InvalidateRepo(context.Background(), repo)
 					}
 				}
@@ -592,6 +598,7 @@ func (m *Model) toggleKeymapOverlay() tea.Cmd {
 		ctx.Tab = m.prDetail.ActiveTab()
 		if m.prDetail.Detail != nil {
 			ctx.PRState = m.prDetail.Detail.State
+			ctx.Behind = m.prDetail.Detail.MergeState == "BEHIND"
 		}
 		ctx.DraftCount = m.prDetail.DraftCount()
 	}
@@ -1674,8 +1681,12 @@ func (m *Model) openPRDetailForJump(summary domain.PullRequestSummary) tea.Cmd {
 }
 
 func (m *Model) findRepoByFullName(fullName string) (domain.Repository, bool) {
+	return m.findRepoByHostAndFullName("", fullName)
+}
+
+func (m *Model) findRepoByHostAndFullName(host, fullName string) (domain.Repository, bool) {
 	for _, r := range m.state.Repos.Discovered {
-		if sameRepo(r.FullName, fullName) {
+		if sameRepo(r.FullName, fullName) && (host == "" || strings.EqualFold(r.Host, host)) {
 			return r, true
 		}
 	}

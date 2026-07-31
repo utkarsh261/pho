@@ -502,6 +502,7 @@ type prService struct {
 	postCommentFn      func(ctx context.Context, repo domain.Repository, prID, body string) error
 	postCommentReplyFn func(ctx context.Context, repo domain.Repository, prID, commentID, body string) error
 	postThreadReplyFn  func(ctx context.Context, repo domain.Repository, threadID, body string) error
+	updateBranchFn     func(ctx context.Context, repo domain.Repository, number int, expectedHeadSHA string) error
 }
 
 func (s *prService) LoadDetail(_ context.Context, _ domain.Repository, _ int, _ bool) (domain.PRPreviewSnapshot, bool, error) {
@@ -561,6 +562,12 @@ func (s *prService) ClosePR(_ context.Context, _ domain.Repository, _ int, _ str
 func (s *prService) ReopenPR(_ context.Context, _ domain.Repository, _ int, _ string) error {
 	return nil
 }
+func (s *prService) UpdateBranch(ctx context.Context, repo domain.Repository, number int, expectedHeadSHA string) error {
+	if s.updateBranchFn == nil {
+		panic("prService.UpdateBranch called but updateBranchFn is nil")
+	}
+	return s.updateBranchFn(ctx, repo, number, expectedHeadSHA)
+}
 
 func (s *prService) UpdatePR(_ context.Context, _ domain.Repository, _ int, _ string, _ string, _ string) error {
 	return nil
@@ -591,4 +598,77 @@ func splitRepo(full string) (string, string, bool) {
 		}
 	}
 	return "", full, false
+}
+
+func TestUpdateBranchCmd(t *testing.T) {
+	r := repo("org/a")
+	r.Host = "github.example.com"
+
+	t.Run("success", func(t *testing.T) {
+		var gotRepo domain.Repository
+		var gotNumber int
+		var gotExpected string
+		svc := &prService{updateBranchFn: func(ctx context.Context, repo domain.Repository, number int, expectedHeadSHA string) error {
+			gotRepo = repo
+			gotNumber = number
+			gotExpected = expectedHeadSHA
+			return nil
+		}}
+
+		msg := run(t, cmds.UpdateBranchCmd(svc, r, 42, ""))
+		upd, ok := msg.(cmds.UpdateBranchMsg)
+		if !ok {
+			t.Fatalf("message type = %T, want cmds.UpdateBranchMsg", msg)
+		}
+		if upd.Err != nil {
+			t.Fatalf("expected nil Err on success, got %v", upd.Err)
+		}
+		if upd.Repo != r.FullName {
+			t.Errorf("expected Repo=%q, got %q", r.FullName, upd.Repo)
+		}
+		if upd.Host != r.Host {
+			t.Errorf("expected Host=%q, got %q", r.Host, upd.Host)
+		}
+		if upd.Number != 42 {
+			t.Errorf("expected Number=42, got %d", upd.Number)
+		}
+		if gotRepo.FullName != r.FullName {
+			t.Errorf("service received repo=%q, want %q", gotRepo.FullName, r.FullName)
+		}
+		if gotNumber != 42 {
+			t.Errorf("service received number=%d, want 42", gotNumber)
+		}
+		if gotExpected != "" {
+			t.Errorf("service received expectedHeadSHA=%q, want empty", gotExpected)
+		}
+	})
+
+	t.Run("passes expected head SHA", func(t *testing.T) {
+		var gotExpected string
+		svc := &prService{updateBranchFn: func(_ context.Context, _ domain.Repository, _ int, expectedHeadSHA string) error {
+			gotExpected = expectedHeadSHA
+			return nil
+		}}
+
+		run(t, cmds.UpdateBranchCmd(svc, r, 7, "6dcb09b5b57875f334f61aebed695e2e4193db5e"))
+		if gotExpected != "6dcb09b5b57875f334f61aebed695e2e4193db5e" {
+			t.Fatalf("expected expected_head_sha forwarded unchanged, got %q", gotExpected)
+		}
+	})
+
+	t.Run("failure propagates error and identity", func(t *testing.T) {
+		wantErr := errors.New("rest: unexpected status 422")
+		svc := &prService{updateBranchFn: func(_ context.Context, _ domain.Repository, _ int, _ string) error {
+			return wantErr
+		}}
+
+		msg := run(t, cmds.UpdateBranchCmd(svc, r, 42, ""))
+		upd := msg.(cmds.UpdateBranchMsg)
+		if !errors.Is(upd.Err, wantErr) {
+			t.Fatalf("expected wrapped error, got %#v", upd.Err)
+		}
+		if upd.Host != r.Host || upd.Repo != r.FullName || upd.Number != 42 {
+			t.Fatalf("expected identity fields preserved on error, got %#v", upd)
+		}
+	})
 }

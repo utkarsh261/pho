@@ -209,6 +209,52 @@ func (c *Client) FetchRepoInfo(ctx context.Context, owner, repo string) (RepoInf
 	return info, nil
 }
 
+// UpdateBranch merges the base branch into the PR head branch via GitHub's "Update branch" endpoint.
+func (c *Client) UpdateBranch(ctx context.Context, owner, repo string, number int, expectedHeadSHA string) error {
+	var statusCode int
+	defer c.log.Timer("rest update branch", pholog.FieldHost, c.BaseURL, pholog.FieldStatusCode, statusCode)()
+
+	url := buildUpdateBranchURL(c.BaseURL, owner, repo, number)
+
+	payload := map[string]any{}
+	if expectedHeadSHA != "" {
+		payload["expected_head_sha"] = expectedHeadSHA
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("rest: marshal payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("rest: create request: %w", err)
+	}
+
+	req.Header.Set("Accept", acceptJSONHeader)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", userAgentHeader)
+	req.Header.Set("Authorization", "token "+c.Token)
+
+	client := c.HTTPClient
+	if client == nil {
+		client = http.DefaultClient
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("rest: request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	statusCode = resp.StatusCode
+
+	if resp.StatusCode != http.StatusAccepted {
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		return fmt.Errorf("rest: unexpected status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	return nil
+}
+
 // CreatePullRequest creates a new pull request via the GitHub REST API.
 func (c *Client) CreatePullRequest(ctx context.Context, owner, repo string, params domain.CreatePRParams) (PullRequestResponse, error) {
 	var statusCode int

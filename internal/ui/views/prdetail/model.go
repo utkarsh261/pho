@@ -170,6 +170,9 @@ type PRDetailModel struct {
 	// Inline review drafts
 	visual            visualModeState
 	drafts            []domain.DraftInlineComment
+	draftHeadSHA      string
+	draftsStale       bool
+	inlineDraftStale  bool
 	confirmDiscardAll bool
 	draftCovered      map[hunkLineKey]bool // precomputed for diff rendering
 
@@ -187,6 +190,18 @@ type PRDetailModel struct {
 	mergeErr    string
 	mergeRepo   domain.Repository
 	mergePRID   string
+
+	// Update-branch flow state
+	updateStep updateStep
+	updateErr  string
+	updateRepo domain.Repository
+	// Set after an accepted update-branch mutation. The next successful detail
+	// response uses this to reconcile dependent state on hosts that cannot
+	// provide a head SHA; hosts with a SHA continue to use normal change
+	// detection.
+	reloadDependentsIfHeadUnknown bool
+
+	detailRequestID uint64
 
 	// Close/reopen flow state
 	closeStep   closeStep
@@ -230,6 +245,15 @@ const (
 	mergeStepExecuting
 )
 
+// updateStep tracks the "Update branch" workflow state.
+type updateStep int
+
+const (
+	updateStepNone updateStep = iota
+	updateStepConfirm
+	updateStepExecuting
+)
+
 // closeStep tracks the close/reopen workflow state.
 type closeStep int
 
@@ -244,6 +268,65 @@ type hunkLineKey struct{ fileIdx, hunkIdx, lineIdx int }
 
 func (m *PRDetailModel) isLoading() bool {
 	return m.DetailLoading || m.DiffLoading || m.commitsLoading || m.leftPanel.Loading
+}
+
+func (m *PRDetailModel) matchesPR(host, repo string, number int) bool {
+	if number != 0 && number != m.Summary.Number {
+		return false
+	}
+	if host != "" && m.Repo.Host != "" && !strings.EqualFold(host, m.Repo.Host) {
+		return false
+	}
+	if repo != "" && !strings.EqualFold(repo, m.Repo.FullName) && !strings.EqualFold(repo, m.Summary.Repo) {
+		return false
+	}
+	return true
+}
+
+func (m *PRDetailModel) loadPRDetailCmd(force bool) tea.Cmd {
+	if m.PRService == nil {
+		return nil
+	}
+	m.detailRequestID++
+	return cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, force, m.detailRequestID)
+}
+
+func (m *PRDetailModel) reloadHeadDependentState(headSHA string) tea.Cmd {
+	reloadCommits := m.commitsLoaded || m.commitsLoading || m.activeTab == TabCommits
+	// Every diff-derived structure is tied to the previous head SHA. Drop it
+	// before refetching so stale lines, anchors, and commits cannot be relabeled
+	// as belonging to a newly observed head.
+	m.Diff = nil
+	m.DiffLoading = true
+	m.leftPanel.Files = nil
+	m.leftPanel.Loading = true
+	m.navigableLines = nil
+	m.navigableRows = nil
+	m.navIdxMap = nil
+	m.invalidateDiffCursor()
+	m.visual.Active = false
+	m.diffLineIndex = nil
+	m.diffAnchorIndex = nil
+	m.searchIndex = nil
+	m.refreshSearchMatches()
+	m.commits = nil
+	m.commitsLoaded = false
+	m.commitsLoading = reloadCommits
+
+	if m.PRService == nil {
+		m.DiffLoading = false
+		m.leftPanel.Loading = false
+		m.commitsLoading = false
+		return nil
+	}
+	cmdsOut := []tea.Cmd{
+		cmds.LoadDiffCmd(m.PRService, m.Repo, m.Summary.Number, headSHA, true),
+	}
+	if reloadCommits {
+		cmdsOut = append(cmdsOut,
+			cmds.LoadPRCommitsCmd(m.PRService, m.Repo, m.Summary.Number, headSHA, true))
+	}
+	return tea.Batch(cmdsOut...)
 }
 
 // NewModel creates a new PRDetailModel for the given PR.
@@ -333,7 +416,7 @@ func (m *PRDetailModel) Init() tea.Cmd {
 		} else {
 			headSHA := m.Summary.HeadRefOID
 			cmdsOut = append(cmdsOut,
-				cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, false),
+				m.loadPRDetailCmd(false),
 				cmds.LoadDiffCmd(m.PRService, m.Repo, m.Summary.Number, headSHA, false),
 			)
 		}
@@ -361,6 +444,15 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		return m, tea.Batch(spinCmd, composeCmd)
 
 	case cmds.PRDetailLoaded:
+		if !m.matchesPR(msg.Host, msg.Repo, msg.Number) {
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		if msg.RequestID != 0 && msg.RequestID < m.detailRequestID {
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		if msg.RequestID > m.detailRequestID {
+			m.detailRequestID = msg.RequestID
+		}
 		m.DetailLoading = false
 		if msg.Err != nil {
 			if m.Detail == nil {
@@ -368,8 +460,12 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 			}
 			return m, tea.Batch(spinCmd, composeCmd)
 		}
+		previousHead := m.headSHA()
 		m.Detail = &msg.Detail
 		m.DetailFromCache = msg.FromCache
+		if msg.Detail.HeadRefOID != "" {
+			m.Summary.HeadRefOID = msg.Detail.HeadRefOID
+		}
 		m.commentEntriesDirty = true
 
 		// Replication-lag mitigation: when a toggle is pending, force the
@@ -439,15 +535,36 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 			m.postedCommentTarget = commentEntry{}
 		}
 
+		headChanged := msg.Detail.HeadRefOID != "" && msg.Detail.HeadRefOID != previousHead
+		if headChanged {
+			if m.compose.active && m.compose.mode == composeModeDraftInline {
+				m.inlineDraftStale = true
+			}
+			m.markDraftsStale(previousHead)
+		}
+		reloadUnknownHead := m.reloadDependentsIfHeadUnknown && msg.Detail.HeadRefOID == ""
+		m.reloadDependentsIfHeadUnknown = false
+		if reloadUnknownHead {
+			// Do not label freshly fetched diff/commit data with a pre-update SHA
+			// when the host cannot report the current one.
+			m.Summary.HeadRefOID = ""
+		}
+
 		var out []tea.Cmd
 		out = append(out, spinCmd, composeCmd)
+		if headChanged || reloadUnknownHead {
+			out = append(out, m.reloadHeadDependentState(m.Summary.HeadRefOID))
+		}
 		// Stale cache hit → schedule background revalidation.
 		if msg.FromCache {
-			out = append(out, cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true))
+			out = append(out, m.loadPRDetailCmd(true))
 		}
 		return m, tea.Batch(out...)
 
 	case cmds.DiffLoaded:
+		if !m.matchesPR(msg.Host, msg.Repo, msg.Number) {
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
 		m.DiffLoading = false
 		if msg.Err != nil {
 			if m.Diff == nil {
@@ -477,6 +594,18 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		return m, tea.Batch(spinCmd, composeCmd)
 
 	case cmds.CommitsLoaded:
+		if !m.matchesPR(msg.Host, msg.Repo, msg.Number) {
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		if msg.HeadSHA != "" && m.Summary.HeadRefOID != "" && msg.HeadSHA != m.Summary.HeadRefOID {
+			if m.PRService == nil {
+				m.commitsLoading = false
+				return m, tea.Batch(spinCmd, composeCmd)
+			}
+			m.commitsLoading = true
+			return m, tea.Batch(spinCmd, composeCmd,
+				cmds.LoadPRCommitsCmd(m.PRService, m.Repo, m.Summary.Number, m.Summary.HeadRefOID, true))
+		}
 		m.commitsLoading = false
 		if msg.Err != nil {
 			m.commits = nil
@@ -506,6 +635,11 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 	case submitComposeMsg:
 		body := msg.body
 		if m.compose.mode == composeModeDraftInline {
+			if m.draftsStale || m.inlineDraftStale {
+				m.compose.status = composeStatusError
+				m.compose.errMsg = "The diff changed; reopen the inline draft on the current head"
+				return m, tea.Batch(spinCmd, composeCmd)
+			}
 			if body == "" {
 				return m, tea.Batch(spinCmd, composeCmd)
 			}
@@ -513,6 +647,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 			m.upsertDraft(draft)
 			m.persistDrafts()
 			m.compose.Close()
+			m.inlineDraftStale = false
 			m.exitVisualMode()
 			return m, tea.Batch(spinCmd, composeCmd)
 		}
@@ -531,6 +666,11 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 			return m, tea.Batch(spinCmd, composeCmd, cmds.UpdatePRCmd(m.PRService, m.Repo, m.Summary.Number, m.Summary.ID, m.Summary.Title, msg.body))
 		}
 		if m.PRService == nil {
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		if draftErr := m.draftSubmissionError(); draftErr != "" && len(m.drafts) > 0 && (m.compose.mode == composeModeReviewComment || m.compose.mode == composeModeApprove) {
+			m.compose.status = composeStatusError
+			m.compose.errMsg = draftErr
 			return m, tea.Batch(spinCmd, composeCmd)
 		}
 		// When drafts exist, batch-submit them with the review event.
@@ -569,6 +709,11 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 
 	case submitApproveMsg:
 		if m.PRService == nil {
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		if draftErr := m.draftSubmissionError(); draftErr != "" && len(m.drafts) > 0 {
+			m.compose.status = composeStatusError
+			m.compose.errMsg = draftErr
 			return m, tea.Batch(spinCmd, composeCmd)
 		}
 		// When drafts exist, batch-submit them as an approved review.
@@ -650,12 +795,15 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 
 	case cmds.ReviewPosted:
 		m.compose.status = composeStatusSuccess
+		draftHeadSHA := m.draftCacheHeadSHA()
 		m.drafts = nil
+		m.draftHeadSHA = ""
+		m.draftsStale = false
 		m.rebuildDraftCovered()
 		m.commentEntriesDirty = true
 		if m.PRService != nil {
-			if headSHA := m.headSHA(); headSHA != "" {
-				_ = m.PRService.DeleteDraftComments(context.Background(), m.Repo, m.Summary.Number, headSHA)
+			if draftHeadSHA != "" {
+				_ = m.PRService.DeleteDraftComments(context.Background(), m.Repo, m.Summary.Number, draftHeadSHA)
 			}
 		}
 		return m, tea.Batch(spinCmd, composeCmd, tea.Tick(1500*time.Millisecond, func(time.Time) tea.Msg {
@@ -700,9 +848,29 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		// Refresh detail to show merged state.
 		var refreshCmd tea.Cmd
 		if m.PRService != nil {
-			refreshCmd = cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true)
+			refreshCmd = m.loadPRDetailCmd(true)
 		}
 		return m, tea.Batch(spinCmd, composeCmd, refreshCmd)
+
+	case cmds.UpdateBranchMsg:
+		if !m.matchesPR(msg.Host, msg.Repo, msg.Number) {
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		if m.updateStep != updateStepExecuting {
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		if msg.Err != nil {
+			m.updateStep = updateStepNone
+			m.updateRepo = domain.Repository{}
+			m.reloadDependentsIfHeadUnknown = false
+			m.updateErr = "Update branch failed: " + msg.Err.Error()
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		m.updateErr = ""
+		m.updateStep = updateStepNone
+		m.updateRepo = domain.Repository{}
+		m.reloadDependentsIfHeadUnknown = true
+		return m, tea.Batch(spinCmd, composeCmd, m.loadPRDetailCmd(true))
 
 	case cmds.PRStateChangedMsg:
 		if m.closeStep != closeStepExecuting {
@@ -719,7 +887,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		}
 		var refreshCmd tea.Cmd
 		if m.PRService != nil {
-			refreshCmd = cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true)
+			refreshCmd = m.loadPRDetailCmd(true)
 		}
 		return m, tea.Batch(spinCmd, composeCmd, refreshCmd)
 
@@ -744,7 +912,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		}
 		var refreshCmd tea.Cmd
 		if m.PRService != nil {
-			refreshCmd = cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true)
+			refreshCmd = m.loadPRDetailCmd(true)
 		}
 		return m, tea.Batch(spinCmd, composeCmd, refreshCmd, tea.Tick(1500*time.Millisecond, func(time.Time) tea.Msg {
 			return composeSuccessDismissMsg{}
@@ -758,7 +926,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		// replication-lag mitigation and cursor re-anchor, then clears it.
 		var refreshCmd tea.Cmd
 		if m.PRService != nil {
-			refreshCmd = cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true)
+			refreshCmd = m.loadPRDetailCmd(true)
 		}
 		return m, tea.Batch(spinCmd, composeCmd, refreshCmd)
 
@@ -770,7 +938,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		// replication-lag mitigation and cursor re-anchor, then clears it.
 		var refreshCmd tea.Cmd
 		if m.PRService != nil {
-			refreshCmd = cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true)
+			refreshCmd = m.loadPRDetailCmd(true)
 		}
 		return m, tea.Batch(spinCmd, composeCmd, refreshCmd)
 
@@ -790,7 +958,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		// Reload to reconcile against fresh GitHub state.
 		var refreshCmd tea.Cmd
 		if m.PRService != nil {
-			refreshCmd = cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true)
+			refreshCmd = m.loadPRDetailCmd(true)
 		}
 		return m, tea.Batch(spinCmd, composeCmd, refreshCmd)
 
@@ -804,13 +972,14 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		m.postedComment = true
 		m.postedCommentTarget = target
 		if m.PRService != nil {
-			return m, tea.Batch(spinCmd, composeCmd, cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true))
+			return m, tea.Batch(spinCmd, composeCmd, m.loadPRDetailCmd(true))
 		}
 		return m, tea.Batch(spinCmd, composeCmd)
 
 	case composeClosedMsg:
 		// Compose closed itself (e.g. Esc). No action needed here; the same-cycle
 		// guard in tea.KeyMsg below prevents the consumed key from reaching handleKey.
+		m.inlineDraftStale = false
 		return m, tea.Batch(spinCmd, composeCmd)
 
 	case cmds.CheckoutResult:

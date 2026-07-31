@@ -69,6 +69,9 @@ func (s *editPRService) ClosePR(_ context.Context, _ domain.Repository, _ int, _
 func (s *editPRService) ReopenPR(_ context.Context, _ domain.Repository, _ int, _ string) error {
 	return nil
 }
+func (s *editPRService) UpdateBranch(_ context.Context, _ domain.Repository, _ int, _ string) error {
+	return nil
+}
 func (s *editPRService) UpdatePR(ctx context.Context, repo domain.Repository, number int, prID, title, body string) error {
 	if s.updatePRFn != nil {
 		return s.updatePRFn(ctx, repo, number, prID, title, body)

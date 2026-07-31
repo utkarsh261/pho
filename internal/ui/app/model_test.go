@@ -63,9 +63,10 @@ type stubDashboardService struct {
 	dashboardByRepo map[string]domain.DashboardSnapshot
 	previewByPR     map[string]domain.PRPreviewSnapshot
 
-	loadRepoCalls      []loadRepoCall
-	loadInvolvingCalls []loadInvolvingCall
-	loadPreviewCalls   []loadPreviewCall
+	loadRepoCalls       []loadRepoCall
+	loadInvolvingCalls  []loadInvolvingCall
+	loadPreviewCalls    []loadPreviewCall
+	invalidateRepoCalls []domain.Repository
 }
 
 type stubViewedHistoryStore struct {
@@ -112,7 +113,8 @@ func (s *stubDashboardService) LoadPreview(ctx context.Context, repo string, num
 func (s *stubDashboardService) LoadAllPRsPage(_ context.Context, _ domain.Repository, _ string) ([]domain.PullRequestSummary, bool, string, error) {
 	return nil, false, "", nil
 }
-func (s *stubDashboardService) InvalidateRepo(_ context.Context, _ domain.Repository) error {
+func (s *stubDashboardService) InvalidateRepo(_ context.Context, repo domain.Repository) error {
+	s.invalidateRepoCalls = append(s.invalidateRepoCalls, repo)
 	return nil
 }
 
@@ -204,6 +206,9 @@ func (s *stubPRService) ClosePR(_ context.Context, _ domain.Repository, _ int, _
 	return nil
 }
 func (s *stubPRService) ReopenPR(_ context.Context, _ domain.Repository, _ int, _ string) error {
+	return nil
+}
+func (s *stubPRService) UpdateBranch(_ context.Context, _ domain.Repository, _ int, _ string) error {
 	return nil
 }
 
@@ -1956,4 +1961,98 @@ func createprSubmitMsg() tea.Msg {
 
 func createprCancelMsg() tea.Msg {
 	return createpr.CancelMsg{}
+}
+
+// TestUpdateBranchMsgDeliveredToPRDetailAndInvalidatesDashboard is a regression
+// test for routing: UpdateBranchMsg must reach m.prDetail regardless of which
+// view is active, and a successful update must invalidate the dashboard so the
+// PR list reflects the new head state. Mirrors the MergePRMsg / PRStateChangedMsg
+// routing case in app.Update.
+func TestUpdateBranchMsgDeliveredToPRDetailAndInvalidatesDashboard(t *testing.T) {
+	t.Parallel()
+
+	repo := testutil.Repo("acme/alpha")
+	prs := []domain.PullRequestSummary{pr(repo.FullName, 1, "Behind PR")}
+	m := setupModelWithPRs(t, []domain.Repository{repo}, prs)
+
+	// Open PR detail, arm the update flow (U → y), then return to dashboard
+	// while the REST call is in flight.
+	_, _ = m.Update(dashboard.SelectPRMsg{
+		Tab: domain.TabMyPRs, Index: 0, Repo: repo.FullName, Number: 1, Summary: prs[0],
+	})
+	_ = m.openPRDetail()
+	if m.currentView() != domain.PrimaryViewPRDetail {
+		t.Fatalf("expected PR detail view, got %s", m.currentView())
+	}
+	m.prDetail.Detail = &domain.PRPreviewSnapshot{
+		Repo: repo.FullName, Number: 1, State: domain.PRStateOpen,
+		Mergeable: "MERGEABLE", MergeState: "BEHIND",
+	}
+	_, _ = m.prDetail.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'U'}})
+	if got := m.prDetail.StatusHint(); !strings.Contains(got, "Update branch #1") {
+		t.Fatalf("expected confirm hint after U, got %q", got)
+	}
+	_, _ = m.prDetail.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	if got := m.prDetail.StatusHint(); got != "Updating branch..." {
+		t.Fatalf("expected 'Updating branch...' after y, got %q", got)
+	}
+
+	// Navigate back to dashboard while the update REST call is still pending.
+	_, _ = m.Update(prdetail.BackToDashboard{})
+	if m.currentView() != domain.PrimaryViewDashboard {
+		t.Fatalf("expected dashboard after BackToDashboard, got %s", m.currentView())
+	}
+
+	dash := m.deps.Dashboard.(*stubDashboardService)
+	before := len(dash.invalidateRepoCalls)
+
+	// Deliver the completion message while the dashboard is the active view.
+	_, refreshCmd := m.Update(cmds.UpdateBranchMsg{Host: repo.Host, Repo: repo.FullName, Number: 1})
+
+	// (1) prDetail must unlock and issue a one-shot detail refresh.
+	if got := m.prDetail.StatusHint(); got == "Updating branch..." {
+		t.Fatalf("UpdateBranchMsg was not delivered to prDetail: got status %q", got)
+	}
+	if refreshCmd == nil {
+		t.Fatal("expected one-shot detail refresh after accepted update")
+	}
+	// (2) Dashboard must have been invalidated on success.
+	if got := len(dash.invalidateRepoCalls); got != before+1 {
+		t.Fatalf("expected one InvalidateRepo call on success, got %d (before=%d, after=%d)", got-before, before, got)
+	}
+	if len(dash.invalidateRepoCalls) > 0 && dash.invalidateRepoCalls[len(dash.invalidateRepoCalls)-1].FullName != repo.FullName {
+		t.Errorf("InvalidateRepo called with wrong repo: got %+v", dash.invalidateRepoCalls[len(dash.invalidateRepoCalls)-1])
+	}
+}
+
+// TestUpdateBranchMsgFailureDoesNotInvalidateDashboard pins the symmetric case:
+// an error must NOT clear dashboards (the data didn't change).
+func TestUpdateBranchMsgFailureDoesNotInvalidateDashboard(t *testing.T) {
+	t.Parallel()
+
+	repo := testutil.Repo("acme/beta")
+	prs := []domain.PullRequestSummary{pr(repo.FullName, 2, "Behind PR")}
+	m := setupModelWithPRs(t, []domain.Repository{repo}, prs)
+	_, _ = m.Update(dashboard.SelectPRMsg{
+		Tab: domain.TabMyPRs, Index: 0, Repo: repo.FullName, Number: 2, Summary: prs[0],
+	})
+	_ = m.openPRDetail()
+	m.prDetail.Detail = &domain.PRPreviewSnapshot{
+		Repo: repo.FullName, Number: 2, State: domain.PRStateOpen,
+		Mergeable: "MERGEABLE", MergeState: "BEHIND",
+	}
+	_, _ = m.prDetail.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'U'}})
+	_, _ = m.prDetail.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	_, _ = m.Update(prdetail.BackToDashboard{})
+
+	dash := m.deps.Dashboard.(*stubDashboardService)
+	before := len(dash.invalidateRepoCalls)
+	_, _ = m.Update(cmds.UpdateBranchMsg{Repo: repo.FullName, Number: 2, Err: errors.New("422 validation failed")})
+	if got := len(dash.invalidateRepoCalls); got != before {
+		t.Fatalf("expected no InvalidateRepo on UpdateBranchMsg error, got +%d calls", got-before)
+	}
+	// Error state should be visible on prDetail via StatusHint.
+	if got := m.prDetail.StatusHint(); !strings.Contains(got, "Update branch failed:") {
+		t.Fatalf("expected 'Update branch failed:' in StatusHint after error, got %q", got)
+	}
 }

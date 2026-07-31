@@ -457,6 +457,9 @@ func (m *PRDetailModel) handleRefresh() (*PRDetailModel, tea.Cmd) {
 	if m.PRService == nil {
 		return m, nil
 	}
+	// A full user refresh already reloads detail and all visible dependent
+	// state, so it supersedes the SHA-less post-update fallback.
+	m.reloadDependentsIfHeadUnknown = false
 	m.Detail = nil
 	m.Diff = nil
 	m.DetailLoading = true
@@ -469,12 +472,12 @@ func (m *PRDetailModel) handleRefresh() (*PRDetailModel, tea.Cmd) {
 	m.refreshSearchMatches()
 	headSHA := m.Summary.HeadRefOID
 	cmds_ := []tea.Cmd{
-		cmds.LoadPRDetailCmd(m.PRService, m.Repo, m.Summary.Number, true),
+		m.loadPRDetailCmd(true),
 		cmds.LoadDiffCmd(m.PRService, m.Repo, m.Summary.Number, headSHA, true),
 	}
 	if m.activeTab == TabCommits || m.CommitMode {
 		m.commitsLoading = true
-		cmds_ = append(cmds_, cmds.LoadPRCommitsCmd(m.PRService, m.Repo, m.Summary.Number, true))
+		cmds_ = append(cmds_, cmds.LoadPRCommitsCmd(m.PRService, m.Repo, m.Summary.Number, m.Summary.HeadRefOID, true))
 	}
 	return m, tea.Batch(cmds_...)
 }

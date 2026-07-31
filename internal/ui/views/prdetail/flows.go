@@ -31,6 +31,15 @@ func (m *PRDetailModel) StatusHint() string {
 	if m.mergeErr != "" {
 		return m.mergeErr
 	}
+	switch m.updateStep {
+	case updateStepConfirm:
+		return fmt.Sprintf("Update branch #%d with base? (y/n)", m.Summary.Number)
+	case updateStepExecuting:
+		return "Updating branch..."
+	}
+	if m.updateErr != "" {
+		return m.updateErr
+	}
 	if m.resolveErr != "" {
 		return m.resolveErr
 	}
@@ -67,6 +76,9 @@ func (m *PRDetailModel) StatusHint() string {
 	}
 	if m.editErr != "" {
 		return m.editErr
+	}
+	if m.draftsStale && len(m.drafts) > 0 {
+		return fmt.Sprintf("%d inline drafts belong to the previous head | D: Discard drafts", len(m.drafts))
 	}
 	if m.CommitMode {
 		if m.searchActive {
@@ -158,9 +170,71 @@ func (m *PRDetailModel) resetMergeFlow() {
 	m.mergeErr = ""
 }
 
+// handleUpdateKey routes keys when the "Update branch" flow is active.
+// Returns a non-nil tea.Cmd if an update action was triggered.
+func (m *PRDetailModel) handleUpdateKey(msg tea.KeyMsg) tea.Cmd {
+	switch m.updateStep {
+	case updateStepConfirm:
+		switch msg.String() {
+		case "y":
+			m.updateStep = updateStepExecuting
+			// Pass empty expected_head_sha so the server uses the PR branch's
+			// current HEAD. Optimistic concurrency is not worth the false-422
+			// risk on a TUI with SWR-cached detail.
+			return cmds.UpdateBranchCmd(m.PRService, m.updateRepo, m.Summary.Number, "")
+		case "n", "esc":
+			m.resetUpdateFlow()
+		}
+		return func() tea.Msg { return nil }
+	case updateStepExecuting:
+		// The mutation is in flight and cannot be cancelled.
+		return func() tea.Msg { return nil }
+	case updateStepNone:
+		if msg.String() == "U" {
+			if m.PRService == nil || m.Detail == nil {
+				return func() tea.Msg { return nil }
+			}
+			if m.isAnyActionInProgress() {
+				return func() tea.Msg { return nil }
+			}
+			if m.Detail.State != "OPEN" {
+				m.updateErr = "Cannot update branch: PR is " + strings.ToLower(string(m.Detail.State))
+				return func() tea.Msg { return nil }
+			}
+			if m.Detail.MergeState != "BEHIND" {
+				m.updateErr = "PR is not behind base (" + humanizeMergeState(m.Detail.MergeState) + ")"
+				return func() tea.Msg { return nil }
+			}
+			if len(m.drafts) == 0 {
+				m.loadDrafts()
+			}
+			if len(m.drafts) > 0 {
+				m.updateErr = "Submit or discard inline drafts before updating the branch"
+				return func() tea.Msg { return nil }
+			}
+			m.updateErr = ""
+			m.updateStep = updateStepConfirm
+			m.updateRepo = m.Repo
+			return func() tea.Msg { return nil }
+		}
+		// Any other key while updateErr is showing clears the error.
+		if m.updateErr != "" {
+			m.updateErr = ""
+		}
+	}
+	return nil
+}
+
+func (m *PRDetailModel) resetUpdateFlow() {
+	m.updateStep = updateStepNone
+	m.updateErr = ""
+	m.updateRepo = domain.Repository{}
+}
+
 // isAnyActionInProgress reports whether a transient action is active.
 func (m *PRDetailModel) isAnyActionInProgress() bool {
 	return m.mergeStep != mergeStepNone ||
+		m.updateStep != updateStepNone ||
 		m.closeStep != closeStepNone ||
 		m.checkoutInFlight ||
 		m.editPosting ||
