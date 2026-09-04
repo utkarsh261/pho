@@ -19,6 +19,6 @@ owner/repo  •  feature → main
                                                                               
                                                                               
                                                                               
-                                   Create PR                                 
+ Create PR                                                                   
 
 Tab: Next field   ←/→: Change option   Ctrl+S: Create PR   Esc: Cancel          

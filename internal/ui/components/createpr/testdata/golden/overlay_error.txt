@@ -18,7 +18,7 @@
               │                                                  │              
               │                                                  │              
               │                                                  │              
-              │                                     Create PR    │              
+              │   Create PR                                      │              
               │                                                  │              
               │  ← left • → right • / filter • enter select      │              
               │  ✗ validation failed                             │              
