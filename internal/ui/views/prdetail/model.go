@@ -114,6 +114,11 @@ type PRDetailModel struct {
 	DetailLoading bool
 	DiffLoading   bool
 
+	// LoadErr holds the failure from the initial detail load (e.g. a
+	// deep-linked PR number that doesn't exist). The view shows an error
+	// panel instead of content until it's cleared by a retry or reload.
+	LoadErr error
+
 	DetailFromCache bool
 
 	Width  int
@@ -466,15 +471,27 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		m.DetailLoading = false
 		if msg.Err != nil {
 			if m.Detail == nil {
-				m.DetailLoading = true
+				m.LoadErr = msg.Err
 			}
 			return m, tea.Batch(spinCmd, composeCmd)
 		}
+		m.LoadErr = nil
 		previousHead := m.headSHA()
 		m.Detail = &msg.Detail
 		m.DetailFromCache = msg.FromCache
 		if msg.Detail.HeadRefOID != "" {
 			m.Summary.HeadRefOID = msg.Detail.HeadRefOID
+		}
+		// Deep-linked opens start from a bare {repo, number} summary; fill the
+		// header fields from the loaded snapshot without clobbering real ones.
+		if m.Summary.Title == "" {
+			m.Summary.Title = msg.Detail.Title
+		}
+		if m.Summary.Author == "" {
+			m.Summary.Author = msg.Detail.Author
+		}
+		if m.Summary.State == "" {
+			m.Summary.State = msg.Detail.State
 		}
 		m.commentEntriesDirty = true
 

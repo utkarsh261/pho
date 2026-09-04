@@ -12,6 +12,21 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		return m, nil
 	}
 
+	// Load-error state: `r` retries, esc/q leave. Every other key is inert —
+	// there is no Detail to act on.
+	if m.LoadErr != nil && m.Detail == nil && !m.CommitMode {
+		switch msg.String() {
+		case "r":
+			m.LoadErr = nil
+			m.DetailLoading = true
+			return m, m.loadPRDetailCmd(true)
+		case "esc", "q":
+			return m, m.emitBackToDashboard()
+		}
+		m.LastKey = ""
+		return m, nil
+	}
+
 	// Visual mode consumes only its own keys.
 	if m.visual.Active {
 		switch msg.String() {

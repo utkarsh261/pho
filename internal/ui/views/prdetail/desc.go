@@ -1,13 +1,19 @@
 package prdetail
 
 import (
+	"fmt"
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 // descriptionLines returns the display lines for the Description section.
 // Returns nil (RowCount = 0) when no body is available or body is empty.
 func (m *PRDetailModel) descriptionLines(contentWidth int) []string {
 	if m.Detail == nil {
+		if m.LoadErr != nil {
+			return m.loadErrorLines(contentWidth)
+		}
 		if m.DetailLoading {
 			return []string{"Loading…"}
 		}
@@ -41,6 +47,26 @@ func (m *PRDetailModel) descriptionLines(contentWidth int) []string {
 	} else {
 		lines = append(lines, wrapParagraph(body, cw)...)
 	}
+	return lines
+}
+
+// loadErrorLines renders the panel shown when the initial detail load failed.
+func (m *PRDetailModel) loadErrorLines(contentWidth int) []string {
+	cw := max(contentWidth, 1)
+	title := fmt.Sprintf("⚠ Could not load PR #%d in %s", m.Summary.Number, m.Summary.Repo)
+
+	var lines []string
+	if m.theme != nil {
+		lines = append(lines, lipgloss.NewStyle().Foreground(m.theme.Error).Bold(true).Render(title))
+	} else {
+		lines = append(lines, title)
+	}
+	lines = append(lines, wrapParagraph(m.LoadErr.Error(), cw)...)
+	hint := "r retry · esc back to dashboard"
+	if m.theme != nil {
+		hint = m.theme.MutedTxt.Render(hint)
+	}
+	lines = append(lines, "", hint)
 	return lines
 }
 
