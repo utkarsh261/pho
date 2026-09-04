@@ -134,6 +134,10 @@ func (m *PRDetailModel) renderHeader() string {
 		finalHeader = leftPart + strings.Repeat(" ", max(0, innerW-lipgloss.Width(leftPart)))
 	}
 
+	if strip := m.renderReviewerStrip(innerW); strip != "" {
+		finalHeader = lipgloss.JoinVertical(lipgloss.Left, finalHeader, strip)
+	}
+
 	var content string
 	var borderColor lipgloss.Color
 	if m.theme != nil {
