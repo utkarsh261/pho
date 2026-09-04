@@ -19,7 +19,10 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		case "r":
 			m.LoadErr = nil
 			m.DetailLoading = true
-			return m, m.loadPRDetailCmd(true)
+			m.DiffLoading = true
+			m.leftPanel.Loading = true
+			return m, tea.Batch(m.loadPRDetailCmd(true),
+				cmds.LoadDiffCmd(m.PRService, m.Repo, m.Summary.Number, m.Summary.HeadRefOID, true))
 		case "esc", "q":
 			return m, m.emitBackToDashboard()
 		}

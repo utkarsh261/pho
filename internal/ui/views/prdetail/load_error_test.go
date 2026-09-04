@@ -57,9 +57,8 @@ func TestLoadErrorPanelRenders(t *testing.T) {
 	}
 }
 
-// TestLoadErrorRetryRefiresLoad verifies `r` clears the error and re-issues
-// the detail load, and esc leaves for the dashboard straight from the error
-// state.
+// TestLoadErrorRetryRefiresLoad verifies `r` clears the error, re-issues the
+// detail load, and esc leaves for the dashboard straight from the error state.
 func TestLoadErrorRetryRefiresLoad(t *testing.T) {
 	t.Parallel()
 
@@ -72,11 +71,13 @@ func TestLoadErrorRetryRefiresLoad(t *testing.T) {
 		t.Fatal("expected back-to-dashboard command on esc in error state")
 	}
 
-	retry := makePRDetail(100, 30, nil, nil)
-	retry.Summary.Number = 999
+	retry := NewModel(domain.PullRequestSummary{Repo: "owner/repo", Number: 999}, domain.Repository{FullName: "owner/repo"}, &fakePRService{})
 	retry.LoadErr = errors.New("boom")
 
-	updated, _ := retry.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	updated, cmd := retry.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	if cmd == nil {
+		t.Fatal("expected a reload command after retry")
+	}
 	if updated.LoadErr != nil {
 		t.Fatalf("expected LoadErr cleared after retry, got %v", updated.LoadErr)
 	}
@@ -92,13 +93,18 @@ func TestPRDetailLoadedBackfillsEmptySummary(t *testing.T) {
 	t.Parallel()
 
 	detail := domain.PRPreviewSnapshot{
-		Title:  "Fix login",
-		Author: "octocat",
-		State:  domain.PRStateOpen,
+		ID:          "PRR_node_id",
+		Title:       "Fix login",
+		Author:      "octocat",
+		State:       domain.PRStateOpen,
+		HeadRefName: "fix/login",
 	}
 
 	m := NewModel(domain.PullRequestSummary{Repo: "owner/repo", Number: 7}, domain.Repository{FullName: "owner/repo"}, nil)
 	m, _ = m.Update(cmds.PRDetailLoaded{Repo: "owner/repo", Number: 7, Detail: detail})
+	if m.Summary.ID != "PRR_node_id" {
+		t.Errorf("expected empty summary ID backfilled, got %q", m.Summary.ID)
+	}
 	if m.Summary.Title != "Fix login" {
 		t.Errorf("expected empty summary title backfilled, got %q", m.Summary.Title)
 	}
@@ -107,6 +113,9 @@ func TestPRDetailLoadedBackfillsEmptySummary(t *testing.T) {
 	}
 	if m.Summary.State != domain.PRStateOpen {
 		t.Errorf("expected empty summary state backfilled, got %q", m.Summary.State)
+	}
+	if m.Summary.HeadRefName != "fix/login" {
+		t.Errorf("expected empty summary head ref backfilled, got %q", m.Summary.HeadRefName)
 	}
 
 	m = NewModel(domain.PullRequestSummary{Repo: "owner/repo", Number: 7, Title: "Local title", Author: "me", State: domain.PRStateClosed}, domain.Repository{FullName: "owner/repo"}, nil)

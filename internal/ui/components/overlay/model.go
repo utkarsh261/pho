@@ -107,9 +107,8 @@ func (m *Model) SetResults(results []domain.SearchResult) {
 	m.ensureSelectionVisible()
 }
 
-// OpenRepoPick switches the palette into repo-pick mode: the given repos are
-// the result list (filtered in-memory as the user types), and hint is shown
-// as the box title.
+// OpenRepoPick switches the palette into repo-pick mode listing the given
+// repos, with hint as the box title.
 func (m *Model) OpenRepoPick(repos []domain.Repository, hint string) {
 	m.pickMode = true
 	m.pickHint = hint
@@ -259,7 +258,6 @@ func (m *Model) refreshResults() {
 	m.ensureSelectionVisible()
 }
 
-// filterRepoPool case-insensitively matches the pick pool against the query.
 func filterRepoPool(pool []domain.SearchResult, query string) []domain.SearchResult {
 	q := strings.ToLower(strings.TrimSpace(query))
 	if q == "" {
@@ -529,7 +527,6 @@ func (m Model) queryLine(innerW int) string {
 	return truncate(line, innerW)
 }
 
-// boxTitle is the heading shown at the top of the palette box.
 func (m Model) boxTitle() string {
 	if m.pickMode {
 		return m.pickHint

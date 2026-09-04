@@ -87,7 +87,6 @@ func xdgDir(env, fallback string) string {
 	return filepath.Join(home, fallback)
 }
 
-// invocation holds everything parseInvocation can extract from the command line.
 type invocation struct {
 	Version    bool
 	Debug      bool

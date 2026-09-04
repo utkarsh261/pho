@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"flag"
+	"strings"
 	"testing"
 )
 
@@ -102,7 +103,7 @@ func TestParseInvocation(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected error containing %q, got invocation %+v", tt.wantErr, got)
 				}
-				if !contains(err.Error(), tt.wantErr) {
+				if !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("expected error containing %q, got %q", tt.wantErr, err.Error())
 				}
 				return
@@ -124,13 +125,4 @@ func TestParseInvocationHelpReturnsErrHelp(t *testing.T) {
 	if !errors.Is(err, flag.ErrHelp) {
 		t.Fatalf("expected flag.ErrHelp for -h, got %v", err)
 	}
-}
-
-func contains(haystack, needle string) bool {
-	for i := 0; i+len(needle) <= len(haystack); i++ {
-		if haystack[i:i+len(needle)] == needle {
-			return true
-		}
-	}
-	return false
 }

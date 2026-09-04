@@ -19,10 +19,10 @@ import (
 	"github.com/utkarsh261/pho/internal/ui/components/overlay"
 )
 
-// Run with -update-deeplink to regenerate golden files:
+// Run with -update to regenerate golden files:
 //
-//	go test ./internal/ui/app/... -update-deeplink
-var updateDeeplink = flag.Bool("update-deeplink", false, "overwrite deeplink e2e golden files")
+//	go test ./internal/ui/app/... -update
+var updateGolden = flag.Bool("update", false, "overwrite deeplink e2e golden files")
 
 var deeplinkAnsiRe = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
@@ -173,7 +173,7 @@ func TestEndToEndDeepLinkPRDetail(t *testing.T) {
 
 	got := stripANSI(m.View())
 	goldenPath := filepath.Join("testdata", "golden", "deeplink_pr_detail.txt")
-	if *updateDeeplink {
+	if *updateGolden {
 		if err := os.MkdirAll(filepath.Dir(goldenPath), 0o755); err != nil {
 			t.Fatalf("mkdir testdata: %v", err)
 		}
@@ -184,7 +184,7 @@ func TestEndToEndDeepLinkPRDetail(t *testing.T) {
 	}
 	want, err := os.ReadFile(goldenPath)
 	if err != nil {
-		t.Fatalf("read golden %s (run with -update-deeplink to generate): %v", goldenPath, err)
+		t.Fatalf("read golden %s (run with -update to generate): %v", goldenPath, err)
 	}
 	if got != string(want) {
 		t.Errorf("golden mismatch for deeplink PR detail\ngot:\n%s\nwant:\n%s", got, string(want))
@@ -207,8 +207,8 @@ func TestDeepLinkAmbiguousOpensRepoPicker(t *testing.T) {
 	drainCmds(m, m.Init())
 
 	if m.pendingPRNumber != 123 {
-		t.Fatalf("expected pending deep link retained for picker, got %d (overlayOpen=%v, focus=%s, discovered=%d, errors=%+v, view:\n%s)",
-			m.pendingPRNumber, m.state.Search.OverlayOpen, m.focus, len(m.state.Repos.Discovered), m.state.Errors.Errors, m.View())
+		t.Fatalf("expected pending deep link retained for picker, got %d (overlayOpen=%v, focus=%s)",
+			m.pendingPRNumber, m.state.Search.OverlayOpen, m.focus)
 	}
 	if !m.state.Search.OverlayOpen {
 		t.Fatalf("expected repo picker overlay open, view:\n%s", m.View())
@@ -353,6 +353,9 @@ func TestDeepLinkPRNotFoundShowsError(t *testing.T) {
 	}
 	if m.prDetail == nil || m.prDetail.LoadErr == nil {
 		t.Fatalf("expected LoadErr set on prDetail, got %+v", m.prDetail)
+	}
+	if m.prDetail.DiffLoading {
+		t.Fatal("expected spinners stopped after the failed load")
 	}
 	if !strings.Contains(m.View(), "Could not load PR #123") {
 		t.Fatalf("expected load-error panel in view, got:\n%s", m.View())

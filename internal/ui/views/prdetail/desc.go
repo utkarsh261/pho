@@ -7,8 +7,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// descriptionLines returns the display lines for the Description section.
-// Returns nil (RowCount = 0) when no body is available or body is empty.
+// descriptionLines returns the display lines for the Description section: the
+// load-error panel, a loading placeholder, or the rendered body (nil when the
+// body is empty).
 func (m *PRDetailModel) descriptionLines(contentWidth int) []string {
 	if m.Detail == nil {
 		if m.LoadErr != nil {
@@ -50,7 +51,6 @@ func (m *PRDetailModel) descriptionLines(contentWidth int) []string {
 	return lines
 }
 
-// loadErrorLines renders the panel shown when the initial detail load failed.
 func (m *PRDetailModel) loadErrorLines(contentWidth int) []string {
 	cw := max(contentWidth, 1)
 	title := fmt.Sprintf("⚠ Could not load PR #%d in %s", m.Summary.Number, m.Summary.Repo)

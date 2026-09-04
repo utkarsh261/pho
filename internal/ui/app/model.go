@@ -53,7 +53,7 @@ type Dependencies struct {
 	// app opens this PR's detail view directly (`pho pr <number>`).
 	InitialPRNumber int
 	// CWD overrides the working directory used to resolve the deep-link repo;
-	// empty means os.Getwd(). Injectable for tests.
+	// empty means os.Getwd().
 	CWD string
 
 	Classifier achdashboard.SummaryTabClassifier
@@ -284,6 +284,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.prDetail != nil {
 			next, cmd := m.prDetail.Update(msg)
 			m.prDetail = next
+			if msg.Err == nil {
+				m.refreshBareViewedSummary(msg.Repo, msg.Number)
+			}
 			m.syncStatus()
 			return m, cmd
 		}
@@ -1563,6 +1566,21 @@ func (m *Model) recordError(kind domain.ErrorKind, err error, repo string) {
 	m.syncStatus()
 }
 
+// refreshBareViewedSummary re-records a viewed-history entry that was saved
+// before its summary was known — deep links record a bare {repo, number} at
+// open time and only learn the title/author once the PR loads.
+func (m *Model) refreshBareViewedSummary(repo string, number int) {
+	if m.prDetail == nil {
+		return
+	}
+	for _, rec := range m.state.Dashboard.RecentlyViewed {
+		if sameRepo(rec.Repo, repo) && rec.Number == number && rec.Summary.Title == "" {
+			m.recordPRViewed(m.prDetail.Summary, m.prDetail.Repo, m.now())
+			return
+		}
+	}
+}
+
 func (m *Model) clearErrors() {
 	m.state.Errors.Errors = nil
 	m.state.Errors.RateLimitReset = nil
@@ -1716,15 +1734,22 @@ func (m *Model) cwd() string {
 	return ""
 }
 
-// consumeInitialPR resolves the pending `pho pr <n>` deep link once repo
-// discovery finished. The PR opens unambiguously when exactly one repo was
-// discovered or the CWD repo is among them; with multiple unrelated repos a
-// repo picker asks the user (pending stays set until they pick or cancel),
-// and with no repos the dashboard stays up with a recorded error.
+// consumeInitialPR resolves the pending `pho pr <n>` deep link after repo
+// discovery. The CWD repo or a sole discovered repo opens straight away;
+// multiple unrelated repos raise the picker (pending stays set until the user
+// picks or cancels); no repos records an error and stays on the dashboard.
 func (m *Model) consumeInitialPR(repos []domain.Repository) tea.Cmd {
 	number := m.pendingPRNumber
 	if number == 0 {
 		return nil
+	}
+
+	// A palette opened before discovery finished would either float over the
+	// pushed detail or be replaced mid-query by the picker; close it first.
+	if m.state.Search.OverlayOpen {
+		m.pendingPRNumber = 0
+		m.closePalette()
+		m.pendingPRNumber = number
 	}
 
 	repo, ok := resolveDeepLinkRepo(repos, m.cwd())
@@ -1760,15 +1785,28 @@ func resolveDeepLinkRepo(repos []domain.Repository, cwd string) (domain.Reposito
 	}
 	for _, r := range repos {
 		lp, err := filepath.Abs(r.LocalPath)
-		if err == nil && filepath.Clean(lp) == filepath.Clean(cwdAbs) {
+		if err == nil && sameDir(lp, cwdAbs) {
 			return r, true
 		}
 	}
 	return domain.Repository{}, false
 }
 
-// openRepoPickOverlay opens the command palette in repo-pick mode so the user
-// can choose which repo a deep-linked PR number belongs to.
+// sameDir compares absolute paths, resolving symlinks best-effort — on macOS,
+// for instance, /tmp is a symlink to /private/tmp, so textual equality
+// misses real matches.
+func sameDir(a, b string) bool {
+	if ra, err := filepath.EvalSymlinks(a); err == nil {
+		a = ra
+	}
+	if rb, err := filepath.EvalSymlinks(b); err == nil {
+		b = rb
+	}
+	return a == b
+}
+
+// openRepoPickOverlay asks the user which repo a deep-linked PR number
+// belongs to.
 func (m *Model) openRepoPickOverlay(number int, repos []domain.Repository) tea.Cmd {
 	m.previousFocus = m.focus
 	m.state.Search.OverlayOpen = true
@@ -1784,8 +1822,6 @@ func (m *Model) openRepoPickOverlay(number int, repos []domain.Repository) tea.C
 	return nil
 }
 
-// handleDeepLinkRepoPicked opens the pending deep-linked PR in the repo the
-// user picked from the repo-picker overlay.
 func (m *Model) handleDeepLinkRepoPicked(fullName string) tea.Cmd {
 	number := m.pendingPRNumber
 	m.pendingPRNumber = 0
