@@ -45,13 +45,30 @@ echo 'export PATH="$(go env GOPATH)/bin:$PATH"' >> ~/.zshrc
 Right now, pho looks at only the `cwd` and its direct children directories (if they are actually git repos). So if you have some repositories cloned in a directory, you can either open pho in that directory or: 
 
 ```
-$(go env GOPATH)/bin/pho ~/path/to/dir/containing/all/cloned/repositories
+$(go env GOPATH)/bin/pho -root ~/path/to/dir/containing/all/cloned/repositories
 ```
 or simply start it in the current directory
 
 ```
 pho
 ```
+
+### Open a PR directly
+
+Jump straight into a PR's detail view, skipping the dashboard:
+
+```
+pho pr 123
+```
+
+The PR number resolves against the repos pho discovers at startup (the working directory and its direct children):
+
+- run from a repo's root → that repo is used;
+- a directory containing exactly one repo → that repo is used;
+- several repos → a picker lists them; pick one and the PR opens in it (esc cancels);
+- no repos → pho starts on the dashboard and shows an error.
+
+If the PR doesn't exist (or fails to load), the detail view shows an error panel — `r` retries, `esc` goes back to the dashboard.
 
 ## Requirements
 

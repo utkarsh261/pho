@@ -239,6 +239,7 @@ type PRPreviewSnapshot struct {
 	Assignees      []string
 	Mergeable      string
 	MergeState     string
+	HeadRefName    string
 	HeadRefOID     string
 	Comments       []PreviewComment
 }
