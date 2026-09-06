@@ -45,10 +45,20 @@ func (m *PRDetailModel) rightPanelWidth() int {
 	return m.Width
 }
 
+// headerContentRows returns the number of text rows inside the header box
+// (excluding borders): one, plus a second when the reviewer strip renders.
+func (m *PRDetailModel) headerContentRows() int {
+	if !m.CommitMode && m.renderReviewerStrip(max(m.Width-2, 1)) != "" {
+		return 2
+	}
+	return 1
+}
+
 // effectiveBodyH returns the body height available for the left/right panels,
-// accounting for the compose pane when it is open (3 rows: top border + 2 content rows).
+// accounting for the actual header height and the compose pane when it is
+// open (3 rows: top border + 2 content rows).
 func (m *PRDetailModel) effectiveBodyH() int {
-	bodyH := max(m.Height-3, 1)
+	bodyH := max(m.Height-m.headerContentRows()-2, 1)
 	if m.compose.active {
 		return max(bodyH-3, 1)
 	}
