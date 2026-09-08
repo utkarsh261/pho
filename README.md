@@ -13,6 +13,7 @@
 
 - **Dashboard** - Auto-discovers repos, lists PRs across *My PRs*, *Needs Review*, *Involving*, and *Recent* tabs with a live preview pane.
 - **Jump to repo/PR** - `Ctrl+P` to fuzzy-find and jump to any PR.
+- **Open a PR directly** - `pho pr 123` to launch straight into a PR's detail view.
 - **PR detail** - Browse description, diff, comments, and commits. Sidebar for files and CI checks.
 - **Diff navigation** - Line-by-line cursor, `gg`/`G`, `Ctrl+d`/`Ctrl+u`, visual mode for selecting ranges.
 - **Inline reviews** - Draft inline comments on diff lines, edit, discard, and batch-submit with a review event. Just like Github web UI.
@@ -52,23 +53,6 @@ or simply start it in the current directory
 ```
 pho
 ```
-
-### Open a PR directly
-
-Jump straight into a PR's detail view, skipping the dashboard:
-
-```
-pho pr 123
-```
-
-The PR number resolves against the repos pho discovers at startup (the working directory and its direct children):
-
-- run from a repo's root → that repo is used;
-- a directory containing exactly one repo → that repo is used;
-- several repos → a picker lists them; pick one and the PR opens in it (esc cancels);
-- no repos → pho starts on the dashboard and shows an error.
-
-If the PR doesn't exist (or fails to load), the detail view shows an error panel — `r` retries, `esc` goes back to the dashboard.
 
 ## Requirements
 
