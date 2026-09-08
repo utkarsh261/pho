@@ -18,12 +18,16 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"strconv"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -83,43 +87,127 @@ func xdgDir(env, fallback string) string {
 	return filepath.Join(home, fallback)
 }
 
+type invocation struct {
+	Version    bool
+	Debug      bool
+	Reset      bool
+	ConfigPath string
+	RootDir    string
+	PRNumber   int
+}
+
+func registerFlags(fs *flag.FlagSet, inv *invocation, hidden map[string]bool) {
+	fs.BoolVar(&inv.Version, "version", false, "print version and exit")
+	fs.BoolVar(&inv.Debug, "debug", false, "enable debug logging (also set by PHO_DEBUG=1)")
+	fs.BoolVar(&inv.Reset, "reset", false, "clear all caches (SQLite + discovery) and exit")
+	fs.StringVar(&inv.RootDir, "root", ".", "root directory to scan for git repos")
+	fs.StringVar(&inv.ConfigPath, "config", "", "path to config file (default: XDG config dir)")
+	hidden["config"] = true
+}
+
+// newFlagSet builds a quiet FlagSet: flag's own error/usage output is
+// suppressed so main is the single place that prints errors and usage.
+func newFlagSet(name string, inv *invocation, hidden map[string]bool) *flag.FlagSet {
+	fs := flag.NewFlagSet(name, flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.Usage = func() {}
+	registerFlags(fs, inv, hidden)
+	return fs
+}
+
+// parseInvocation parses pho's CLI: optional global flags, an optional
+// `pr <number>` subcommand, and flags again after the subcommand — both
+// `pho -debug pr 12` and `pho pr 12 -debug` work.
+func parseInvocation(args []string) (invocation, error) {
+	var inv invocation
+	hidden := map[string]bool{}
+
+	fs := newFlagSet("pho", &inv, hidden)
+	if err := fs.Parse(args); err != nil {
+		return inv, err
+	}
+	rest := fs.Args()
+	if len(rest) == 0 {
+		return inv, nil
+	}
+	if rest[0] != "pr" {
+		return inv, fmt.Errorf("unknown command %q (expected `pho pr <number>`)", rest[0])
+	}
+	rest = rest[1:]
+	if len(rest) == 0 {
+		return inv, fmt.Errorf("`pho pr` requires a pull request number, e.g. `pho pr 123`")
+	}
+	numberStr := strings.TrimPrefix(rest[0], "#")
+	number, err := strconv.Atoi(numberStr)
+	if err != nil || number <= 0 {
+		return inv, fmt.Errorf("invalid pull request number %q", rest[0])
+	}
+	inv.PRNumber = number
+	rest = rest[1:]
+
+	// Flags after the subcommand are parsed into a scratch invocation and
+	// merged only if the user actually set them, so defaults don't clobber
+	// values parsed before the subcommand.
+	var tail invocation
+	tailFS := newFlagSet("pho pr", &tail, hidden)
+	if err := tailFS.Parse(rest); err != nil {
+		return inv, err
+	}
+	if extra := tailFS.Args(); len(extra) > 0 {
+		return inv, fmt.Errorf("unexpected argument %q after `pho pr <number>`", extra[0])
+	}
+	tailFS.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "version":
+			inv.Version = tail.Version
+		case "debug":
+			inv.Debug = tail.Debug
+		case "reset":
+			inv.Reset = tail.Reset
+		case "root":
+			inv.RootDir = tail.RootDir
+		case "config":
+			inv.ConfigPath = tail.ConfigPath
+		}
+	})
+	return inv, nil
+}
+
+func printUsage(w io.Writer) {
+	fmt.Fprintf(w, "pho — terminal UI for GitHub pull requests\n\nUsage:\n  pho [flags]\n  pho pr <number> [flags]\n      open a pull request by number, straight to its detail view\n\nFlags:\n")
+	hidden := map[string]bool{}
+	fs := newFlagSet("pho", &invocation{}, hidden)
+	fs.VisitAll(func(f *flag.Flag) {
+		if hidden[f.Name] {
+			return
+		}
+		if f.DefValue == "" || f.DefValue == "false" || f.DefValue == "0" {
+			fmt.Fprintf(w, "  -%s\n\t%s\n", f.Name, f.Usage)
+		} else {
+			fmt.Fprintf(w, "  -%s\n\t%s (default %s)\n", f.Name, f.Usage, f.DefValue)
+		}
+	})
+}
+
 func main() {
+	inv, err := parseInvocation(os.Args[1:])
+	if err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			printUsage(os.Stderr)
+			return
+		}
+		fmt.Fprintf(os.Stderr, "pho: %v\n\n", err)
+		printUsage(os.Stderr)
+		os.Exit(1)
+	}
+
 	var (
-		showVersion bool
-		debug       bool
-		reset       bool
-		configPath  string
-		rootDir     string
+		showVersion = inv.Version
+		debug       = inv.Debug
+		reset       = inv.Reset
+		configPath  = inv.ConfigPath
+		rootDir     = inv.RootDir
 	)
-
-	flag.BoolVar(&showVersion, "version", false, "print version and exit")
-	flag.BoolVar(&debug, "debug", false, "enable debug logging (also set by PHO_DEBUG=1)")
-	flag.BoolVar(&reset, "reset", false, "clear all caches (SQLite + discovery) and exit")
-	flag.StringVar(&rootDir, "root", ".", "root directory to scan for git repos")
-
-	hiddenFlags := map[string]bool{}
-	hideVar := func(name, value, usage string) *string {
-		hiddenFlags[name] = true
-		return flag.String(name, value, usage)
-	}
-	pconfig := hideVar("config", "", "path to config file (default: XDG config dir)")
-
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "pho — terminal UI for GitHub pull requests\n\nUsage:\n  pho [flags]\n\nFlags:\n")
-		flag.VisitAll(func(f *flag.Flag) {
-			if hiddenFlags[f.Name] {
-				return
-			}
-			if f.DefValue == "" || f.DefValue == "false" || f.DefValue == "0" {
-				fmt.Fprintf(os.Stderr, "  -%s\n\t%s\n", f.Name, f.Usage)
-			} else {
-				fmt.Fprintf(os.Stderr, "  -%s\n\t%s (default %s)\n", f.Name, f.Usage, f.DefValue)
-			}
-		})
-	}
-
-	flag.Parse()
-	configPath = *pconfig
 
 	if showVersion {
 		fmt.Println("pho", version)
@@ -225,16 +313,17 @@ func main() {
 	prSvc.Log = logger
 
 	deps := app.Dependencies{
-		Viewer:        ghClient,
-		Discovery:     discoverySvc,
-		Dashboard:     dashboardSvc,
-		Search:        searchSvc,
-		PR:            prSvc,
-		ViewedHistory: viewedHistoryStore,
-		Root:          rootDir,
-		Host:          profiles[0].Host,
-		MaxJumpPRs:    cfg.Palette.MaxPRs,
-		Logger:        logger,
+		Viewer:          ghClient,
+		Discovery:       discoverySvc,
+		Dashboard:       dashboardSvc,
+		Search:          searchSvc,
+		PR:              prSvc,
+		ViewedHistory:   viewedHistoryStore,
+		Root:            rootDir,
+		Host:            profiles[0].Host,
+		MaxJumpPRs:      cfg.Palette.MaxPRs,
+		InitialPRNumber: inv.PRNumber,
+		Logger:          logger,
 	}
 	model := app.NewModel(deps)
 

@@ -147,6 +147,7 @@ func normalizePreviewNode(repo domain.Repository, number int, node model.PullReq
 		Assignees:      assigneeLogins(node.Assignees),
 		Mergeable:      node.Mergeable,
 		MergeState:     node.MergeState,
+		HeadRefName:    node.HeadRefName,
 		HeadRefOID:     node.HeadRefOid,
 		LatestActivity: previewLatestActivity(repo, node.Number, node.TimelineItems.Nodes),
 	}

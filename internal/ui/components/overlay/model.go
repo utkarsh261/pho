@@ -65,6 +65,13 @@ type Model struct {
 	hydrating bool
 
 	limit int
+
+	// pickMode turns the palette into a plain repo chooser (used by the
+	// `pho pr <n>` deep link): results are pickPool filtered in-memory,
+	// independent of the search index.
+	pickMode bool
+	pickPool []domain.SearchResult
+	pickHint string
 }
 
 // NewModel constructs a command palette overlay model.
@@ -98,6 +105,22 @@ func (m *Model) SetResults(results []domain.SearchResult) {
 	m.results = append([]domain.SearchResult(nil), results...)
 	m.selectedIndex = clampIndex(m.selectedIndex, len(m.results))
 	m.ensureSelectionVisible()
+}
+
+// OpenRepoPick switches the palette into repo-pick mode listing the given
+// repos, with hint as the box title.
+func (m *Model) OpenRepoPick(repos []domain.Repository, hint string) {
+	m.pickMode = true
+	m.pickHint = hint
+	m.pickPool = make([]domain.SearchResult, 0, len(repos))
+	for _, r := range repos {
+		m.pickPool = append(m.pickPool, domain.SearchResult{
+			Kind:  domain.SearchResultRepo,
+			Repo:  r.FullName,
+			Title: r.FullName,
+		})
+	}
+	m.refreshResults()
 }
 
 // Update handles Bubble Tea messages.
@@ -190,6 +213,14 @@ func (m *Model) deleteBeforeCursor() bool {
 }
 
 func (m *Model) refreshResults() {
+	if m.pickMode {
+		m.results = filterRepoPool(m.pickPool, m.query)
+		m.selectedIndex = clampIndex(0, len(m.results))
+		m.scrollOffset = 0
+		m.ensureSelectionVisible()
+		return
+	}
+
 	if m.search == nil {
 		m.results = nil
 		m.selectedIndex = 0
@@ -225,6 +256,20 @@ func (m *Model) refreshResults() {
 	m.selectedIndex = clampIndex(0, len(m.results))
 	m.scrollOffset = 0
 	m.ensureSelectionVisible()
+}
+
+func filterRepoPool(pool []domain.SearchResult, query string) []domain.SearchResult {
+	q := strings.ToLower(strings.TrimSpace(query))
+	if q == "" {
+		return append([]domain.SearchResult(nil), pool...)
+	}
+	out := make([]domain.SearchResult, 0, len(pool))
+	for _, r := range pool {
+		if strings.Contains(strings.ToLower(r.Repo), q) {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 func (m *Model) moveSelection(delta int) {
@@ -384,7 +429,7 @@ func (m Model) bodyLines(innerW, innerH int) []string {
 		return m.bodyLinesPlain(innerW, innerH)
 	}
 
-	badge := m.theme.BoxTitle.Render("Go to")
+	badge := m.theme.BoxTitle.Render(m.boxTitle())
 	title := lipgloss.PlaceHorizontal(innerW, lipgloss.Center, badge)
 	query := m.queryLine(innerW)
 	divider := m.theme.BoxDiv.Render(strings.Repeat("─", innerW))
@@ -419,7 +464,7 @@ func (m Model) bodyLines(innerW, innerH int) []string {
 }
 
 func (m Model) bodyLinesPlain(innerW, innerH int) []string {
-	title := centerText("Go to", innerW)
+	title := centerText(m.boxTitle(), innerW)
 	query := m.queryLine(innerW)
 	divider := strings.Repeat("─", innerW)
 	lines := []string{title, query, divider}
@@ -482,7 +527,17 @@ func (m Model) queryLine(innerW int) string {
 	return truncate(line, innerW)
 }
 
+func (m Model) boxTitle() string {
+	if m.pickMode {
+		return m.pickHint
+	}
+	return "Go to"
+}
+
 func (m Model) footerHint() string {
+	if m.pickMode {
+		return "  ↑↓/jk select · enter open · esc cancel"
+	}
 	if m.hydrating {
 		return "  Loading…"
 	}

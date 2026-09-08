@@ -13,6 +13,7 @@
 
 - **Dashboard** - Auto-discovers repos, lists PRs across *My PRs*, *Needs Review*, *Involving*, and *Recent* tabs with a live preview pane.
 - **Jump to repo/PR** - `Ctrl+P` to fuzzy-find and jump to any PR.
+- **Open a PR directly** - `pho pr 123` to launch straight into a PR's detail view.
 - **PR detail** - Browse description, diff, comments, and commits. Sidebar for files and CI checks.
 - **Diff navigation** - Line-by-line cursor, `gg`/`G`, `Ctrl+d`/`Ctrl+u`, visual mode for selecting ranges.
 - **Inline reviews** - Draft inline comments on diff lines, edit, discard, and batch-submit with a review event. Just like Github web UI.
@@ -45,7 +46,7 @@ echo 'export PATH="$(go env GOPATH)/bin:$PATH"' >> ~/.zshrc
 Right now, pho looks at only the `cwd` and its direct children directories (if they are actually git repos). So if you have some repositories cloned in a directory, you can either open pho in that directory or: 
 
 ```
-$(go env GOPATH)/bin/pho ~/path/to/dir/containing/all/cloned/repositories
+$(go env GOPATH)/bin/pho -root ~/path/to/dir/containing/all/cloned/repositories
 ```
 or simply start it in the current directory
 

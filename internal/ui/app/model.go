@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -47,6 +49,13 @@ type Dependencies struct {
 
 	MaxJumpPRs int
 
+	// InitialPRNumber, when > 0, deep-links startup: after repo discovery the
+	// app opens this PR's detail view directly (`pho pr <number>`).
+	InitialPRNumber int
+	// CWD overrides the working directory used to resolve the deep-link repo;
+	// empty means os.Getwd().
+	CWD string
+
 	Classifier achdashboard.SummaryTabClassifier
 	Now        func() time.Time
 
@@ -62,6 +71,9 @@ type Model struct {
 	// viewStack tracks the stack of base views. Top element is current view.
 	// Always has at least one element (PrimaryViewDashboard).
 	viewStack []domain.PrimaryView
+
+	// pendingPRNumber is a `pho pr <n>` deep link awaiting repo discovery.
+	pendingPRNumber int
 
 	// prDetail holds the PR detail sub-model when the top view is PR detail.
 	prDetail *prdetail.PRDetailModel
@@ -123,6 +135,7 @@ func NewModel(deps Dependencies) *Model {
 		deps:              deps,
 		log:               log,
 		classifier:        classifier,
+		pendingPRNumber:   deps.InitialPRNumber,
 		hydratedRepos:     map[string]struct{}{},
 		hydrationInFlight: map[string]bool{},
 		layout:            layout.NewLayoutState(0, 0),
@@ -271,6 +284,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.prDetail != nil {
 			next, cmd := m.prDetail.Update(msg)
 			m.prDetail = next
+			if msg.Err == nil {
+				m.refreshBareViewedSummary(msg.Repo, msg.Number)
+			}
 			m.syncStatus()
 			return m, cmd
 		}
@@ -710,6 +726,9 @@ func (m *Model) applyMessage(msg tea.Msg) tea.Cmd {
 	case overlay.DispatchMsg:
 		return m.handleOverlayDispatch(msg)
 	case overlay.SelectRepo:
+		if m.pendingPRNumber != 0 {
+			return m.handleDeepLinkRepoPicked(msg.Repo)
+		}
 		return m.selectRepoByFullName(msg.Repo, false)
 	case cmds.AllPRsPageLoaded:
 		return m.handleAllPRsPage(msg)
@@ -765,7 +784,7 @@ func (m *Model) handleReposDiscovered(msg cmds.ReposDiscovered) tea.Cmd {
 		m.resetRepoSelection()
 		m.syncPaletteStats()
 		m.syncStatus()
-		return nil
+		return m.consumeInitialPR(nil)
 	}
 
 	repos := append([]domain.Repository(nil), msg.Repos...)
@@ -794,7 +813,7 @@ func (m *Model) handleReposDiscovered(msg cmds.ReposDiscovered) tea.Cmd {
 		if m.deps.Search != nil {
 			rebuild = cmds.RebuildRepoIndexCmd(m.deps.Search, m.state.Repos.Discovered)
 		}
-		return batch(cmd, rebuild)
+		return batch(cmd, rebuild, m.consumeInitialPR(m.state.Repos.Discovered))
 	}
 
 	m.syncPaletteStats()
@@ -1076,6 +1095,10 @@ func (m *Model) togglePalette() tea.Cmd {
 }
 
 func (m *Model) closePalette() tea.Cmd {
+	if number := m.pendingPRNumber; number != 0 {
+		m.pendingPRNumber = 0
+		m.logDebug("deeplink cancelled", "pr", number)
+	}
 	m.state.Search.OverlayOpen = false
 	if m.previousFocus == "" {
 		m.focus = domain.FocusRepoPanel
@@ -1543,6 +1566,21 @@ func (m *Model) recordError(kind domain.ErrorKind, err error, repo string) {
 	m.syncStatus()
 }
 
+// refreshBareViewedSummary re-records a viewed-history entry that was saved
+// before its summary was known — deep links record a bare {repo, number} at
+// open time and only learn the title/author once the PR loads.
+func (m *Model) refreshBareViewedSummary(repo string, number int) {
+	if m.prDetail == nil {
+		return
+	}
+	for _, rec := range m.state.Dashboard.RecentlyViewed {
+		if sameRepo(rec.Repo, repo) && rec.Number == number && rec.Summary.Title == "" {
+			m.recordPRViewed(m.prDetail.Summary, m.prDetail.Repo, m.now())
+			return
+		}
+	}
+}
+
 func (m *Model) clearErrors() {
 	m.state.Errors.Errors = nil
 	m.state.Errors.RateLimitReset = nil
@@ -1682,6 +1720,122 @@ func (m *Model) openPRDetailForJump(summary domain.PullRequestSummary) tea.Cmd {
 
 func (m *Model) findRepoByFullName(fullName string) (domain.Repository, bool) {
 	return m.findRepoByHostAndFullName("", fullName)
+}
+
+// cwd returns the working directory used to resolve `pho pr <n>` deep links.
+// deps.CWD overrides for tests; empty falls back to the process working dir.
+func (m *Model) cwd() string {
+	if m.deps.CWD != "" {
+		return m.deps.CWD
+	}
+	if wd, err := os.Getwd(); err == nil {
+		return wd
+	}
+	return ""
+}
+
+// consumeInitialPR resolves the pending `pho pr <n>` deep link after repo
+// discovery. The CWD repo or a sole discovered repo opens straight away;
+// multiple unrelated repos raise the picker (pending stays set until the user
+// picks or cancels); no repos records an error and stays on the dashboard.
+func (m *Model) consumeInitialPR(repos []domain.Repository) tea.Cmd {
+	number := m.pendingPRNumber
+	if number == 0 {
+		return nil
+	}
+
+	// A palette opened before discovery finished would either float over the
+	// pushed detail or be replaced mid-query by the picker; close it first.
+	if m.state.Search.OverlayOpen {
+		m.pendingPRNumber = 0
+		m.closePalette()
+		m.pendingPRNumber = number
+	}
+
+	repo, ok := resolveDeepLinkRepo(repos, m.cwd())
+	if ok {
+		m.pendingPRNumber = 0
+		m.logDebug("deeplink opening pr detail", "pr", m.prSlug(repo.FullName, number), "repo", repo.FullName)
+		return m.openPRDetailForSummary(domain.PullRequestSummary{Repo: repo.FullName, Number: number}, repo)
+	}
+	if len(repos) == 0 {
+		m.pendingPRNumber = 0
+		err := fmt.Errorf("cannot open PR #%d: no repositories found under %s", number, m.deps.Root)
+		m.logError("deeplink unresolved", "err", err)
+		m.recordError(domain.ErrorKindDiscovery, err, "")
+		m.syncStatus()
+		return nil
+	}
+	m.logDebug("deeplink ambiguous, opening repo picker", "pr", number, "repos", len(repos))
+	return m.openRepoPickOverlay(number, repos)
+}
+
+// resolveDeepLinkRepo picks the repo a bare PR number refers to: the only
+// discovered repo, or the one checked out at the CWD. ok=false means ambiguous.
+func resolveDeepLinkRepo(repos []domain.Repository, cwd string) (domain.Repository, bool) {
+	if len(repos) == 1 {
+		return repos[0], true
+	}
+	if cwd == "" {
+		return domain.Repository{}, false
+	}
+	cwdAbs, err := filepath.Abs(cwd)
+	if err != nil {
+		return domain.Repository{}, false
+	}
+	for _, r := range repos {
+		lp, err := filepath.Abs(r.LocalPath)
+		if err == nil && sameDir(lp, cwdAbs) {
+			return r, true
+		}
+	}
+	return domain.Repository{}, false
+}
+
+// sameDir compares absolute paths, resolving symlinks best-effort — on macOS,
+// for instance, /tmp is a symlink to /private/tmp, so textual equality
+// misses real matches.
+func sameDir(a, b string) bool {
+	if ra, err := filepath.EvalSymlinks(a); err == nil {
+		a = ra
+	}
+	if rb, err := filepath.EvalSymlinks(b); err == nil {
+		b = rb
+	}
+	return a == b
+}
+
+// openRepoPickOverlay asks the user which repo a deep-linked PR number
+// belongs to.
+func (m *Model) openRepoPickOverlay(number int, repos []domain.Repository) tea.Cmd {
+	m.previousFocus = m.focus
+	m.state.Search.OverlayOpen = true
+	m.focus = domain.FocusCmdPalette
+	m.palette = overlay.NewModel(m.deps.Search)
+	m.palette.SetTheme(m.theme)
+	m.palette.SetActiveRepo(m.selectedRepoName())
+	m.palette.OpenRepoPick(repos, fmt.Sprintf("Open PR #%d in:", number))
+	// Apply current terminal size so View() renders immediately (not blank).
+	m.palette, _ = m.palette.Update(tea.WindowSizeMsg{Width: m.layout.Width, Height: m.layout.Height})
+	m.syncPaletteStats()
+	m.syncStatus()
+	return nil
+}
+
+func (m *Model) handleDeepLinkRepoPicked(fullName string) tea.Cmd {
+	number := m.pendingPRNumber
+	m.pendingPRNumber = 0
+	m.closePalette()
+	repo, ok := m.findRepoByFullName(fullName)
+	if !ok {
+		err := fmt.Errorf("cannot open PR #%d: repo %s not found", number, fullName)
+		m.logError("deeplink unresolved", "err", err)
+		m.recordError(domain.ErrorKindDiscovery, err, "")
+		m.syncStatus()
+		return nil
+	}
+	m.logDebug("deeplink opening pr detail", "pr", m.prSlug(repo.FullName, number), "repo", repo.FullName)
+	return m.openPRDetailForSummary(domain.PullRequestSummary{Repo: repo.FullName, Number: number}, repo)
 }
 
 func (m *Model) findRepoByHostAndFullName(host, fullName string) (domain.Repository, bool) {

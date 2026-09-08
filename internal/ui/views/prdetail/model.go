@@ -114,6 +114,10 @@ type PRDetailModel struct {
 	DetailLoading bool
 	DiffLoading   bool
 
+	// LoadErr holds the initial load's failure; the view shows an error panel
+	// until a retry or reload clears it.
+	LoadErr error
+
 	DetailFromCache bool
 
 	Width  int
@@ -466,15 +470,38 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		m.DetailLoading = false
 		if msg.Err != nil {
 			if m.Detail == nil {
-				m.DetailLoading = true
+				m.LoadErr = msg.Err
+				// Nothing else will clear the sidebar spinners on a failed
+				// first load.
+				m.DiffLoading = false
+				m.leftPanel.Loading = false
 			}
 			return m, tea.Batch(spinCmd, composeCmd)
 		}
+		m.LoadErr = nil
 		previousHead := m.headSHA()
 		m.Detail = &msg.Detail
 		m.DetailFromCache = msg.FromCache
 		if msg.Detail.HeadRefOID != "" {
 			m.Summary.HeadRefOID = msg.Detail.HeadRefOID
+		}
+		// Deep-linked opens start from a bare {repo, number} summary; fill the
+		// rest from the loaded snapshot without clobbering real values. The ID
+		// is required by every mutation (comment, approve, merge, close).
+		if m.Summary.ID == "" {
+			m.Summary.ID = msg.Detail.ID
+		}
+		if m.Summary.Title == "" {
+			m.Summary.Title = msg.Detail.Title
+		}
+		if m.Summary.Author == "" {
+			m.Summary.Author = msg.Detail.Author
+		}
+		if m.Summary.State == "" {
+			m.Summary.State = msg.Detail.State
+		}
+		if m.Summary.HeadRefName == "" {
+			m.Summary.HeadRefName = msg.Detail.HeadRefName
 		}
 		m.commentEntriesDirty = true
 
@@ -578,7 +605,12 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		m.DiffLoading = false
 		if msg.Err != nil {
 			if m.Diff == nil {
-				m.DiffLoading = true
+				if m.LoadErr != nil {
+					// The detail load already failed; don't keep spinning.
+					m.leftPanel.Loading = false
+				} else {
+					m.DiffLoading = true
+				}
 			}
 			return m, tea.Batch(spinCmd, composeCmd)
 		}
