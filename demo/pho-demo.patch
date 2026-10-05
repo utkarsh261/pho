@@ -1,0 +1,125 @@
+diff --git a/internal/github/host.go b/internal/github/host.go
+index f096749..8471d5b 100644
+--- a/internal/github/host.go
++++ b/internal/github/host.go
+@@ -1,5 +1,7 @@
+ package github
+ 
++import "os"
++
+ // GitHubHostProfile holds resolved connection details for one authenticated GitHub host.
+ // Built once at startup by AuthService and cached in memory for the session.
+ type GitHubHostProfile struct {
+@@ -13,6 +15,9 @@ type GitHubHostProfile struct {
+ }
+ 
+ func DefaultGraphQLURL(host string) string {
++	if m := os.Getenv("PHO_MOCK_API"); m != "" {
++		return m + "/graphql"
++	}
+ 	if host == "github.com" {
+ 		return "https://api.github.com/graphql"
+ 	}
+@@ -20,6 +25,9 @@ func DefaultGraphQLURL(host string) string {
+ }
+ 
+ func DefaultRESTURL(host string) string {
++	if m := os.Getenv("PHO_MOCK_API"); m != "" {
++		return m
++	}
+ 	if host == "github.com" {
+ 		return "https://api.github.com"
+ 	}
+diff --git a/internal/ui/views/prdetail/flows.go b/internal/ui/views/prdetail/flows.go
+index 222dc0f..3e1b682 100644
+--- a/internal/ui/views/prdetail/flows.go
++++ b/internal/ui/views/prdetail/flows.go
+@@ -405,7 +405,7 @@ func (m *PRDetailModel) handleCheckout() tea.Cmd {
+ 	}
+ 	if m.Repo.LocalPath == "" {
+ 		m.checkoutErr = "Not a local repo"
+-		return tea.Tick(3*time.Second, func(time.Time) tea.Msg {
++		return tea.Tick(slowmo*3*time.Second, func(time.Time) tea.Msg {
+ 			return checkoutClearMsg{}
+ 		})
+ 	}
+diff --git a/internal/ui/views/prdetail/model.go b/internal/ui/views/prdetail/model.go
+index 0aa0aec..41c24af 100644
+--- a/internal/ui/views/prdetail/model.go
++++ b/internal/ui/views/prdetail/model.go
+@@ -838,7 +838,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
+ 				m.commentEntriesDirty = true
+ 			}
+ 		}
+-		return m, tea.Batch(spinCmd, composeCmd, tea.Tick(1500*time.Millisecond, func(time.Time) tea.Msg {
++		return m, tea.Batch(spinCmd, composeCmd, tea.Tick(slowmo*1500*time.Millisecond, func(time.Time) tea.Msg {
+ 			return composeSuccessDismissMsg{}
+ 		}))
+ 
+@@ -849,7 +849,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
+ 
+ 	case cmds.ApprovalPosted:
+ 		m.compose.status = composeStatusSuccess
+-		return m, tea.Batch(spinCmd, composeCmd, tea.Tick(1500*time.Millisecond, func(time.Time) tea.Msg {
++		return m, tea.Batch(spinCmd, composeCmd, tea.Tick(slowmo*1500*time.Millisecond, func(time.Time) tea.Msg {
+ 			return composeSuccessDismissMsg{}
+ 		}))
+ 
+@@ -871,7 +871,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
+ 				_ = m.PRService.DeleteDraftComments(context.Background(), m.Repo, m.Summary.Number, draftHeadSHA)
+ 			}
+ 		}
+-		return m, tea.Batch(spinCmd, composeCmd, tea.Tick(1500*time.Millisecond, func(time.Time) tea.Msg {
++		return m, tea.Batch(spinCmd, composeCmd, tea.Tick(slowmo*1500*time.Millisecond, func(time.Time) tea.Msg {
+ 			return composeSuccessDismissMsg{}
+ 		}))
+ 
+@@ -979,7 +979,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
+ 		if m.PRService != nil {
+ 			refreshCmd = m.loadPRDetailCmd(true)
+ 		}
+-		return m, tea.Batch(spinCmd, composeCmd, refreshCmd, tea.Tick(1500*time.Millisecond, func(time.Time) tea.Msg {
++		return m, tea.Batch(spinCmd, composeCmd, refreshCmd, tea.Tick(slowmo*1500*time.Millisecond, func(time.Time) tea.Msg {
+ 			return composeSuccessDismissMsg{}
+ 		}))
+ 
+@@ -1056,7 +1056,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
+ 		m.checkoutInFlight = false
+ 		if msg.err != nil {
+ 			m.checkoutErr = msg.err.Error()
+-			return m, tea.Batch(spinCmd, composeCmd, tea.Tick(3*time.Second, func(time.Time) tea.Msg {
++			return m, tea.Batch(spinCmd, composeCmd, tea.Tick(slowmo*3*time.Second, func(time.Time) tea.Msg {
+ 				return checkoutClearMsg{}
+ 			}))
+ 		}
+@@ -1064,7 +1064,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
+ 		if msg.stashed {
+ 			m.checkoutStatus += " (changes stashed — git stash pop to restore)"
+ 		}
+-		return m, tea.Batch(spinCmd, composeCmd, tea.Tick(2*time.Second, func(time.Time) tea.Msg {
++		return m, tea.Batch(spinCmd, composeCmd, tea.Tick(slowmo*2*time.Second, func(time.Time) tea.Msg {
+ 			return checkoutClearMsg{}
+ 		}))
+ 
+diff --git a/internal/ui/views/prdetail/slowmo.go b/internal/ui/views/prdetail/slowmo.go
+new file mode 100644
+index 0000000..8ebacb6
+--- /dev/null
++++ b/internal/ui/views/prdetail/slowmo.go
+@@ -0,0 +1,16 @@
++package prdetail
++
++import (
++	"os"
++	"strconv"
++	"time"
++)
++
++// slowmo stretches status-message timers when the app is recorded in slow
++// motion (PHO_SLOWMO=3), so they last their normal length on playback.
++var slowmo = func() time.Duration {
++	if n, err := strconv.Atoi(os.Getenv("PHO_SLOWMO")); err == nil && n > 0 {
++		return time.Duration(n)
++	}
++	return 1
++}()
