@@ -2,6 +2,7 @@ package prdetail
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+	"slices"
 
 	diffmodel "github.com/utkarsh261/pho/internal/diff/model"
 	diffsearch "github.com/utkarsh261/pho/internal/diff/search"
@@ -130,6 +131,10 @@ func (m *PRDetailModel) refreshSearchMatches() {
 		return
 	}
 	m.searchMatches = m.searchIndex.Search(m.searchQuery)
+	// Files too large to show can't be jumped to, so their matches are dropped.
+	m.searchMatches = slices.DeleteFunc(m.searchMatches, func(mt diffsearch.Match) bool {
+		return m.fileTooLarge(mt.FileIndex)
+	})
 	m.searchCursor = 0
 	m.searchCommit = false
 }
@@ -145,17 +150,15 @@ func (m *PRDetailModel) currentSearchMatch() (diffsearch.Match, bool) {
 }
 
 // normalizeDiffRows keeps StartRow/DisplayRows aligned with the renderer's
-// authoritative row model (diffFileDisplayRows).
+// authoritative row layout.
 func (m *PRDetailModel) normalizeDiffRows() {
 	if m.Diff == nil {
 		return
 	}
-	cursor := 0
+	lay := m.rows()
 	for i := range m.Diff.Files {
-		rows := diffFileDisplayRows(&m.Diff.Files[i])
-		m.Diff.Files[i].DisplayRows = rows
-		m.Diff.Files[i].StartRow = cursor
-		cursor += rows
+		m.Diff.Files[i].DisplayRows = lay.fileRows[i]
+		m.Diff.Files[i].StartRow = lay.fileStart[i]
 	}
 }
 
@@ -172,22 +175,13 @@ func (m *PRDetailModel) scrollToSearchCursor() {
 		return
 	}
 
+	m.expandFileForJump(match.FileIndex)
 	m.normalizeDiffRows()
 
 	flatLineIndexWithinFile := m.matchDisplayOffsetWithinFile(match)
 	matchDisplayRow := m.Diff.Files[match.FileIndex].StartRow + flatLineIndexWithinFile
 
 	contentHeight := m.contentViewportHeight()
-	diffRows := m.diffSectionRowCount()
-
-	// When the match is in a file past the truncation boundary, show the
-	// truncation banner instead.
-	if matchDisplayRow >= diffRows {
-		m.switchTab(TabDiff)
-		m.ContentScroll = clamp(max(0, diffRows-contentHeight), 0, m.maxContentScroll())
-		return
-	}
-
 	m.switchTab(TabDiff)
 	m.ContentScroll = clamp(matchDisplayRow-contentHeight/2, 0, m.maxContentScroll())
 

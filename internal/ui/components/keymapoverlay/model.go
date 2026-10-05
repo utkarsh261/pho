@@ -363,6 +363,8 @@ func buildCommitDetailBindings() []Group {
 			Name: "Actions",
 			Bindings: []Binding{
 				{Key: "o", Description: "Open in browser"},
+				{Key: "O", Description: "Open file on GitHub"},
+				{Key: "z / Z", Description: "Collapse file / all"},
 				{Key: "y", Description: "Copy SHA"},
 				{Key: "R", Description: "Refresh"},
 				{Key: "esc / q", Description: "Back to PR detail"},
@@ -437,6 +439,8 @@ func buildPRDetailBindings(ctx Context) []Group {
 				{Key: "space", Description: "Visual mode"},
 				{Key: "J/K", Description: "Jump 5 lines"},
 				{Key: "ctrl+d/u", Description: "Half page"},
+				{Key: "z / Z", Description: "Collapse file / all"},
+				{Key: "O", Description: "Open file on GitHub"},
 			},
 		})
 	case prdetail.TabComments:

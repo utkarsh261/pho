@@ -31,6 +31,8 @@ type LeftPanelModel struct {
 	Cursor          int // index of highlighted file
 	Scroll          int // index of first visible file row
 	LastOpenedIndex int // persisted after Enter/l
+	// Collapsed marks files collapsed in the diff (parallel to Files).
+	Collapsed []bool
 
 	// Data — set by PRDetailModel when diff/detail data arrive
 	Checks  []domain.PreviewCheckRow
@@ -216,9 +218,14 @@ func (m *LeftPanelModel) renderFileRow(f diffmodel.DiffFile, idx int) string {
 	isOpened := idx == m.LastOpenedIndex && !isSelected
 
 	path := truncatePathLeft(f.NewPath, lpPathMax) // exactly lpPathMax visible chars
+	collapsed := idx < len(m.Collapsed) && m.Collapsed[idx]
 
 	if m.theme == nil {
-		content := "  " + path + formatFileStats(f.Additions, f.Deletions)
+		lead := "  "
+		if collapsed {
+			lead = "▸ "
+		}
+		content := lead + path + formatFileStats(f.Additions, f.Deletions)
 		if isSelected || isOpened {
 			return lipgloss.NewStyle().Reverse(true).Width(lpInner).Render(content)
 		}
@@ -234,12 +241,19 @@ func (m *LeftPanelModel) renderFileRow(f diffmodel.DiffFile, idx int) string {
 		dir, base = trimmed[:i+1], trimmed[i+1:]
 	}
 	baseStyle := lipgloss.NewStyle().Foreground(th.Text)
-	if isSelected {
+	switch {
+	case isSelected:
 		baseStyle = baseStyle.Bold(true).Foreground(th.TextBright)
+	case collapsed:
+		baseStyle = th.MutedTxt
 	}
 	styledPath := th.MutedTxt.Render(dir) + baseStyle.Render(base) + pad
 
-	content := fileStatusLetter(f, th) + " " + styledPath + formatFileStatsColored(f.Additions, f.Deletions, th)
+	sep := " "
+	if collapsed {
+		sep = th.FaintTxt.Render("▸")
+	}
+	content := fileStatusLetter(f, th) + sep + styledPath + formatFileStatsColored(f.Additions, f.Deletions, th)
 
 	switch {
 	case isSelected:

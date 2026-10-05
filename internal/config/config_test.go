@@ -319,3 +319,27 @@ func TestResolvePaths_XDGOverrides(t *testing.T) {
 		t.Errorf("LogFile: got %q", paths.LogFile)
 	}
 }
+
+func TestLoad_DiffLimits(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	toml := `
+[diff]
+collapse_lines = 500
+collapse_line_width = 1000
+max_lines = 3000
+max_line_width = 8000
+row_budget = 10000
+`
+	if err := os.WriteFile(path, []byte(toml), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	d := cfg.Diff
+	if d.CollapseLines != 500 || d.CollapseLineWidth != 1000 || d.MaxLines != 3000 || d.MaxLineWidth != 8000 || d.RowBudget != 10000 {
+		t.Errorf("Diff = %+v", d)
+	}
+}

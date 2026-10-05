@@ -50,6 +50,9 @@ type Dependencies struct {
 	MaxJumpPRs int
 	// MaxDashboardPRs caps how many open PRs the All tab loads.
 	MaxDashboardPRs int
+	// DiffLimits controls which diff files start collapsed; zero fields use
+	// pho's defaults.
+	DiffLimits prdetail.DiffLimits
 
 	// InitialPRNumber, when > 0, deep-links startup: after repo discovery the
 	// app opens this PR's detail view directly (`pho pr <number>`).
@@ -243,6 +246,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 	case prdetail.BackToDashboard:
 		return m, m.handleBackToDashboard()
+	case prdetail.OpenBrowserFile:
+		url := fileBrowserURL(m.selectedRepoForURL(msg.Repo), msg)
+		return m, func() tea.Msg {
+			if err := openURL(url); err != nil {
+				return browserOpenFailed{URL: url, Err: err}
+			}
+			return nil
+		}
 	case prdetail.OpenBrowserPR:
 		return m, openBrowserForPRCmd(m.selectedRepoForURL(msg.Repo), msg.Repo, msg.Number)
 	case prdetail.OpenBrowserCI:
@@ -1717,6 +1728,7 @@ func (m *Model) openPRDetailForSummary(summary domain.PullRequestSummary, repo d
 	m.recordPRViewed(summary, repo, m.now())
 	m.prDetail = prdetail.NewModel(summary, repo, m.deps.PR)
 	m.prDetail.Log = m.log
+	m.prDetail.Limits = m.deps.DiffLimits
 	m.prDetail.SetTheme(m.theme)
 	m.prDetail.ViewerLogin = m.state.Session.ViewerByHost[repo.Host]
 	m.prDetail.Width = m.layout.Current.Width
@@ -1742,6 +1754,7 @@ func (m *Model) openPRDetailForJump(summary domain.PullRequestSummary) tea.Cmd {
 	m.recordPRViewed(summary, repo, m.now())
 	m.prDetail = prdetail.NewModel(summary, repo, m.deps.PR)
 	m.prDetail.Log = m.log
+	m.prDetail.Limits = m.deps.DiffLimits
 	m.prDetail.SetTheme(m.theme)
 	m.prDetail.ViewerLogin = m.state.Session.ViewerByHost[repo.Host]
 	m.prDetail.Width = m.layout.Current.Width
@@ -1907,6 +1920,7 @@ func (m *Model) openPRDetail() tea.Cmd {
 	// PR service may be nil (not wired yet) — model still renders from summary.
 	m.prDetail = prdetail.NewModel(current, repo, m.deps.PR)
 	m.prDetail.Log = m.log
+	m.prDetail.Limits = m.deps.DiffLimits
 	m.prDetail.SetTheme(m.theme)
 	m.prDetail.ViewerLogin = m.state.Session.ViewerByHost[repo.Host]
 	m.prDetail.Width = m.layout.Current.Width
@@ -1945,6 +1959,7 @@ func (m *Model) handleBackToDashboard() tea.Cmd {
 func (m *Model) handleOpenCommitDetail(msg prdetail.OpenCommitDetail) tea.Cmd {
 	m.commitDetail = commitdetail.NewModel(msg.Repo, msg.Commit, m.deps.PR)
 	m.commitDetail.Log = m.log
+	m.commitDetail.Inner().Limits = m.deps.DiffLimits
 	m.commitDetail.SetTheme(m.theme)
 	if m.layout.Current.Width > 0 {
 		_, _ = m.commitDetail.Update(tea.WindowSizeMsg{Width: m.layout.Current.Width, Height: m.layout.Current.Height - 2})

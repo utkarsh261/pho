@@ -68,7 +68,23 @@ func readAnchorGolden(t *testing.T, name string) map[[3]int]goldenAnchor {
 	return out
 }
 
+// loadPlacementModel loads raw through DiffLoaded with every file expanded,
+// so every line can be checked.
 func loadPlacementModel(t *testing.T, raw string) *PRDetailModel {
+	t.Helper()
+	m := loadPlacementModelWith(t, raw, DiffLimits{CollapseLines: 1 << 30, CollapseLineWidth: 1 << 30, MaxLines: 1 << 30, MaxLineWidth: 1 << 30, RowBudget: 1 << 30})
+	for i := range m.Diff.Files {
+		m.setFileCollapsed(i, false)
+	}
+	for _, c := range m.navigableLines {
+		if c.isPlaceholder() {
+			t.Fatalf("file %d still collapsed", c.FileIdx)
+		}
+	}
+	return m
+}
+
+func loadPlacementModelWith(t *testing.T, raw string, lim DiffLimits) *PRDetailModel {
 	t.Helper()
 	dm, err := parse.Parse(raw)
 	if err != nil {
@@ -77,6 +93,7 @@ func loadPlacementModel(t *testing.T, raw string) *PRDetailModel {
 	anchor.Generate(dm, placementSHA)
 	m := makePRDetail(120, 40, nil, nil)
 	m.PRService = &prServiceStub{}
+	m.Limits = lim
 	m.DiffLoading = true
 	m, _ = m.Update(cmds.DiffLoaded{Repo: "owner/repo", Number: 1, Diff: *dm})
 	m.leftPanel.Focus = FocusContent
@@ -146,7 +163,10 @@ func TestDraftPlacementMatchesGolden(t *testing.T) {
 					m = pressKey(m, "j")
 				}
 				m = pressKey(m, "c")
-				m, _ = m.Update(submitComposeMsg{body: "x"})
+				if m.compose.active {
+					m, _ = m.Update(submitComposeMsg{body: "x"})
+				}
+				m.compose.Close()
 				end := golden[[3]int{c.FileIdx, c.HunkIdx, c.LineIdx + span}]
 				if !end.ok {
 					if len(m.drafts) != 0 {

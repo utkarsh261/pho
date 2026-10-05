@@ -324,14 +324,12 @@ func TestDiffRenderEmptyDiff(t *testing.T) {
 	}
 }
 
-// TestDiffRenderTruncationAt5000Rows verifies that when the diff exceeds
-// maxDiffDisplayRows, a truncation banner appears at row maxDiffDisplayRows
-// and diffSectionRowCount returns maxDiffDisplayRows+1.
-func TestDiffRenderTruncationAt20000Rows(t *testing.T) {
+// TestDiffRenderReachesEveryFile verifies that a diff far past the old
+// 20,000-row cutoff renders its last file instead of a truncation banner.
+func TestDiffRenderReachesEveryFile(t *testing.T) {
 	t.Parallel()
 
 	// Each file with no hunks has diffFileDisplayRows = 3 (blank+sep+header).
-	// 8000 files × 3 = 24000 rows > maxDiffDisplayRows (20000).
 	const fileCount = 8000
 	files := makeFilesWithDisplayRows(fileCount, 3)
 
@@ -340,22 +338,16 @@ func TestDiffRenderTruncationAt20000Rows(t *testing.T) {
 	m.DiffLoading = false
 	m.SetTheme(theme.Default())
 
-	// diffSectionRowCount must return maxDiffDisplayRows+1.
-	if got := m.diffSectionRowCount(); got != maxDiffDisplayRows+1 {
-		t.Errorf("expected diffSectionRowCount=%d (cap+banner), got %d", maxDiffDisplayRows+1, got)
+	total := m.diffSectionRowCount()
+	if total != fileCount*3 {
+		t.Fatalf("diffSectionRowCount = %d, want %d", total, fileCount*3)
 	}
-
-	// Render a 2-row window that straddles the truncation point:
-	// rows [maxDiffDisplayRows-1, maxDiffDisplayRows+1) → indices 0 and 1 in out.
-	lines := m.renderDiffSectionLines(maxDiffDisplayRows-1, maxDiffDisplayRows+1, 80)
-
-	if len(lines) < 2 {
-		t.Fatalf("expected 2 lines in truncation window, got %d", len(lines))
+	out := strings.Join(m.renderDiffSectionLines(total-3, total, 80), "\n")
+	if !strings.Contains(plainText(out), files[fileCount-1].NewPath) {
+		t.Errorf("expected the last file's header at the end, got: %q", plainText(out))
 	}
-	// lines[1] maps to absolute diff row maxDiffDisplayRows → the banner.
-	bannerText := plainText(lines[1])
-	if !strings.Contains(bannerText, "truncated") {
-		t.Errorf("expected truncation banner at row maxDiffDisplayRows, got: %q", bannerText)
+	if strings.Contains(out, "truncated") {
+		t.Errorf("unexpected truncation banner: %q", out)
 	}
 }
 

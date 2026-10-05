@@ -13,10 +13,7 @@ func (m *PRDetailModel) diffLineToDisplayRow(fileIdx, hunkIdx, lineIdx int) int 
 	if m.Diff == nil {
 		return 0
 	}
-	row := 0
-	for i := range fileIdx {
-		row += diffFileDisplayRows(&m.Diff.Files[i])
-	}
+	row := m.rows().fileStart[fileIdx]
 	row += diffFileHeaderRows // blank + separator + header
 	f := &m.Diff.Files[fileIdx]
 	for i := range hunkIdx {
@@ -29,17 +26,13 @@ func (m *PRDetailModel) diffLineToDisplayRow(fileIdx, hunkIdx, lineIdx int) int 
 // firstDiffLineAtOrBelow finds the first actual DiffLine at or after targetRow,
 // where targetRow is relative to the start of the Diff tab.
 // Binary files are skipped; if targetRow lands inside a binary file, the search
-// continues to subsequent files. The target is clamped to maxDiffDisplayRows-1
-// so only rendered lines are returned.
+// continues to subsequent files. A collapsed file yields its placeholder stop.
 func (m *PRDetailModel) firstDiffLineAtOrBelow(targetRow int) (fileIdx, hunkIdx, lineIdx int, found bool) {
 	if len(m.navigableLines) == 0 {
 		return 0, 0, 0, false
 	}
 	if targetRow < 0 {
 		targetRow = 0
-	}
-	if targetRow >= maxDiffDisplayRows {
-		targetRow = maxDiffDisplayRows - 1
 	}
 	for i, row := range m.navigableRows {
 		if row >= targetRow {
@@ -66,7 +59,8 @@ func (m *PRDetailModel) enterVisualMode() {
 	} else {
 		fi, hi, li, ok = m.firstDiffLineAtOrBelow(m.ContentScroll)
 	}
-	if !ok {
+	// A collapsed file's placeholder is not a line you can comment on.
+	if !ok || li == placeholderLine {
 		return
 	}
 	m.visual = visualModeState{

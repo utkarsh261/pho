@@ -58,6 +58,13 @@ type rawConfig struct {
 	Palette struct {
 		MaxPRs int `toml:"max_prs"`
 	} `toml:"palette"`
+	Diff struct {
+		CollapseLines     int `toml:"collapse_lines"`
+		CollapseLineWidth int `toml:"collapse_line_width"`
+		MaxLines          int `toml:"max_lines"`
+		MaxLineWidth      int `toml:"max_line_width"`
+		RowBudget         int `toml:"row_budget"`
+	} `toml:"diff"`
 }
 
 type Config struct {
@@ -87,6 +94,14 @@ type Config struct {
 	}
 	Palette struct {
 		MaxPRs int
+	}
+	// Diff limits for collapsing large files; zero means pho's default.
+	Diff struct {
+		CollapseLines     int // files with more changed lines start collapsed
+		CollapseLineWidth int // files with a longer line start collapsed
+		MaxLines          int // files with more changed lines only open on GitHub
+		MaxLineWidth      int // files with a longer line only open on GitHub
+		RowBudget         int // collapse the largest files beyond this many rows
 	}
 }
 
@@ -238,6 +253,11 @@ func Load(path string) (Config, error) {
 	cfg.Logging.File = raw.Logging.File
 	cfg.Logging.Level = raw.Logging.Level
 	cfg.Palette.MaxPRs = raw.Palette.MaxPRs
+	cfg.Diff.CollapseLines = raw.Diff.CollapseLines
+	cfg.Diff.CollapseLineWidth = raw.Diff.CollapseLineWidth
+	cfg.Diff.MaxLines = raw.Diff.MaxLines
+	cfg.Diff.MaxLineWidth = raw.Diff.MaxLineWidth
+	cfg.Diff.RowBudget = raw.Diff.RowBudget
 
 	// Fill zero-value fields with defaults.
 	applyDefaults(&cfg, def)
