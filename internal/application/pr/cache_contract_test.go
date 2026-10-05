@@ -79,7 +79,7 @@ func contractCache(t *testing.T, dbPath string) *cache.Coordinator {
 func contractService(c *cache.Coordinator, srv *fakeDiffServer) *PRService {
 	return &PRService{
 		Cache: c,
-		REST:  &rest.Client{BaseURL: srv.URL, Token: "tok"},
+		REST:  &rest.Client{BaseURL: srv.URL, Token: "tok", HTTPClient: srv.Client()},
 		Owner: "owner", Repo: "repo",
 		Log:          pholog.NewNop(),
 		Now:          func() time.Time { return frozenNow },
