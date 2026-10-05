@@ -464,6 +464,7 @@ func (m *PRDetailModel) handleRefresh() (*PRDetailModel, tea.Cmd) {
 	m.reloadDependentsIfHeadUnknown = false
 	m.Detail = nil
 	m.Diff = nil
+	m.DiffErr = nil
 	m.DetailLoading = true
 	m.DiffLoading = true
 	m.leftPanel.Loading = true
@@ -489,6 +490,7 @@ func (m *PRDetailModel) handleCommitRefresh() (*PRDetailModel, tea.Cmd) {
 		return m, nil
 	}
 	m.Diff = nil
+	m.DiffErr = nil
 	m.DiffLoading = true
 	m.leftPanel.Loading = true
 	m.searchIndex = nil

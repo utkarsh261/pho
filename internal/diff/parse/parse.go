@@ -1,11 +1,17 @@
 package parse
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/utkarsh261/pho/internal/diff/model"
 )
+
+// PatchUnavailableMarker starts a header line ("pho-patch-unavailable +A -D")
+// marking a file whose patch GitHub did not send. Git never writes such a
+// line, so it cannot appear in a real diff.
+const PatchUnavailableMarker = "pho-patch-unavailable "
 
 // Parse parses a unified diff. DiffLine.Raw values are substrings of raw, so
 // the parsed model shares raw's memory instead of copying every line.
@@ -63,6 +69,14 @@ func parseFileBlock(lines []string) model.DiffFile {
 
 	for _, line := range lines {
 		line = strings.TrimSuffix(line, "\r")
+
+		// pho writes this marker when converting per-file API results for a
+		// file GitHub sent without a patch.
+		if !inHunk && strings.HasPrefix(line, PatchUnavailableMarker) {
+			f.PatchUnavailable = true
+			_, _ = fmt.Sscanf(strings.TrimPrefix(line, PatchUnavailableMarker), "+%d -%d", &f.Additions, &f.Deletions)
+			continue
+		}
 
 		// Detect binary diff marker.
 		if strings.Contains(line, "Binary files ") || strings.Contains(line, "Binary files differ") {

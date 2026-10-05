@@ -13,6 +13,9 @@ import (
 // disagree on anything other than the fields only the new parser fills.
 func requireSameAsLegacy(t *testing.T, raw string) {
 	t.Helper()
+	if strings.Contains(raw, PatchUnavailableMarker) {
+		return // pho's own marker; the legacy parser predates it
+	}
 	got, err := Parse(raw)
 	if err != nil {
 		t.Fatal(err)

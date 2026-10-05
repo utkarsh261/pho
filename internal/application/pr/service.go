@@ -2,6 +2,7 @@ package pr
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -453,6 +454,13 @@ func (s *PRService) loadDiffInner(ctx context.Context, repo domain.Repository, n
 		return model.DiffModel{}, false, fmt.Errorf("fetch raw diff: %w", err)
 	}
 	rawDiff, err := restClient.FetchRawDiff(ctx, s.ownerName(repo), s.RepoName(repo), number)
+	partial := false
+	if errors.Is(err, rest.ErrDiffTooLarge) {
+		s.logDebug("diff too large, fetching per-file patches", "key", key, "number", number)
+		rawDiff, partial, err = s.diffFromFiles(err, func() ([]rest.ChangedFile, error) {
+			return restClient.FetchPRFiles(ctx, s.ownerName(repo), s.RepoName(repo), number)
+		})
+	}
 	if err != nil {
 		if found && headSHA != "" {
 			s.logWarn("diff fetch failed, returning stale", "key", key, "number", number, "err", err)
@@ -472,6 +480,7 @@ func (s *PRService) loadDiffInner(ctx context.Context, repo domain.Repository, n
 		return model.DiffModel{}, false, fmt.Errorf("parse diff: %w", err)
 	}
 
+	dm.PartialFiles = partial
 	// Populate HeadSHA from the GraphQL result (not from the raw diff index line).
 	dm.HeadSHA = headSHA
 	dm.Repo = repoFullName(repo)
@@ -504,6 +513,17 @@ func (s *PRService) loadDiffInner(ctx context.Context, repo domain.Repository, n
 	}
 
 	return *dm, false, nil
+}
+
+// diffFromFiles rebuilds a diff from per-file patches after GitHub refused
+// to render the whole diff (tooLarge). partial reports that GitHub's file
+// limit was hit, so later files are missing.
+func (s *PRService) diffFromFiles(tooLarge error, fetch func() ([]rest.ChangedFile, error)) (raw string, partial bool, err error) {
+	files, err := fetch()
+	if err != nil {
+		return "", false, fmt.Errorf("%w; per-file fallback: %w", tooLarge, err)
+	}
+	return unifiedDiffFromFiles(files), len(files) >= maxListedFiles, nil
 }
 
 // LoadPRCommits loads the commit list for a PR via GraphQL.
@@ -565,6 +585,13 @@ func (s *PRService) LoadCommitDiff(ctx context.Context, repo domain.Repository, 
 		return model.DiffModel{}, fmt.Errorf("fetch commit diff: %w", err)
 	}
 	rawDiff, err := restClient.FetchCommitDiff(ctx, s.ownerName(repo), s.RepoName(repo), sha)
+	partial := false
+	if errors.Is(err, rest.ErrDiffTooLarge) {
+		s.logDebug("commit diff too large, fetching per-file patches", "key", key, "sha", sha)
+		rawDiff, partial, err = s.diffFromFiles(err, func() ([]rest.ChangedFile, error) {
+			return restClient.FetchCommitFiles(ctx, s.ownerName(repo), s.RepoName(repo), sha)
+		})
+	}
 	if err != nil {
 		if found {
 			s.logWarn("commit diff fetch failed, returning stale", "key", key, "sha", sha, "err", err)
@@ -582,6 +609,7 @@ func (s *PRService) LoadCommitDiff(ctx context.Context, repo domain.Repository, 
 		return model.DiffModel{}, fmt.Errorf("parse commit diff: %w", err)
 	}
 
+	dm.PartialFiles = partial
 	dm.HeadSHA = sha
 	dm.Repo = repoFullName(repo)
 

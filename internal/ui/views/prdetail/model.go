@@ -117,6 +117,9 @@ type PRDetailModel struct {
 	// LoadErr holds the initial load's failure; the view shows an error panel
 	// until a retry or reload clears it.
 	LoadErr error
+	// DiffErr holds a diff load failure when no diff is shown; the Diff tab
+	// shows it with a retry hint instead of spinning.
+	DiffErr error
 
 	DetailFromCache bool
 
@@ -609,15 +612,12 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		m.DiffLoading = false
 		if msg.Err != nil {
 			if m.Diff == nil {
-				if m.LoadErr != nil {
-					// The detail load already failed; don't keep spinning.
-					m.leftPanel.Loading = false
-				} else {
-					m.DiffLoading = true
-				}
+				m.DiffErr = msg.Err
+				m.leftPanel.Loading = false
 			}
 			return m, tea.Batch(spinCmd, composeCmd)
 		}
+		m.DiffErr = nil
 		// Validate SHA if HeadRefOID is available.
 		if m.Summary.HeadRefOID != "" && msg.Diff.HeadSHA != "" && msg.Diff.HeadSHA != m.Summary.HeadRefOID {
 			// SHA mismatch — discard and refetch.
@@ -665,8 +665,13 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 	case cmds.CommitDiffLoaded:
 		m.DiffLoading = false
 		if msg.Err != nil {
+			if m.Diff == nil {
+				m.DiffErr = msg.Err
+				m.leftPanel.Loading = false
+			}
 			return m, tea.Batch(spinCmd, composeCmd)
 		}
+		m.DiffErr = nil
 		m.Diff = &msg.Diff
 		m.buildNavigableIndex()
 		m.invalidateDiffCursor()

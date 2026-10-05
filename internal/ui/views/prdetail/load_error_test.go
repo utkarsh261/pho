@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/utkarsh261/pho/internal/application/cmds"
+	diffmodel "github.com/utkarsh261/pho/internal/diff/model"
 	"github.com/utkarsh261/pho/internal/domain"
 )
 
@@ -122,5 +123,45 @@ func TestPRDetailLoadedBackfillsEmptySummary(t *testing.T) {
 	m, _ = m.Update(cmds.PRDetailLoaded{Repo: "owner/repo", Number: 7, Detail: detail})
 	if m.Summary.Title != "Local title" || m.Summary.Author != "me" || m.Summary.State != domain.PRStateClosed {
 		t.Errorf("expected populated summary untouched, got %+v", m.Summary)
+	}
+}
+
+func TestDiffLoadErrorShowsMessageInsteadOfSpinning(t *testing.T) {
+	t.Parallel()
+	m := makePRDetail(120, 40, nil, nil)
+	m.PRService = &prServiceStub{}
+	m.DiffLoading = true
+	m.leftPanel.Loading = true
+	m, _ = m.Update(cmds.DiffLoaded{Repo: "owner/repo", Number: 1, Err: errors.New("fetch raw diff: boom")})
+	if m.DiffLoading || m.leftPanel.Loading {
+		t.Fatal("diff and file list must stop loading after an error")
+	}
+	if m.DiffErr == nil {
+		t.Fatal("expected DiffErr to be set")
+	}
+	out := strings.Join(m.renderDiffTab(0, 10, 100), "\n")
+	for _, want := range []string{"Could not load the diff", "boom", "R refresh"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("diff tab missing %q:\n%s", want, out)
+		}
+	}
+
+	m.activeTab = TabDiff
+	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("R")})
+	if cmd == nil || m.DiffErr != nil || !m.DiffLoading {
+		t.Fatalf("R must clear the error and reload (err=%v loading=%v)", m.DiffErr, m.DiffLoading)
+	}
+}
+
+func TestDiffRefreshErrorKeepsShownDiff(t *testing.T) {
+	t.Parallel()
+	m := makePRDetail(120, 40, nil, nil)
+	m.PRService = &prServiceStub{}
+	m, _ = m.Update(cmds.DiffLoaded{Repo: "owner/repo", Number: 1, Diff: diffmodel.DiffModel{
+		Files: []diffmodel.DiffFile{{NewPath: "a.go", OldPath: "a.go", Status: "modified"}},
+	}})
+	m, _ = m.Update(cmds.DiffLoaded{Repo: "owner/repo", Number: 1, Err: errors.New("offline")})
+	if m.Diff == nil || m.DiffErr != nil {
+		t.Fatalf("a failed refresh must keep the shown diff (diff=%v err=%v)", m.Diff != nil, m.DiffErr)
 	}
 }

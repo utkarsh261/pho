@@ -18,6 +18,7 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		switch msg.String() {
 		case "r":
 			m.LoadErr = nil
+			m.DiffErr = nil
 			m.DetailLoading = true
 			m.DiffLoading = true
 			m.leftPanel.Loading = true

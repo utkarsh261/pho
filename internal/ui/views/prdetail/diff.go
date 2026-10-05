@@ -54,6 +54,9 @@ func (m *PRDetailModel) diffSectionRowCount() int {
 		if m.DiffLoading {
 			return 1 // "Loading diff…" placeholder
 		}
+		if m.DiffErr != nil {
+			return diffErrRows
+		}
 		return 0 // not loaded, not loading — truly absent
 	}
 	if len(m.Diff.Files) == 0 {
@@ -89,6 +92,10 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 	n := localEnd - localStart
 	out := make([]string, n)
 
+	if m.Diff == nil && !m.DiffLoading && m.DiffErr != nil {
+		copy(out, m.diffErrLines(contentWidth)[min(localStart, diffErrRows):])
+		return out
+	}
 	if m.Diff == nil || len(m.Diff.Files) == 0 {
 		if n > 0 {
 			if m.DiffLoading && m.Diff == nil {
@@ -336,6 +343,23 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 	}
 
 	return out
+}
+
+// diffErrRows is the height of the diff load-error placeholder.
+const diffErrRows = 3
+
+// diffErrLines renders the diff load-error placeholder: a title, the error
+// and the refresh hint, each cut to the content width.
+func (m *PRDetailModel) diffErrLines(contentWidth int) []string {
+	cw := max(contentWidth, 1)
+	title, hint := "⚠ Could not load the diff", "R refresh"
+	msg := truncateText(strings.ReplaceAll(m.DiffErr.Error(), "\n", " "), cw)
+	if m.theme != nil {
+		title = lipgloss.NewStyle().Foreground(m.theme.Error).Bold(true).Render(title)
+		msg = m.theme.MutedTxt.Render(msg)
+		hint = m.theme.MutedTxt.Render(hint)
+	}
+	return []string{title, msg, hint}
 }
 
 // clipForRender cuts lines far wider than the viewport before they are
