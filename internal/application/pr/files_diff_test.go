@@ -224,7 +224,7 @@ func TestLoadDiffFallsBackToFilesWhenTooLarge(t *testing.T) {
 		srv := fallbackServer(t, prefix, files)
 		svc := &PRService{
 			Cache: newTestCoordinator(t),
-			REST:  &rest.Client{BaseURL: srv.URL + prefix, Token: "tok"},
+			REST:  &rest.Client{BaseURL: srv.URL + prefix, Token: "tok", HTTPClient: srv.Client()},
 			Owner: "owner", Repo: "repo",
 			Log: pholog.NewNop(), Now: func() time.Time { return frozenNow },
 		}
@@ -257,7 +257,7 @@ func TestLoadDiffFallbackFailureKeepsError(t *testing.T) {
 	defer srv.Close()
 	svc := &PRService{
 		Cache: newTestCoordinator(t),
-		REST:  &rest.Client{BaseURL: srv.URL, Token: "tok"},
+		REST:  &rest.Client{BaseURL: srv.URL, Token: "tok", HTTPClient: srv.Client()},
 		Owner: "owner", Repo: "repo",
 		Log: pholog.NewNop(), Now: func() time.Time { return frozenNow },
 	}
