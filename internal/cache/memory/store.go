@@ -64,6 +64,19 @@ func (s *JSONStore) DeleteByRepo(_ context.Context, host, repo string) error {
 	return nil
 }
 
+// DeleteOtherDiffs removes a PR's diff entries except keepKey.
+func (s *JSONStore) DeleteOtherDiffs(_ context.Context, host, repo string, prNumber int, keepKey string) error {
+	s.inner.DeleteIf(func(key string, metaWrap Meta[domain.CacheMeta]) bool {
+		meta := metaWrap.Data
+		return key != keepKey && meta.Kind == diffKind && meta.Host == host && meta.Repo == repo &&
+			meta.PRNumber != nil && *meta.PRNumber == prNumber
+	})
+	return nil
+}
+
+// diffKind is the cache kind of PR and commit diffs.
+const diffKind = "diff"
+
 func groupForKind(kind string) Group {
 	switch kind {
 	case "preview":

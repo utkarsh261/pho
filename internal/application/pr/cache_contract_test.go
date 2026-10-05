@@ -238,6 +238,9 @@ func (s *brokenStore) Delete(context.Context, string) error { return nil }
 func (s *brokenStore) DeleteByRepo(context.Context, string, string) error {
 	return nil
 }
+func (s *brokenStore) DeleteOtherDiffs(context.Context, string, string, int, string) error {
+	return errors.New("disk full")
+}
 
 func TestCacheContract_WriteFailureDoesNotFailLoad(t *testing.T) {
 	t.Parallel()

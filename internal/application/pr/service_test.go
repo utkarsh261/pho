@@ -1332,6 +1332,9 @@ func (failingStore) Delete(context.Context, string) error                     { 
 func (failingStore) DeleteByRepo(context.Context, string, string) error {
 	return errors.New("disk full")
 }
+func (failingStore) DeleteOtherDiffs(context.Context, string, string, int, string) error {
+	return errors.New("disk full")
+}
 
 func TestUpdateBranchRoutesToHostSpecificRESTClient(t *testing.T) {
 	t.Parallel()

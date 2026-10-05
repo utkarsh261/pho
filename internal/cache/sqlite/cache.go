@@ -257,6 +257,33 @@ func (c *Cache) DeleteByRepo(ctx context.Context, host, repo string) error {
 	return nil
 }
 
+// DeleteOtherDiffs removes a PR's diff entries except keepKey. Commit diffs
+// have no PR number and are never matched.
+func (c *Cache) DeleteOtherDiffs(ctx context.Context, host, repo string, prNumber int, keepKey string) error {
+	_, err := c.db.ExecContext(ctx,
+		`DELETE FROM cache_entries WHERE kind = 'diff' AND host = ? AND repo = ? AND pr_number = ? AND key <> ?`,
+		host, repo, prNumber, keepKey)
+	if err != nil {
+		return fmt.Errorf("sqlite cache delete other diffs %s/%s#%d: %w", host, repo, prNumber, err)
+	}
+	return nil
+}
+
+// DeleteKeyPrefixes removes every entry whose key starts with one of the
+// prefixes, e.g. entries in a cache format pho no longer reads.
+func (c *Cache) DeleteKeyPrefixes(ctx context.Context, prefixes ...string) (int64, error) {
+	var total int64
+	for _, p := range prefixes {
+		res, err := c.db.ExecContext(ctx, `DELETE FROM cache_entries WHERE substr(key, 1, ?) = ?`, len(p), p)
+		if err != nil {
+			return total, fmt.Errorf("sqlite cache delete prefix %q: %w", p, err)
+		}
+		n, _ := res.RowsAffected()
+		total += n
+	}
+	return total, nil
+}
+
 // LoadViewedHistory returns the persisted viewed PR records for a repository,
 // ordered by most recently viewed first.
 func (c *Cache) LoadViewedHistory(ctx context.Context, repo domain.Repository) ([]domain.ViewedPRRecord, error) {
