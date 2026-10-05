@@ -1276,6 +1276,7 @@ func (m *Model) syncPanels() {
 
 func (m *Model) syncStatus() {
 	m.status.Focus = m.focus
+	m.status.Mode = ""
 	m.status.Loading = len(m.state.Jobs.InFlight) > 0 || m.state.Dashboard.PreviewLoading
 	m.status.Freshness = m.state.Dashboard.FreshnessByTab[m.state.Dashboard.ActiveTab]
 	m.status.Errors = m.state.Errors
@@ -1289,6 +1290,7 @@ func (m *Model) syncStatus() {
 		m.status.HintOverride = "Tab: Next field   ←/→: Change option   Ctrl+S: Create PR   Esc: Cancel"
 	} else if m.currentView() == domain.PrimaryViewPRDetail && m.prDetail != nil {
 		m.status.HintOverride = m.prDetail.StatusHint()
+		m.status.Mode = m.prDetail.StatusMode()
 	} else if m.currentView() == domain.PrimaryViewCommitDetail && m.commitDetail != nil {
 		m.status.HintOverride = m.commitDetail.StatusHint()
 	} else {

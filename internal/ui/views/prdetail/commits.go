@@ -21,10 +21,48 @@ func (m *PRDetailModel) commitsSectionRowCount() int {
 	return len(m.commits)*3 - 1
 }
 
-// renderCommitsTab renders the Commits tab content.
+// commitGraphWidth is the width of the git-graph column drawn left of each commit.
+const commitGraphWidth = 3
+
+// renderCommitsTab renders the Commits tab content as a vertical timeline:
+// a "●" node on each commit's headline row joined by "│" down to the next.
 // availW is the available content width (innerW - 1, accounting for the left-pad
 // space that renderRightViewport adds to every line).
 func (m *PRDetailModel) renderCommitsTab(scroll, contentH, availW int) []string {
+	if m.commitsLoading || len(m.commits) == 0 || availW <= commitGraphWidth+10 {
+		return m.renderCommitRows(scroll, contentH, availW)
+	}
+	rows := m.renderCommitRows(scroll, contentH, availW-commitGraphWidth)
+
+	th := m.theme
+	if th == nil {
+		th = theme.Default()
+	}
+	rail := th.FaintTxt
+	node := th.DimTxt
+	for i := range rows {
+		r := scroll + i
+		idx, off := r/3, r%3
+		var g string
+		switch {
+		case idx >= len(m.commits):
+			g = "   "
+		case off == 0 && idx == m.commitCursor:
+			g = " " + th.PrimaryTxt.Render("◉") + " "
+		case off == 0:
+			g = " " + node.Render("●") + " "
+		case idx < len(m.commits)-1:
+			g = " " + rail.Render("│") + " "
+		default:
+			g = "   "
+		}
+		rows[i] = g + rows[i]
+	}
+	return rows
+}
+
+// renderCommitRows renders the commit rows (headline + metadata + gap) at width availW.
+func (m *PRDetailModel) renderCommitRows(scroll, contentH, availW int) []string {
 	out := make([]string, contentH)
 	cw := max(availW, 1)
 
@@ -90,19 +128,16 @@ func (m *PRDetailModel) renderCommitsTab(scroll, contentH, availW int) []string 
 		relTime := relativeTime(c.CommittedAt)
 
 		if isSelected {
-			line1 := shortSHA + gap + c.MessageHeadline
-			line1 = truncateText(line1, cw)
+			headline := lipgloss.NewStyle().Bold(true).Foreground(th.TextBright).
+				Render(truncateText(c.MessageHeadline, max(cw-shaW-gapW, 1)))
+			line1 := theme.FillBg(th.Highlight, cw, shaStyled+gap+headline)
 
-			line2 := author
-			padding := cw - lipgloss.Width(line2) - lipgloss.Width(relTime)
-			if padding > 0 {
-				line2 += strings.Repeat(" ", padding)
-			}
-			line2 += relTime
+			authorStyled := th.DimTxt.Render(author)
+			relStyled := th.MutedTxt.Render(relTime)
+			padding := max(cw-lipgloss.Width(authorStyled)-lipgloss.Width(relStyled), 0)
+			line2 := theme.FillBg(th.Highlight, cw, authorStyled+strings.Repeat(" ", padding)+relStyled)
 
-			fullRow := line1 + "\n" + line2
-			rendered := th.BoxSelected.Width(cw).Render(fullRow)
-			parts := strings.Split(rendered, "\n")
+			parts := []string{line1, line2}
 			for pi, p := range parts {
 				if outIdx >= contentH {
 					break
@@ -115,7 +150,7 @@ func (m *PRDetailModel) renderCommitsTab(scroll, contentH, availW int) []string 
 			}
 		} else {
 			authorStyle := th.BoxPRAuthor
-			mutedStyle := lipgloss.NewStyle().Foreground(th.Muted)
+			mutedStyle := th.MutedTxt
 
 			globalRow1 := rowStart - localStart
 			if globalRow1 >= 0 && globalRow1 < contentH {

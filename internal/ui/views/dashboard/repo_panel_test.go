@@ -23,14 +23,14 @@ func TestRepoPanelRenderActiveAndCursor(t *testing.T) {
 	if len(lines) < 7 {
 		t.Fatalf("expected at least 7 lines, got %d", len(lines))
 	}
-	// Lines 0=header, 1=blank spacing, 2=underline, 3=blank. Repos start at line 4.
-	// ActiveIndex=2 → third repo → line 6
-	// Cursor=3 → fourth repo → line 7
-	if !strings.Contains(lines[6], "▶") {
-		t.Fatalf("expected active marker on row 2, got %q", lines[6])
+	// Lines 0=header, 1=blank spacing. Repos start at line 2.
+	// ActiveIndex=2 → third repo → line 4
+	// Cursor=3 → fourth repo → line 5
+	if !strings.Contains(lines[4], "▶") {
+		t.Fatalf("expected active marker on row 2, got %q", lines[4])
 	}
-	if !strings.Contains(lines[7], "▌") {
-		t.Fatalf("expected cursor highlight on row 3, got %q", lines[7])
+	if !strings.Contains(lines[5], "▌") {
+		t.Fatalf("expected cursor highlight on row 3, got %q", lines[5])
 	}
 }
 

@@ -12,8 +12,8 @@ var panelHeadBorder = lipgloss.Border{
 	Bottom:      "─",
 	Left:        "│",
 	Right:       "│",
-	TopLeft:     "┌",
-	TopRight:    "┐",
+	TopLeft:     "╭",
+	TopRight:    "╮",
 	BottomLeft:  "├",
 	BottomRight: "┤",
 }

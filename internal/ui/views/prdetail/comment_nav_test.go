@@ -381,7 +381,7 @@ func TestCommentEntryStartRowsSyncWithCommentLines(t *testing.T) {
 				}
 				// The line after the border top should contain "@login".
 				line := descStripANSI(allLines[headerRow])
-				want := "@" + entries[i].login
+				want := entries[i].login
 				if line == "" || !containsStr(line, want) {
 					t.Errorf("entry %d headerRow=%d: line=%q does not contain %q", i, headerRow, line, want)
 				}

@@ -46,10 +46,10 @@ func (m *PRDetailModel) rightPanelWidth() int {
 }
 
 // headerContentRows returns the number of text rows inside the header box
-// (excluding borders): one, plus a second when the reviewer strip renders.
+// (excluding borders): title + meta line for a PR, a single line for a commit.
 func (m *PRDetailModel) headerContentRows() int {
-	if !m.CommitMode && m.renderReviewerStrip(max(m.Width-2, 1)) != "" {
-		return 2
+	if !m.CommitMode {
+		return 2 // title + meta line
 	}
 	return 1
 }
@@ -189,6 +189,10 @@ type PRDetailModel struct {
 	inlineDraftStale  bool
 	confirmDiscardAll bool
 	draftCovered      map[hunkLineKey]bool // precomputed for diff rendering
+	// wordDiffs caches intraLineChanges per hunk for wordDiffsFor; it is
+	// rebuilt whenever the diff model is replaced.
+	wordDiffs    map[*model.DiffHunk]map[int]byteRange
+	wordDiffsFor *model.DiffModel
 
 	// Diff indices (rebuilt when Diff changes)
 	diffLineIndex   map[string]map[int]string            // path → line → raw text

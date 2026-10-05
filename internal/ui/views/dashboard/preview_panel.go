@@ -177,14 +177,10 @@ func (m *PreviewPanelModel) View() string {
 			return padStyle.Render(renderBlock([]string{msg}, innerW, m.Height))
 		}
 		header := "PREVIEW"
+		underline := strings.Repeat("─", innerW)
 		if m.theme != nil {
-			header = m.theme.Bold.Render(m.theme.MutedTxt.Render(header))
-		}
-		underline := ""
-		if m.theme != nil {
-			underline = m.theme.Divider.Render(strings.Repeat("─", innerW))
-		} else {
-			underline = strings.Repeat("─", innerW)
+			header = m.theme.Header.Render("Preview")
+			underline = ""
 		}
 		empty := "Select a PR to preview"
 		if m.theme != nil {
@@ -317,7 +313,7 @@ func (m *PreviewPanelModel) buildLines() []string {
 
 func (m *PreviewPanelModel) authorStateLine(snap domain.PRPreviewSnapshot) string {
 	if m.theme != nil {
-		return fmt.Sprintf("%s %s | %s %s",
+		return fmt.Sprintf("%s %s   %s %s",
 			m.theme.MutedTxt.Render("Author:"), snap.Author,
 			m.theme.MutedTxt.Render("State:"), stateLabel(snap.State, snap.IsDraft),
 		)
@@ -327,7 +323,7 @@ func (m *PreviewPanelModel) authorStateLine(snap domain.PRPreviewSnapshot) strin
 
 func (m *PreviewPanelModel) ciReviewLine(snap domain.PRPreviewSnapshot) string {
 	if m.theme != nil {
-		return fmt.Sprintf("%s %s | %s %s",
+		return fmt.Sprintf("%s %s   %s %s",
 			m.theme.MutedTxt.Render("CI:"), ciLabel(snap.CIStatus),
 			m.theme.MutedTxt.Render("Review:"), reviewLabel(snap.ReviewDecision, snap.IsDraft),
 		)

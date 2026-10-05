@@ -1,8 +1,8 @@
 
-╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
-Comments
+2 comments
+
 ╭──────────────────────────────────────────────────────╮
-│✓ Resolved · 2 · handlers.go:103 · @bob [Enter: Expand│
-│| r: Reply | m: Unresolve]                            │
+│✓ Resolved thread on handlers.go:103 · 2 comments · by│
+│bob                                                   │
 │                                                      │
 ╰──────────────────────────────────────────────────────╯

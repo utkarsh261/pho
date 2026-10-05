@@ -5,6 +5,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/utkarsh261/pho/internal/domain"
+	"github.com/utkarsh261/pho/internal/ui/theme"
 )
 
 func (m *Model) renderDashboard() string {
@@ -56,7 +57,7 @@ func (m *Model) composeBody(height int) string {
 			boxed[i] = col.view
 			continue
 		}
-		boxed[i] = buildBox(col.view, col.contentW, height, col.focus == m.focus)
+		boxed[i] = buildBox(m.theme, col.view, col.contentW, height, col.focus == m.focus)
 	}
 
 	// Join panels side-by-side.
@@ -69,11 +70,11 @@ func (m *Model) composeBody(height int) string {
 func (m *Model) repoColumnView(height int) string {
 	logoH := repoLogoPanelHeight(m.layout.Current.Repo, height)
 	if logoH == 0 {
-		return buildBox(m.repoPanel.View(), m.layout.Current.Repo, height, m.focus == domain.FocusRepoPanel)
+		return buildBox(m.theme, m.repoPanel.View(), m.layout.Current.Repo, height, m.focus == domain.FocusRepoPanel)
 	}
 	repoH := height - logoH
-	logo := buildBox(m.repoLogoView(m.layout.Current.Repo, logoH-2), m.layout.Current.Repo, logoH, false)
-	repos := buildBox(m.repoPanel.View(), m.layout.Current.Repo, repoH, m.focus == domain.FocusRepoPanel)
+	logo := buildBox(m.theme, m.repoLogoView(m.layout.Current.Repo, logoH-2), m.layout.Current.Repo, logoH, false)
+	repos := buildBox(m.theme, m.repoPanel.View(), m.layout.Current.Repo, repoH, m.focus == domain.FocusRepoPanel)
 	return logo + "\n" + repos
 }
 
@@ -159,10 +160,13 @@ func maxLineWidth(lines []string) int {
 // Returns a string that is (contentW + 3) chars wide:
 //
 //	1 left border + contentW + 1 right border + 1 gap space.
-func buildBox(view string, contentW, height int, focused bool) string {
-	bc := lipgloss.Color("#7C3AED") // TODO: take from theme.go
+func buildBox(th *theme.Theme, view string, contentW, height int, focused bool) string {
+	if th == nil {
+		th = theme.Default()
+	}
+	bc := th.Primary
 	if !focused {
-		bc = lipgloss.Color("#374151")
+		bc = th.Border
 	}
 	border := lipgloss.NewStyle().Foreground(bc).Render
 
@@ -171,8 +175,8 @@ func buildBox(view string, contentW, height int, focused bool) string {
 	lines := make([]string, 0, height)
 
 	// TODO: this is hacky af, fix it
-	// Top: ┌───┐
-	lines = append(lines, border("┌"+strings.Repeat("─", contentW)+"┐"))
+	// Top: ╭───╮
+	lines = append(lines, border("╭"+strings.Repeat("─", contentW)+"╮"))
 
 	contentLines := strings.Split(view, "\n")
 	for i := range contentH {
@@ -184,8 +188,8 @@ func buildBox(view string, contentW, height int, focused bool) string {
 		lines = append(lines, border("│")+line+border("│"))
 	}
 
-	// Bottom: └───┘
-	lines = append(lines, border("└"+strings.Repeat("─", contentW)+"┘"))
+	// Bottom: ╰───╯
+	lines = append(lines, border("╰"+strings.Repeat("─", contentW)+"╯"))
 
 	// Append 1-char gap to every line (including last panel for symmetry).
 	box := strings.Join(lines, "\n")

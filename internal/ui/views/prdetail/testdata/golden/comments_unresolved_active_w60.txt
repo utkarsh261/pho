@@ -1,11 +1,11 @@
 
-╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
-Comments
+1 comment  ·  ● 1 unresolved
+
 ╭──────────────────────────────────────────────────────╮
-│@utkarsh261 · Jun 03   [Enter | r: Reply | m: Resolve]│
+│● utkarsh261  commented · Jun 03                      │
 │                                                      │
 │handlers.go:103                                       │
-│                                                      │
+│ 103 │                                                │
 │                                                      │
 │test                                                  │
 │                                                      │

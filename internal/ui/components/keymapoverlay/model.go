@@ -206,17 +206,25 @@ func (m Model) contentLinesThemed(innerW int) []string {
 	lines = append(lines, title)
 	lines = append(lines, th.BoxDiv.Render(strings.Repeat("─", innerW)))
 
+	// Align every description in one column: right-align keys to the widest key.
+	keyColW := 0
+	for _, group := range m.Groups {
+		for _, b := range group.Bindings {
+			keyColW = max(keyColW, lipgloss.Width(b.Key))
+		}
+	}
+
 	for gi, group := range m.Groups {
 		if gi > 0 {
 			lines = append(lines, "")
 		}
 		// Category header
-		header := th.Bold.Render(group.Name)
+		header := th.KeymapHeader.Render(group.Name)
 		lines = append(lines, header)
 		lines = append(lines, th.BoxDiv.Render(strings.Repeat("─", innerW)))
 
 		for _, b := range group.Bindings {
-			keyStr := th.Keycap.Render(fmt.Sprintf(" %s ", b.Key))
+			keyStr := th.Keycap.Render(fmt.Sprintf(" %*s ", keyColW, b.Key))
 			// Calculate remaining width for description
 			keyW := lipgloss.Width(keyStr)
 			descBudget := innerW - keyW - 2 // 2 for spacing

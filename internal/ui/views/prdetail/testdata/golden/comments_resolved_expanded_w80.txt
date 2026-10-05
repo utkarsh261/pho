@@ -1,16 +1,15 @@
 
-╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
-Comments
+2 comments
+
 ╭──────────────────────────────╮
-│@utkarsh261 · Jun 03 ·        │
-│Resolved ✓ by @bob            │
+│● utkarsh261  commented       │
 │                              │
 │handlers.go:103               │
-│                              │
+│ 103 │                        │
 │                              │
 │test                          │
 │                              │
-│  @utkarsh261 · Jun 04        │
+│  ● utkarsh261  replied       │
 │                              │
 │  test inline                 │
 │                              │

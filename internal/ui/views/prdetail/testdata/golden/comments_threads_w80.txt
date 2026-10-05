@@ -1,15 +1,15 @@
 
-╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
-Comments
+2 comments  ·  ● 1 unresolved
+
 ╭──────────────────────────────╮
-│@alice · Mar 10 2024          │
+│● alice  commented            │
 │                              │
 │a.go:5                        │
-│                              │
+│   5 │                        │
 │                              │
 │Should we rename this?        │
 │                              │
-│  @bob · Mar 11 2024          │
+│  ● bob  replied · Mar 11 2024│
 │                              │
 │  I think handleErr is        │
 │  clearer.                    │

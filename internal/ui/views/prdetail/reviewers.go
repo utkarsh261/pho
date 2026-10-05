@@ -112,16 +112,36 @@ func normalizeReviewerState(state string) string {
 // renderReviewerStrip renders the "Reviewers  ✓ @alice  ! @dave" header line,
 // dropping tail badges (with a "+N") until it fits width. Returns "" when
 // there is nothing to show.
-func (m *PRDetailModel) renderReviewerStrip(width int) string {
+// renderHeaderReviewers renders the reviewer strip for the header's meta line,
+// where space is shared with author and state. It prefers showing at least one
+// badge: when the labelled strip can only fit "Reviewers  +N", it drops the
+// label instead, and only falls back to the count when no badge fits at all.
+func (m *PRDetailModel) renderHeaderReviewers(width int) string {
+	line, shown := m.reviewerStrip(width, true)
+	if shown == 0 {
+		if bare, n := m.reviewerStrip(width, false); n > 0 {
+			return bare
+		}
+	}
+	return line
+}
+
+// reviewerStrip renders as many reviewer badges as fit in width, with a "+N"
+// overflow marker and an optional "Reviewers" label. It returns the line and
+// how many badges it shows; "" when nothing fits.
+func (m *PRDetailModel) reviewerStrip(width int, withLabel bool) (string, int) {
 	badges := m.reviewerSummaries()
 	if len(badges) == 0 || width <= 0 {
-		return ""
+		return "", 0
 	}
 	th := m.theme
 	if th == nil {
 		th = theme.Default()
 	}
-	label := th.MutedTxt.Render("Reviewers")
+	prefix := ""
+	if withLabel {
+		prefix = th.MutedTxt.Render("Reviewers") + "  "
+	}
 	segments := make([]string, len(badges))
 	for i, b := range badges {
 		segments[i] = renderReviewerBadge(th, b)
@@ -131,12 +151,12 @@ func (m *PRDetailModel) renderReviewerStrip(width int) string {
 		if shown < len(segments) {
 			parts = append(parts, th.MutedTxt.Render(fmt.Sprintf("+%d", len(segments)-shown)))
 		}
-		line := label + "  " + strings.Join(parts, "  ")
+		line := prefix + strings.Join(parts, "  ")
 		if lipgloss.Width(line) <= width {
-			return line
+			return line, shown
 		}
 	}
-	return ""
+	return "", 0
 }
 
 func renderReviewerBadge(th *theme.Theme, b reviewerBadge) string {

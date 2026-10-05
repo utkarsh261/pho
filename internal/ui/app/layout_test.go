@@ -128,15 +128,15 @@ func TestAppRenderFullUIRender(t *testing.T) {
 		emptyBoxW = 20
 		emptyBoxH = 5
 	)
-	gotEmpty := buildBox("", emptyBoxW, emptyBoxH, false)
-	wantEmpty := "┌────────────────────┐ \n│                    │ \n│                    │ \n│                    │ \n└────────────────────┘ "
+	gotEmpty := buildBox(nil, "", emptyBoxW, emptyBoxH, false)
+	wantEmpty := "╭────────────────────╮ \n│                    │ \n│                    │ \n│                    │ \n╰────────────────────╯ "
 	if gotEmpty != wantEmpty {
 		t.Fatalf("buildBox empty mismatch\nwant: %q\n got: %q", wantEmpty, gotEmpty)
 	}
 
 	// --- buildBox: partially filled (2 content lines, 3 content rows total) ---
-	gotPartial := buildBox("Hello\nWorld", emptyBoxW, emptyBoxH, true)
-	wantPartial := "┌────────────────────┐ \n│Hello               │ \n│World               │ \n│                    │ \n└────────────────────┘ "
+	gotPartial := buildBox(nil, "Hello\nWorld", emptyBoxW, emptyBoxH, true)
+	wantPartial := "╭────────────────────╮ \n│Hello               │ \n│World               │ \n│                    │ \n╰────────────────────╯ "
 	if gotPartial != wantPartial {
 		t.Fatalf("buildBox partial mismatch\nwant: %q\n got: %q", wantPartial, gotPartial)
 	}
@@ -164,8 +164,8 @@ func TestAppRenderFullUIRender(t *testing.T) {
 	}
 
 	// All three panel top-borders on line 0.
-	if !strings.Contains(bodyLines[0], "┌") {
-		t.Fatalf("renderDashboard line 0: expected ┌, got %q", bodyLines[0])
+	if !strings.Contains(bodyLines[0], "╭") {
+		t.Fatalf("renderDashboard line 0: expected ╭, got %q", bodyLines[0])
 	}
 
 	// Every panel row must have consistent per-line width — each row of the
@@ -210,7 +210,7 @@ func TestDashboardRepoColumnRendersSeparateLogoPanel(t *testing.T) {
 	if !strings.Contains(body, "█████╔╝") {
 		t.Fatalf("expected approved block logo treatment, got:\n%s", body)
 	}
-	if !strings.Contains(body, "▸ REPOSITORIES") {
+	if !strings.Contains(body, "Repositories") {
 		t.Fatalf("expected repo list panel below logo panel, got:\n%s", body)
 	}
 }
@@ -234,9 +234,9 @@ func TestFocusBorderUsesPrimaryColor(t *testing.T) {
 	if len(lines) == 0 {
 		t.Fatal("expected non-empty output")
 	}
-	// The first line starts with ┌ (top-left corner of the focused panel's box).
-	if !strings.HasPrefix(lines[0], "┌") {
-		t.Fatalf("expected focused panel to start with ┌, got line: %q", lines[0])
+	// The first line starts with ╭ (top-left corner of the focused panel's box).
+	if !strings.HasPrefix(lines[0], "╭") {
+		t.Fatalf("expected focused panel to start with ╭, got line: %q", lines[0])
 	}
 
 	// Cycle focus to PR panel.
@@ -253,5 +253,30 @@ func TestFocusBorderUsesPrimaryColor(t *testing.T) {
 	}
 	if !strings.HasPrefix(lines[1], "│") {
 		t.Fatalf("expected unfocused repo panel border │, got line: %q", lines[1])
+	}
+}
+
+// TestDashboardFillsTerminalExactly sweeps terminal sizes and checks that the
+// dashboard (panels + status bar) never overflows the terminal in either axis.
+func TestDashboardFillsTerminalExactly(t *testing.T) {
+	t.Parallel()
+	repo := testutil.Repo("acme/alpha")
+	snap := dashboardSnapshot(repo,
+		pr(repo.FullName, 1, "Fix login"),
+		pr(repo.FullName, 2, strings.Repeat("A very long pull request title ", 6)))
+	for _, size := range [][2]int{{60, 20}, {80, 24}, {100, 30}, {120, 40}, {200, 55}} {
+		m := newTestModel([]domain.Repository{repo}, map[string]domain.DashboardSnapshot{repo.FullName: snap})
+		_, _ = m.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
+		_, _ = m.Update(cmdsReposDiscovered([]domain.Repository{repo}))
+		_, _ = m.Update(cmdsDashboardLoaded(repo.FullName, snap, false, nil))
+		view := m.View()
+		if h := lipgloss.Height(view); h > size[1] {
+			t.Errorf("%dx%d: view height %d exceeds terminal", size[0], size[1], h)
+		}
+		for i, line := range strings.Split(view, "\n") {
+			if w := lipgloss.Width(line); w > size[0] {
+				t.Errorf("%dx%d: line %d width %d exceeds terminal", size[0], size[1], i, w)
+			}
+		}
 	}
 }

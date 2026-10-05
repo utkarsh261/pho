@@ -290,9 +290,9 @@ func TestRenderDiffSectionLinesFileHeader(t *testing.T) {
 	if strings.TrimSpace(plainText(lines[0])) != "" {
 		t.Errorf("expected blank row at row 0, got %q", lines[0])
 	}
-	// row 2: file header bar contains filename
-	if !strings.Contains(plainText(lines[2]), "cmd/main.go") {
-		t.Errorf("expected file header bar at row 2 to contain 'cmd/main.go', got %q", plainText(lines[2]))
+	// row 1: file header bar contains filename
+	if !strings.Contains(plainText(lines[1]), "cmd/main.go") {
+		t.Errorf("expected file header bar at row 1 to contain 'cmd/main.go', got %q", plainText(lines[1]))
 	}
 }
 
@@ -342,16 +342,17 @@ func TestRenderDiffSectionLinesDiffLineRaw(t *testing.T) {
 	m.Diff = makeDiff(files)
 	m.DiffLoading = false
 
-	// rows: 0=blank, 1=separator, 2=file bar, 3=hunk header, 4="-gone", 5="+here"
+	// rows: 0=blank, 1=file bar, 2=blank, 3=hunk header, 4="-gone", 5="+here"
+	// (each diff line is prefixed by the line-number gutter)
 	lines := m.renderDiffSectionLines(0, f.DisplayRows, 80)
 
 	if len(lines) < 6 {
 		t.Fatalf("expected 6 rows, got %d: %v", len(lines), lines)
 	}
-	if plainText(lines[4]) != "-gone" {
+	if strings.TrimSpace(plainText(lines[4])) != "-gone" {
 		t.Errorf("expected '-gone' at row 4, got %q", lines[4])
 	}
-	if plainText(lines[5]) != "+here" {
+	if strings.TrimSpace(plainText(lines[5])) != "+here" {
 		t.Errorf("expected '+here' at row 5, got %q", lines[5])
 	}
 }
@@ -381,9 +382,9 @@ func TestRenderDiffSectionLinesMultipleFiles(t *testing.T) {
 	if len(lines) == 0 {
 		t.Fatal("expected rows for second file, got none")
 	}
-	// f2 row layout: 0=blank, 1=separator, 2=file bar with "beta.go"
-	if !strings.Contains(plainText(lines[2]), "beta.go") {
-		t.Errorf("expected 'beta.go' in file header bar at row 2, got %q", plainText(lines[2]))
+	// f2 row layout: 0=blank, 1=file bar with "beta.go", 2=blank
+	if !strings.Contains(plainText(lines[1]), "beta.go") {
+		t.Errorf("expected 'beta.go' in file header bar at row 1, got %q", plainText(lines[1]))
 	}
 }
 

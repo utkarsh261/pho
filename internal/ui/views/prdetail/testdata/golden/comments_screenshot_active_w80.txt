@@ -1,34 +1,30 @@
 
-╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
-Comments
+4 comments  ·  ● 2 unresolved
+
 ╭──────────────────────────────╮
-│@utkarsh261 · COMMENTED · Jun │
-│03                            │
+│● utkarsh261  reviewed        │
 │                              │
 │test latest                   │
 │                              │
 ╰──────────────────────────────╯
 ╭──────────────────────────────╮
-│@utkarsh261 · Jun 03          │
+│● utkarsh261  commented       │
 │                              │
 │internal/adapters/telegram/han│
-│dlers.go:103                  │
-│                              │
+│ 103 │                        │
 │                              │
 │test                          │
 │                              │
-│  @utkarsh261 · Jun 04 [Enter │
-│| r: Reply | m: Resolve]      │
+│  ● utkarsh261  replied       │
 │                              │
 │  test inline                 │
 │                              │
 ╰──────────────────────────────╯
 ╭──────────────────────────────╮
-│@utkarsh261 · Jun 03          │
+│● utkarsh261  commented       │
 │                              │
 │internal/adapters/telegram/han│
-│dlers.go:110                  │
-│                              │
+│ 110 │                        │
 │                              │
 │test new                      │
 │                              │

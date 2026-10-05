@@ -346,9 +346,11 @@ func (m *PRDetailModel) scrollHalfPageUp() {
 	}
 }
 
-// bodyHeight returns the available rows for the two-panel body.
+// bodyHeight returns the rows available to the two-panel body. It must match
+// what View draws (header box and an open compose pane excluded), or the file
+// and CI scroll math lets the cursor move onto rows that are not rendered.
 func (m *PRDetailModel) bodyHeight() int {
-	return max(1, m.Height-2) // subtract header + section buttons rows
+	return m.effectiveBodyH()
 }
 
 // ciVisibleRows returns the visible row count within the CI sub-area.
