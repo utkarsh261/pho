@@ -434,7 +434,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) View() string {
 	defer m.log.Timer("render root view", "view", string(m.currentView()))()
 	if m.state.Search.OverlayOpen {
-		return m.palette.ViewOver(m.renderDashboard())
+		body, status := m.renderDashboardParts()
+		return m.palette.ViewOverStatus(body, status)
 	}
 
 	var bg string

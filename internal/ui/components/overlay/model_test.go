@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 
 	"github.com/utkarsh261/pho/internal/domain"
 	"github.com/utkarsh261/pho/internal/ui/theme"
@@ -339,9 +341,15 @@ func TestOverlayFullUIRender(t *testing.T) {
 
 	view := m.View()
 
-	// Box borders: boxW = round(80*0.6) = 48, innerW = 46 dashes.
-	assertContains(t, view, "┌──────────────────────────────────────────────┐")
-	assertContains(t, view, "└──────────────────────────────────────────────┘")
+	// Box borders: boxW = round(80*0.6) = 48, with the title and the
+	// position set into the top border.
+	assertContains(t, view, "╭─ Go to ─")
+	assertContains(t, view, " 1/2 ─╮")
+	for _, line := range strings.Split(view, "\n") {
+		if strings.Contains(line, "╭") && lipgloss.Width(strings.TrimSpace(line)) != 48 {
+			t.Fatalf("top border width = %d, want 48: %q", lipgloss.Width(strings.TrimSpace(line)), line)
+		}
+	}
 
 	// Title is "Go to".
 	assertContains(t, view, "Go to")
@@ -440,11 +448,13 @@ func TestThemedBoxContent(t *testing.T) {
 // than normal rows — specifically that selected rows have a background (highlight) and that
 // selected vs normal rows produce distinct output.
 func TestSelectedRowHasBackground(t *testing.T) {
-	t.Setenv("CLICOLOR_FORCE", "1")
-	t.Setenv("COLORTERM", "truecolor")
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
 
+	th := theme.Default()
 	m := NewModel(nil)
-	m.SetTheme(theme.Default())
+	m.SetTheme(th)
 	m.width = 80
 	m.height = 24
 	m.SetResults([]domain.SearchResult{
@@ -454,9 +464,7 @@ func TestSelectedRowHasBackground(t *testing.T) {
 	// selectedIndex == 0 by default (Selected PR is first)
 
 	boxW, boxH := m.boxSize()
-	innerW := maxInt(0, boxW-2)
-	innerH := maxInt(0, boxH-2)
-	lines := m.bodyLines(innerW, innerH)
+	lines := strings.Split(m.renderBox(boxW, boxH), "\n")
 
 	var selectedLine, normalLine string
 	for _, l := range lines {
@@ -467,29 +475,18 @@ func TestSelectedRowHasBackground(t *testing.T) {
 			normalLine = l
 		}
 	}
-	if selectedLine == "" {
-		t.Fatal("could not find selected row in body lines")
+	if selectedLine == "" || normalLine == "" {
+		t.Fatalf("rows not found:\n%s", strings.Join(lines, "\n"))
 	}
-	if normalLine == "" {
-		t.Fatal("could not find normal row in body lines")
+	bg := lipgloss.NewStyle().Background(th.Highlight).Render("x")
+	bg = bg[:strings.Index(bg, "x")]
+	if !strings.Contains(selectedLine, bg) {
+		t.Error("selected row: missing highlight background")
 	}
-
-	// When ANSI is enabled, the two rows must have distinct styling sequences.
-	if strings.Contains(selectedLine, "\x1b[") || strings.Contains(normalLine, "\x1b[") {
-		// At least one has ANSI; they must differ (different bg = different escape sequences).
-		if selectedLine == normalLine {
-			t.Error("selected and normal rows have identical output — highlight not applied")
-		}
-		// Selected row must include bold (\\x1b[1m or combined bold code).
-		if !strings.Contains(selectedLine, "1m") && !strings.Contains(selectedLine, ";1;") && !strings.Contains(selectedLine, "1;") {
-			t.Error("selected row: expected bold in ANSI sequence")
-		}
-		// Both rows must have some background escape sequence.
-		if !strings.Contains(selectedLine, "\x1b[") {
-			t.Error("selected row: missing ANSI escape sequence")
-		}
-		if !strings.Contains(normalLine, "\x1b[") {
-			t.Error("normal row: missing ANSI escape sequence (dark bg not applied)")
-		}
+	if strings.Contains(normalLine, bg) {
+		t.Error("normal row: unexpected highlight background")
+	}
+	if !strings.Contains(selectedLine, "▎") || strings.Contains(normalLine, "▎") {
+		t.Error("only the selected row should carry the accent edge")
 	}
 }

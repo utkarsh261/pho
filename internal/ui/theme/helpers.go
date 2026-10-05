@@ -6,6 +6,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 )
 
@@ -123,4 +124,14 @@ func bgSequence(bg lipgloss.Color) string {
 	}
 	bgSeqCache.Store(key, seq)
 	return seq
+}
+
+// Backdrop renders line stripped of its colours in the faint foreground, for
+// content behind a modal box.
+func Backdrop(t *Theme, line string) string {
+	plain := ansi.Strip(line)
+	if t == nil || strings.TrimSpace(plain) == "" {
+		return plain
+	}
+	return lipgloss.NewStyle().Foreground(t.Faint).Render(plain)
 }
