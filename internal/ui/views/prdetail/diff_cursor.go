@@ -94,18 +94,25 @@ func (m *PRDetailModel) buildNavigableIndex() {
 	if m.Diff == nil {
 		return
 	}
-	for fi, f := range m.Diff.Files {
-		if f.IsBinary {
-			continue
-		}
-		for hi, h := range f.Hunks {
-			for li := range h.Lines {
-				cursor := diffCursorLine{FileIdx: fi, HunkIdx: hi, LineIdx: li}
-				m.navIdxMap[cursor] = len(m.navigableLines)
-				m.navigableLines = append(m.navigableLines, cursor)
-				m.navigableRows = append(m.navigableRows, m.diffLineToDisplayRow(fi, hi, li))
+	// Walk rows once; diffLineToDisplayRow per line is O(files) and made
+	// this quadratic on large diffs.
+	fileRow := 0
+	for fi := range m.Diff.Files {
+		f := &m.Diff.Files[fi]
+		if !f.IsBinary {
+			row := fileRow + diffFileHeaderRows
+			for hi, h := range f.Hunks {
+				row++ // hunk header
+				for li := range h.Lines {
+					cursor := diffCursorLine{FileIdx: fi, HunkIdx: hi, LineIdx: li}
+					m.navIdxMap[cursor] = len(m.navigableLines)
+					m.navigableLines = append(m.navigableLines, cursor)
+					m.navigableRows = append(m.navigableRows, row)
+					row++
+				}
 			}
 		}
+		fileRow += diffFileDisplayRows(f)
 	}
 }
 
