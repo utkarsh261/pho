@@ -241,7 +241,8 @@ func (m *PRDetailModel) rebuildDraftCovered() {
 		m.draftCovered = nil
 		return
 	}
-	m.ensureDiffIndices()
+	// No ensureDiffIndices here: lookups build the index on first use, so a
+	// PR without drafts never pays for it.
 	m.draftCovered = make(map[hunkLineKey]bool)
 	for _, d := range m.drafts {
 		fi, hi, endLI, ok := m.findDiffLineAnchor(d.Path, d.Line, d.Side)
@@ -349,23 +350,54 @@ func (m *PRDetailModel) headSHA() string {
 	return m.Summary.HeadRefOID
 }
 
-// ensureDiffIndices lazily rebuilds the diff indices when they are stale.
+// lineKey identifies a file line the way GitHub comments refer to it.
+type lineKey struct {
+	path string
+	line int32
+}
+
+// lineRef is a diff line's position: file, hunk and line index.
+type lineRef [3]int32
+
+// lineAnchors holds where a file line appears in the diff, per side.
+type lineAnchors struct {
+	side [2]lineRef // indexed by sideIndex
+	has  [2]bool
+	// last is the line seen last for this path:line on any side; its text
+	// is what lookupDiffLine returns.
+	last lineRef
+}
+
+// sideIndex maps an anchor side to lineAnchors.side, or -1.
+func sideIndex(side string) int {
+	switch side {
+	case "LEFT":
+		return 0
+	case "RIGHT":
+		return 1
+	}
+	return -1
+}
+
+// ensureDiffIndices builds the diff line lookup the first time it is needed
+// for the current diff, and drops one built for a previous diff.
 func (m *PRDetailModel) ensureDiffIndices() {
-	if m.Diff != nil && m.diffLineIndex == nil {
-		m.rebuildDiffIndices()
+	if m.diffAnchorsFor != m.Diff {
+		m.diffAnchors, m.diffAnchorsFor = nil, nil
+	}
+	if m.Diff != nil && m.diffAnchors == nil {
+		m.buildDiffIndices()
 	}
 }
 
-// rebuildDiffIndices rebuilds the O(1) lookup maps from m.Diff.
-// Call whenever m.Diff changes.
+// rebuildDiffIndices drops the lookup so it is rebuilt from m.Diff on next
+// use. Call whenever m.Diff changes.
 func (m *PRDetailModel) rebuildDiffIndices() {
-	if m.Diff == nil {
-		m.diffLineIndex = nil
-		m.diffAnchorIndex = nil
-		return
-	}
-	m.diffLineIndex = make(map[string]map[int]string)
-	m.diffAnchorIndex = make(map[string]map[int]map[string][3]int)
+	m.diffAnchors, m.diffAnchorsFor = nil, nil
+}
+
+func (m *PRDetailModel) buildDiffIndices() {
+	m.diffAnchors, m.diffAnchorsFor = make(map[lineKey]lineAnchors), m.Diff
 	for fi, f := range m.Diff.Files {
 		for hi, h := range f.Hunks {
 			for li, dl := range h.Lines {
@@ -373,16 +405,14 @@ func (m *PRDetailModel) rebuildDiffIndices() {
 					if a.Path == "" || a.Line == nil {
 						continue
 					}
-					lineNum := *a.Line
-					if m.diffLineIndex[a.Path] == nil {
-						m.diffLineIndex[a.Path] = make(map[int]string)
-						m.diffAnchorIndex[a.Path] = make(map[int]map[string][3]int)
+					k := lineKey{path: a.Path, line: int32(*a.Line)}
+					ref := lineRef{int32(fi), int32(hi), int32(li)}
+					e := m.diffAnchors[k]
+					e.last = ref
+					if s := sideIndex(a.Side); s >= 0 {
+						e.side[s], e.has[s] = ref, true
 					}
-					m.diffLineIndex[a.Path][lineNum] = dl.Raw
-					if m.diffAnchorIndex[a.Path][lineNum] == nil {
-						m.diffAnchorIndex[a.Path][lineNum] = make(map[string][3]int)
-					}
-					m.diffAnchorIndex[a.Path][lineNum][a.Side] = [3]int{fi, hi, li}
+					m.diffAnchors[k] = e
 				}
 			}
 		}
@@ -392,35 +422,31 @@ func (m *PRDetailModel) rebuildDiffIndices() {
 // lookupDiffLine finds the raw diff line text for a given path:line.
 func (m *PRDetailModel) lookupDiffLine(path string, line int) string {
 	m.ensureDiffIndices()
-	if m.diffLineIndex == nil {
+	e, ok := m.diffAnchors[lineKey{path, int32(line)}]
+	if !ok {
 		return ""
 	}
-	if lines, ok := m.diffLineIndex[path]; ok {
-		return lines[line]
-	}
-	return ""
+	return m.Diff.Files[e.last[0]].Hunks[e.last[1]].Lines[e.last[2]].Raw
 }
 
 // findDiffLineAnchor returns the hunk coordinates for a given path:line:side anchor.
 func (m *PRDetailModel) findDiffLineAnchor(path string, line int, side string) (fileIdx, hunkIdx, lineIdx int, ok bool) {
 	m.ensureDiffIndices()
-	if m.diffAnchorIndex == nil {
+	s := sideIndex(side)
+	if s < 0 {
 		return 0, 0, 0, false
 	}
-	if lines, ok := m.diffAnchorIndex[path]; ok {
-		if sides, ok := lines[line]; ok {
-			if coords, ok := sides[side]; ok {
-				return coords[0], coords[1], coords[2], true
-			}
-		}
+	e, found := m.diffAnchors[lineKey{path, int32(line)}]
+	if !found || !e.has[s] {
+		return 0, 0, 0, false
 	}
-	return 0, 0, 0, false
+	r := e.side[s]
+	return int(r[0]), int(r[1]), int(r[2]), true
 }
 
 // findDiffLineAnchorAnySide returns the hunk coordinates for any anchor matching
-// path:line, regardless of side. Tries RIGHT first, then LEFT, then any other.
+// path:line, regardless of side. Tries RIGHT first, then LEFT.
 func (m *PRDetailModel) findDiffLineAnchorAnySide(path string, line int) (fileIdx, hunkIdx, lineIdx int, ok bool) {
-	m.ensureDiffIndices()
 	if fi, hi, li, ok := m.findDiffLineAnchor(path, line, "RIGHT"); ok {
 		return fi, hi, li, ok
 	}
