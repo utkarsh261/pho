@@ -117,6 +117,9 @@ type PRDetailModel struct {
 	// LoadErr holds the initial load's failure; the view shows an error panel
 	// until a retry or reload clears it.
 	LoadErr error
+	// DiffErr holds a diff load failure when no diff is shown; the Diff tab
+	// shows it with a retry hint instead of spinning.
+	DiffErr error
 
 	DetailFromCache bool
 
@@ -180,6 +183,17 @@ type PRDetailModel struct {
 	navigableRows  []int            // parallel display rows for each navigable line
 	navIdxMap      map[diffCursorLine]int
 	navIdx         int // current position in navigableLines; -1 = invalid
+
+	// Collapsed files and the row layout derived from them. fileViews and
+	// layout belong to viewsFor/layoutFor and are ignored for any other diff.
+	Limits          DiffLimits
+	fileViews       []fileView
+	viewsFor        *model.DiffModel
+	collapseTouched bool // the user toggled a file; stop auto-collapsing
+	layout          diffLayout
+	layoutFor       *model.DiffModel
+	// diffNotice is a one-key status message (e.g. why z did nothing).
+	diffNotice string
 
 	// Inline review drafts
 	visual            visualModeState
@@ -322,6 +336,7 @@ func (m *PRDetailModel) reloadHeadDependentState(headSHA string) tea.Cmd {
 	m.navigableRows = nil
 	m.navIdxMap = nil
 	m.invalidateDiffCursor()
+	m.fileViews, m.viewsFor, m.collapseTouched = nil, nil, false
 	m.visual.Active = false
 	m.diffLineIndex = nil
 	m.diffAnchorIndex = nil
@@ -522,6 +537,10 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		m.resetCommentCursor()
 		// Sync checks into left panel.
 		m.leftPanel.Checks = msg.Detail.Checks
+		// Files with review threads must not stay auto-collapsed.
+		if m.Diff != nil && !m.collapseTouched {
+			m.applyAutoCollapse()
+		}
 
 		// Re-anchor cursor to the toggled thread after a resolve/unresolve reload.
 		if m.pendingToggle.active() {
@@ -609,15 +628,12 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		m.DiffLoading = false
 		if msg.Err != nil {
 			if m.Diff == nil {
-				if m.LoadErr != nil {
-					// The detail load already failed; don't keep spinning.
-					m.leftPanel.Loading = false
-				} else {
-					m.DiffLoading = true
-				}
+				m.DiffErr = msg.Err
+				m.leftPanel.Loading = false
 			}
 			return m, tea.Batch(spinCmd, composeCmd)
 		}
+		m.DiffErr = nil
 		// Validate SHA if HeadRefOID is available.
 		if m.Summary.HeadRefOID != "" && msg.Diff.HeadSHA != "" && msg.Diff.HeadSHA != m.Summary.HeadRefOID {
 			// SHA mismatch — discard and refetch.
@@ -626,17 +642,16 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 				cmds.LoadDiffCmd(m.PRService, m.Repo, m.Summary.Number, m.Summary.HeadRefOID, true))
 		}
 		m.Diff = &msg.Diff
-		m.buildNavigableIndex()
 		m.invalidateDiffCursor()
 		m.rebuildDiffIndices()
-		m.normalizeDiffRows()
 		m.searchIndex = nil
-		m.refreshSearchMatches()
 		// Sync files into left panel.
 		m.leftPanel.Files = m.Diff.Files
 		m.leftPanel.Loading = false
-		// Load persisted drafts for this PR/SHA.
+		// Load persisted drafts for this PR/SHA; files with drafts stay expanded.
 		m.loadDrafts()
+		m.resetCollapse()
+		m.refreshSearchMatches()
 		return m, tea.Batch(spinCmd, composeCmd)
 
 	case cmds.CommitsLoaded:
@@ -665,14 +680,18 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 	case cmds.CommitDiffLoaded:
 		m.DiffLoading = false
 		if msg.Err != nil {
+			if m.Diff == nil {
+				m.DiffErr = msg.Err
+				m.leftPanel.Loading = false
+			}
 			return m, tea.Batch(spinCmd, composeCmd)
 		}
+		m.DiffErr = nil
 		m.Diff = &msg.Diff
-		m.buildNavigableIndex()
 		m.invalidateDiffCursor()
 		m.rebuildDiffIndices()
-		m.normalizeDiffRows()
 		m.searchIndex = nil
+		m.resetCollapse()
 		m.refreshSearchMatches()
 		m.leftPanel.Files = m.Diff.Files
 		m.leftPanel.Loading = false
@@ -686,7 +705,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 				m.compose.errMsg = "The diff changed; reopen the inline draft on the current head"
 				return m, tea.Batch(spinCmd, composeCmd)
 			}
-			if body == "" {
+			if body == "" || !m.validVisualState() {
 				return m, tea.Batch(spinCmd, composeCmd)
 			}
 			draft := m.buildDraftFromVisualSelection(body)
@@ -1111,6 +1130,17 @@ func (m *PRDetailModel) log() *pholog.Logger {
 // CopyCommitSHA is emitted when the user presses 'y' on a commit in the Commits tab.
 type CopyCommitSHA struct {
 	SHA string
+}
+
+// OpenBrowserFile is emitted when the user presses 'O' on a diff file: open
+// that file in the PR's "Files changed" page, or in the commit page when
+// CommitSHA is set.
+type OpenBrowserFile struct {
+	Repo       string
+	Number     int
+	CommitRepo domain.Repository
+	CommitSHA  string
+	Path       string
 }
 
 // OpenBrowserPR is emitted when the user presses 'o' in PR detail.

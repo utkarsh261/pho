@@ -7,6 +7,7 @@ import (
 
 // handleKey routes keyboard input within the PR detail view.
 func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
+	m.diffNotice = ""
 	if m.searchActive && m.handleSearchKey(msg) {
 		m.LastKey = ""
 		return m, nil
@@ -18,6 +19,7 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		switch msg.String() {
 		case "r":
 			m.LoadErr = nil
+			m.DiffErr = nil
 			m.DetailLoading = true
 			m.DiffLoading = true
 			m.leftPanel.Loading = true
@@ -218,6 +220,21 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		}
 		if m.isInDiffSection() {
 			m.enterVisualMode()
+		}
+		return m, nil
+	case "z":
+		if m.isInDiffSection() {
+			m.toggleCurrentFile()
+		}
+		return m, nil
+	case "Z":
+		if m.isInDiffSection() {
+			m.toggleAllFiles()
+		}
+		return m, nil
+	case "O":
+		if m.isInDiffSection() {
+			return m, m.emitOpenBrowserFile()
 		}
 		return m, nil
 	case "D":

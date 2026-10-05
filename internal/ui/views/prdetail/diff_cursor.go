@@ -75,7 +75,13 @@ func (m *PRDetailModel) validDiffCursor() bool {
 	if m.diffCursor != m.navigableLines[m.navIdx] {
 		return false
 	}
-	return m.navigableRows[m.navIdx] < maxDiffDisplayRows
+	return true
+}
+
+// validLineCursor reports whether the cursor is on an actual diff line, not
+// a collapsed file's placeholder.
+func (m *PRDetailModel) validLineCursor() bool {
+	return m.validDiffCursor() && !m.diffCursor.isPlaceholder()
 }
 
 func (m *PRDetailModel) invalidateDiffCursor() {
@@ -84,7 +90,8 @@ func (m *PRDetailModel) invalidateDiffCursor() {
 }
 
 // buildNavigableIndex creates a flat ordered slice of every actual diff line,
-// skipping binary files. A parallel display-row slice and a reverse map from
+// skipping binary files; a collapsed file contributes one stop on its
+// placeholder row. A parallel display-row slice and a reverse map from
 // (file,hunk,line) → flat index are also built so cursor movement is O(1).
 func (m *PRDetailModel) buildNavigableIndex() {
 	m.navigableLines = m.navigableLines[:0]
@@ -94,16 +101,27 @@ func (m *PRDetailModel) buildNavigableIndex() {
 	if m.Diff == nil {
 		return
 	}
-	for fi, f := range m.Diff.Files {
+	add := func(c diffCursorLine, row int) {
+		m.navIdxMap[c] = len(m.navigableLines)
+		m.navigableLines = append(m.navigableLines, c)
+		m.navigableRows = append(m.navigableRows, row)
+	}
+	lay := m.rows()
+	for fi := range m.Diff.Files {
+		f := &m.Diff.Files[fi]
 		if f.IsBinary {
 			continue
 		}
+		row := lay.fileStart[fi] + diffFileHeaderRows
+		if m.fileCollapsed(fi) {
+			add(diffCursorLine{FileIdx: fi, HunkIdx: placeholderLine, LineIdx: placeholderLine}, row)
+			continue
+		}
 		for hi, h := range f.Hunks {
+			row++ // hunk header
 			for li := range h.Lines {
-				cursor := diffCursorLine{FileIdx: fi, HunkIdx: hi, LineIdx: li}
-				m.navIdxMap[cursor] = len(m.navigableLines)
-				m.navigableLines = append(m.navigableLines, cursor)
-				m.navigableRows = append(m.navigableRows, m.diffLineToDisplayRow(fi, hi, li))
+				add(diffCursorLine{FileIdx: fi, HunkIdx: hi, LineIdx: li}, row)
+				row++
 			}
 		}
 	}
@@ -241,6 +259,9 @@ func (m *PRDetailModel) jumpToCommentCode() {
 	// Find the diff line matching (path, line).
 	if fi, hi, li, ok := m.findDiffLineAnchorAnySide(entry.path, entry.line); ok {
 		m.switchTab(TabDiff)
+		if !m.expandFileForJump(fi) {
+			hi, li = placeholderLine, placeholderLine
+		}
 		m.setDiffCursor(diffCursorLine{FileIdx: fi, HunkIdx: hi, LineIdx: li})
 		m.scrollToCursor(scrollPadding)
 	}

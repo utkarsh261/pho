@@ -946,8 +946,9 @@ func TestFetchRepoInfoSuccess(t *testing.T) {
 
 	coord := newTestCoordinator(t)
 	restClient := &rest.Client{
-		BaseURL: server.URL,
-		Token:   "test-token",
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+		Token:      "test-token",
 	}
 	svc := &PRService{
 		Cache: coord,
@@ -990,8 +991,9 @@ func TestFetchRepoInfoForkWithParent(t *testing.T) {
 
 	coord := newTestCoordinator(t)
 	restClient := &rest.Client{
-		BaseURL: server.URL,
-		Token:   "test-token",
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+		Token:      "test-token",
 	}
 	svc := &PRService{
 		Cache: coord,
@@ -1029,8 +1031,9 @@ func TestFetchRepoInfoError(t *testing.T) {
 
 	coord := newTestCoordinator(t)
 	restClient := &rest.Client{
-		BaseURL: server.URL,
-		Token:   "test-token",
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+		Token:      "test-token",
 	}
 	svc := &PRService{
 		Cache: coord,
@@ -1074,8 +1077,9 @@ func TestCreatePRSuccess(t *testing.T) {
 	_ = coord.Write(context.Background(), dashKey, []domain.PullRequestSummary{}, domain.CacheMeta{})
 
 	restClient := &rest.Client{
-		BaseURL: server.URL,
-		Token:   "test-token",
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+		Token:      "test-token",
 	}
 	svc := &PRService{
 		Cache: coord,
@@ -1145,8 +1149,9 @@ func TestCreatePRDraft(t *testing.T) {
 
 	coord := newTestCoordinator(t)
 	restClient := &rest.Client{
-		BaseURL: server.URL,
-		Token:   "test-token",
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+		Token:      "test-token",
 	}
 	svc := &PRService{
 		Cache: coord,
@@ -1184,8 +1189,9 @@ func TestCreatePRError(t *testing.T) {
 
 	coord := newTestCoordinator(t)
 	restClient := &rest.Client{
-		BaseURL: server.URL,
-		Token:   "test-token",
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+		Token:      "test-token",
 	}
 	svc := &PRService{
 		Cache: coord,
@@ -1245,8 +1251,9 @@ func TestUpdateBranchInvalidatesPreviewCache(t *testing.T) {
 	defer server.Close()
 
 	restClient := &rest.Client{
-		BaseURL: server.URL,
-		Token:   "test-token",
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+		Token:      "test-token",
 	}
 	svc := &PRService{
 		Cache: coord,
@@ -1275,8 +1282,9 @@ func TestUpdateBranchPropagatesRESTError(t *testing.T) {
 	defer server.Close()
 
 	restClient := &rest.Client{
-		BaseURL: server.URL,
-		Token:   "test-token",
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+		Token:      "test-token",
 	}
 	svc := &PRService{
 		Cache: newTestCoordinator(t),
@@ -1307,7 +1315,7 @@ func TestUpdateBranchCacheDeleteErrorNonfatal(t *testing.T) {
 	}))
 	defer server.Close()
 
-	restClient := &rest.Client{BaseURL: server.URL, Token: "test-token"}
+	restClient := &rest.Client{BaseURL: server.URL, Token: "test-token", HTTPClient: server.Client()}
 	svc := &PRService{
 		Cache: coord,
 		REST:  restClient,
@@ -1366,8 +1374,8 @@ func TestUpdateBranchRoutesToHostSpecificRESTClient(t *testing.T) {
 	defer gheSrv.Close()
 	gheHost = "github.example.com"
 
-	ghClient := &rest.Client{BaseURL: ghSrv.URL, Token: "gh-token"}
-	gheClient := &rest.Client{BaseURL: gheSrv.URL, Token: "ghe-token"}
+	ghClient := &rest.Client{BaseURL: ghSrv.URL, Token: "gh-token", HTTPClient: ghSrv.Client()}
+	gheClient := &rest.Client{BaseURL: gheSrv.URL, Token: "ghe-token", HTTPClient: gheSrv.Client()}
 	restByHost := map[string]*rest.Client{
 		ghHost:  ghClient,
 		gheHost: gheClient,
@@ -1406,7 +1414,7 @@ func TestUpdateBranchFallsBackToDefaultREST(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	defaultClient := &rest.Client{BaseURL: srv.URL, Token: "default-token"}
+	defaultClient := &rest.Client{BaseURL: srv.URL, Token: "default-token", HTTPClient: srv.Client()}
 	// RESTByHost is nil → every host falls back to defaultClient.
 	svc := &PRService{
 		Cache: newTestCoordinator(t),

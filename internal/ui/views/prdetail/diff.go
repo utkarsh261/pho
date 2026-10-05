@@ -3,15 +3,13 @@ package prdetail
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 
 	diffmodel "github.com/utkarsh261/pho/internal/diff/model"
 	"github.com/utkarsh261/pho/internal/ui/theme"
 )
-
-// maxDiffDisplayRows is the cap on rendered diff rows before a truncation banner is shown.
-const maxDiffDisplayRows = 20000
 
 // diffFileHeaderRows is the number of display rows before the first hunk
 // header in each diff file: blank padding + file header bar + blank padding.
@@ -25,9 +23,8 @@ const diffFileHeaderRows = 3
 //	row 3.. : hunk header + diff lines (repeated per hunk)
 //	        : binary files get exactly 1 placeholder row at row 3
 //
-// This is the authoritative source for per-file row counts used by both
-// diffSectionRowCount and renderDiffSectionLines, so they stay in sync
-// regardless of what f.DisplayRows holds (legacy cache entries may have 0).
+// It is the row count of an expanded file; the layout (rows()) applies
+// collapsed files on top and is what every row position is read from.
 func diffFileDisplayRows(f *diffmodel.DiffFile) int {
 	rows := diffFileHeaderRows // blank + header bar + blank
 	if f.IsBinary {
@@ -40,33 +37,30 @@ func diffFileDisplayRows(f *diffmodel.DiffFile) int {
 	return rows
 }
 
-// diffSectionRowCount returns the number of display rows for the Diff section.
-// Always derives the count from hunk structure via diffFileDisplayRows so that
-// legacy cache entries with DisplayRows==0 are handled correctly.
+// diffSectionRowCount returns the number of display rows for the Diff section,
+// from the row layout.
 //
 // Returns 0 only when the diff is not loading and not loaded (truly absent).
 // Returns 1 for a loading placeholder or an empty loaded diff.
-// Caps at maxDiffDisplayRows+1 when the raw total exceeds the limit; the +1
-// reserves a row for the truncation banner.
 func (m *PRDetailModel) diffSectionRowCount() int {
 	if m.Diff == nil {
 		if m.DiffLoading {
 			return 1 // "Loading diff…" placeholder
+		}
+		if m.DiffErr != nil {
+			return diffErrRows
 		}
 		return 0 // not loaded, not loading — truly absent
 	}
 	if len(m.Diff.Files) == 0 {
 		return 1 // "No changes" placeholder
 	}
-	total := 0
-	for i := range m.Diff.Files {
-		total += diffFileDisplayRows(&m.Diff.Files[i])
+	total := m.rows().total
+	if m.Diff.PartialFiles {
+		total++ // "showing the first 3,000 files" banner
 	}
 	if total == 0 {
 		return 1 // safety
-	}
-	if total > maxDiffDisplayRows {
-		return maxDiffDisplayRows + 1 // cap + banner row
 	}
 	return total
 }
@@ -81,13 +75,17 @@ func (m *PRDetailModel) renderDiffTab(scroll, contentH, contentWidth int) []stri
 
 // renderDiffSectionLines renders the diff section rows [localStart, localEnd).
 // Applies file-level virtualization: only files whose row ranges overlap
-// [localStart, localEnd) are processed. Rendering stops at maxDiffDisplayRows;
-// a truncation banner is injected at that position when the diff is larger.
+// [localStart, localEnd) are processed. Collapsed files render their header
+// and a single placeholder row.
 func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidth int) []string {
 	defer m.log().Timer("render diff section")()
 	n := localEnd - localStart
 	out := make([]string, n)
 
+	if m.Diff == nil && !m.DiffLoading && m.DiffErr != nil {
+		copy(out, m.diffErrLines(contentWidth)[min(localStart, diffErrRows):])
+		return out
+	}
 	if m.Diff == nil || len(m.Diff.Files) == 0 {
 		if n > 0 {
 			if m.DiffLoading && m.Diff == nil {
@@ -101,12 +99,7 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 
 	cw := max(contentWidth, 1)
 
-	// Determine whether truncation is needed (recompute real total here).
-	realTotal := 0
-	for i := range m.Diff.Files {
-		realTotal += diffFileDisplayRows(&m.Diff.Files[i])
-	}
-	needsTruncation := realTotal > maxDiffDisplayRows
+	lay := m.rows()
 
 	// Build themed styles once.
 	var truncStyle lipgloss.Style
@@ -141,22 +134,11 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 	}
 
 	for i := range m.Diff.Files {
-		// Stop iterating once we've passed the truncation boundary.
-		if fileRow >= maxDiffDisplayRows {
-			break
-		}
-
 		f := &m.Diff.Files[i]
-		dr := diffFileDisplayRows(f)
-
-		// Clamp the file's effective end to the truncation limit.
-		effectiveEnd := fileRow + dr
-		if effectiveEnd > maxDiffDisplayRows {
-			effectiveEnd = maxDiffDisplayRows
-		}
+		dr := lay.fileRows[i]
 
 		overlapStart := max(fileRow, localStart)
-		overlapEnd := min(effectiveEnd, localEnd)
+		overlapEnd := min(fileRow+dr, localEnd)
 		if overlapStart >= overlapEnd {
 			fileRow += dr
 			globalLineIndex += diffFileLineCount(f)
@@ -183,6 +165,20 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 		if f.IsBinary {
 			// row 3: binary placeholder (no hunk content)
 			rows = append(rows, displayRow{truncStyle.Render("      Binary file (no diff available)")})
+		} else if m.fileCollapsed(i) {
+			// row 3: collapsed placeholder; its lines still count for search.
+			text := m.collapsedPlaceholder(i)
+			onCursor := m.isInDiffSection() && hasValidCursor && cursorFileIdx == i && cursorLineIdx == placeholderLine
+			switch {
+			case onCursor && m.theme != nil:
+				text = theme.FillBg(m.theme.Highlight, cw, m.theme.PrimaryTxt.Render("▎")+truncateText(text[1:], cw-1))
+			case onCursor:
+				text = lipgloss.NewStyle().Reverse(true).Width(cw).Render(truncateText(text, cw))
+			default:
+				text = truncStyle.Render(truncateText(text, cw))
+			}
+			rows = append(rows, displayRow{text})
+			globalLineIndex += diffFileLineCount(f)
 		} else {
 			// rows 3+: hunk headers + diff lines
 			// Only rows inside [overlapStart, overlapEnd) are styled; the rest get
@@ -244,6 +240,8 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 						baseStyle = baseStyle.UnsetBackground()
 						lineBg = ""
 					}
+					bodyW := max(cw-diffGutterWidth, 1)
+					raw := clipForRender(dl.Raw, bodyW)
 					var s string
 					if rg, ok := changed[li]; ok && lineBg != "" && rg.end > rg.start &&
 						len(searchCtx.lineRanges[globalLineIndex]) == 0 {
@@ -252,12 +250,13 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 						if dl.Kind == "deletion" {
 							emphBg = m.theme.DiffDelEmphBg
 						}
-						s = baseStyle.Render(dl.Raw[:rg.start]) +
-							baseStyle.Background(emphBg).Render(dl.Raw[rg.start:rg.end]) +
-							baseStyle.Render(dl.Raw[rg.end:])
+						start, end := min(rg.start, len(raw)), min(rg.end, len(raw))
+						s = baseStyle.Render(raw[:start]) +
+							baseStyle.Background(emphBg).Render(raw[start:end]) +
+							baseStyle.Render(raw[end:])
 					} else {
 						s = m.renderSearchMatchLine(
-							dl.Raw,
+							raw,
 							i,
 							globalLineIndex,
 							searchCtx,
@@ -278,7 +277,6 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 						marker = "draft"
 					}
 					gutter := m.diffGutter(marker, diffLineNumber(dl))
-					bodyW := max(cw-diffGutterWidth, 1)
 
 					switch {
 					case m.theme == nil && (isSelected || isCursor):
@@ -324,15 +322,50 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 		fileRow += dr
 	}
 
-	// Inject truncation banner at row maxDiffDisplayRows if needed and in window.
-	if needsTruncation {
-		bannerIdx := maxDiffDisplayRows - localStart
-		if bannerIdx >= 0 && bannerIdx < n {
-			out[bannerIdx] = truncStyle.Render("… diff truncated (too large to display)")
+	// GitHub lists at most 3,000 files; say so after the last one.
+	if m.Diff.PartialFiles {
+		if idx := lay.total - localStart; idx >= 0 && idx < n {
+			msg := fmt.Sprintf("… showing the first %d files (GitHub's limit)", len(m.Diff.Files))
+			if m.Detail != nil && m.Detail.FileCount > len(m.Diff.Files) {
+				msg = fmt.Sprintf("… showing %d of %d files (GitHub's limit) · o open on GitHub", len(m.Diff.Files), m.Detail.FileCount)
+			}
+			out[idx] = truncStyle.Render(truncateText(msg, cw))
 		}
 	}
 
 	return out
+}
+
+// diffErrRows is the height of the diff load-error placeholder.
+const diffErrRows = 3
+
+// diffErrLines renders the diff load-error placeholder: a title, the error
+// and the refresh hint, each cut to the content width.
+func (m *PRDetailModel) diffErrLines(contentWidth int) []string {
+	cw := max(contentWidth, 1)
+	title, hint := "⚠ Could not load the diff", "R refresh"
+	msg := truncateText(strings.ReplaceAll(m.DiffErr.Error(), "\n", " "), cw)
+	if m.theme != nil {
+		title = lipgloss.NewStyle().Foreground(m.theme.Error).Bold(true).Render(title)
+		msg = m.theme.MutedTxt.Render(msg)
+		hint = m.theme.MutedTxt.Render(hint)
+	}
+	return []string{title, msg, hint}
+}
+
+// clipForRender cuts lines far wider than the viewport before they are
+// styled, so a minified megabyte-long line costs no more than a screenful.
+// Lines under the limit are returned unchanged; longer ones keep enough
+// bytes to fill bodyW cells and are cut on a rune boundary.
+func clipForRender(raw string, bodyW int) string {
+	limit := max(bodyW*8, 2048)
+	if len(raw) <= limit {
+		return raw
+	}
+	for limit > 0 && !utf8.RuneStart(raw[limit]) {
+		limit--
+	}
+	return raw[:limit]
 }
 
 // diffGutterWidth is the width of the left gutter on every diff line:

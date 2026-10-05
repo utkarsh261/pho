@@ -1,0 +1,78 @@
+diff --git a/old/name.go b/new/name.go
+similarity index 100%
+rename from old/name.go
+rename to new/name.go
+diff --git a/pkg/renamed_edit.go b/pkg/renamed_edit2.go
+similarity index 90%
+rename from pkg/renamed_edit.go
+rename to pkg/renamed_edit2.go
+index 1111111..2222222 100644
+--- a/pkg/renamed_edit.go
++++ b/pkg/renamed_edit2.go
+@@ -1,4 +1,4 @@
+ package pkg
+ 
+-func A() {}
++func B() {}
+ // end
+diff --git a/added.txt b/added.txt
+new file mode 100644
+index 0000000..3333333
+--- /dev/null
++++ b/added.txt
+@@ -0,0 +1,3 @@
++one
++two
++three
+diff --git a/removed.txt b/removed.txt
+deleted file mode 100644
+index 4444444..0000000
+--- a/removed.txt
++++ /dev/null
+@@ -1,2 +0,0 @@
+-gone
+-also gone
+diff --git a/nonewline.txt b/nonewline.txt
+index 5555555..6666666 100644
+--- a/nonewline.txt
++++ b/nonewline.txt
+@@ -1,2 +1,2 @@
+ keep
+-old last
+\ No newline at end of file
++new last
+\ No newline at end of file
+diff --git a/img.png b/img.png
+index 7777777..8888888 100644
+Binary files a/img.png and b/img.png differ
+diff --git a/script.sh b/script.sh
+old mode 100644
+new mode 100755
+diff --git a/multi.go b/multi.go
+index 9999999..aaaaaaa 100644
+--- a/multi.go
++++ b/multi.go
+@@ -10,7 +10,8 @@ func multi() {
+ 	a := 1
+
+ 	b := 2
+-	c := 3
++	c := 30
++	d := 4
+ 	return
+ }
+ 
+@@ -50,3 +51,3 @@ func other() {
+ 	x := 1
+-	y := 2
++	y := 20
+ 	z := 3
+diff --git a/win.txt b/win.txt
+index bbbbbbb..ccccccc 100644
+--- a/win.txt
++++ b/win.txt
+@@ -1,3 +1,3 @@
+ first
+-second
++second changed
+ third

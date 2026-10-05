@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/utkarsh261/pho/internal/domain"
 	pholog "github.com/utkarsh261/pho/internal/log"
@@ -82,7 +83,7 @@ type PullRequestResponse struct {
 // Auth header: Authorization: token <token>
 func (c *Client) FetchRawDiff(ctx context.Context, owner, repo string, number int) (string, error) {
 	var statusCode int
-	defer c.log.Timer("rest diff fetch", pholog.FieldHost, c.BaseURL, pholog.FieldStatusCode, statusCode)()
+	defer c.logRequest("rest diff fetch", time.Now(), &statusCode)
 
 	url := buildDiffURL(c.BaseURL, owner, repo, number)
 
@@ -109,6 +110,9 @@ func (c *Client) FetchRawDiff(ctx context.Context, owner, repo string, number in
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		if isDiffTooLarge(resp.StatusCode, body) {
+			return "", fmt.Errorf("%w (status %d): %s", ErrDiffTooLarge, resp.StatusCode, string(body))
+		}
 		return "", fmt.Errorf("rest: unexpected status %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -130,7 +134,7 @@ func (c *Client) FetchRawDiff(ctx context.Context, owner, repo string, number in
 // Auth header: Authorization: token <token>
 func (c *Client) FetchCommitDiff(ctx context.Context, owner, repo, sha string) (string, error) {
 	var statusCode int
-	defer c.log.Timer("rest diff fetch", pholog.FieldHost, c.BaseURL, pholog.FieldStatusCode, statusCode)()
+	defer c.logRequest("rest diff fetch", time.Now(), &statusCode)
 
 	url := buildCommitDiffURL(c.BaseURL, owner, repo, sha)
 
@@ -157,6 +161,9 @@ func (c *Client) FetchCommitDiff(ctx context.Context, owner, repo, sha string) (
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		if isDiffTooLarge(resp.StatusCode, body) {
+			return "", fmt.Errorf("%w (status %d): %s", ErrDiffTooLarge, resp.StatusCode, string(body))
+		}
 		return "", fmt.Errorf("rest: unexpected status %d: %s", resp.StatusCode, string(body))
 	}
 

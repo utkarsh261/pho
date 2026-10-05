@@ -9,6 +9,9 @@ type DiffModel struct {
 	// FileIndex maps NewPath -> index in Files slice for O(1) lookup.
 	FileIndex map[string]int
 	Stats     DiffStats
+	// PartialFiles is set when the diff came from the per-file API and hit
+	// GitHub's 3,000-file limit, so later files are missing.
+	PartialFiles bool
 }
 
 type DiffStats struct {
@@ -26,6 +29,14 @@ type DiffFile struct {
 	Additions int
 	Deletions int
 	Hunks     []DiffHunk
+
+	// MaxLineLen is the byte length of the longest line in Hunks.
+	MaxLineLen int
+
+	// PatchUnavailable is set when GitHub listed the file but sent no patch
+	// for it (the file's diff is too large). Additions/Deletions still hold
+	// GitHub's counts.
+	PatchUnavailable bool
 
 	// total number of display rows this file contributes
 	// to the content viewport (1 file header + sum of all hunk display rows).

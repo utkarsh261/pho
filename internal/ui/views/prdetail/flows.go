@@ -94,6 +94,9 @@ func (m *PRDetailModel) StatusHint() string {
 	if m.editErr != "" {
 		return m.editErr
 	}
+	if m.diffNotice != "" {
+		return m.diffNotice
+	}
 	if m.draftsStale && len(m.drafts) > 0 {
 		return fmt.Sprintf("%d inline drafts belong to the previous head | D: Discard drafts", len(m.drafts))
 	}
@@ -346,7 +349,7 @@ func (m *PRDetailModel) emitOpenBrowserCommit() tea.Cmd {
 }
 
 func (m *PRDetailModel) emitCopyCommitPermalink() tea.Cmd {
-	if !m.validDiffCursor() {
+	if !m.validLineCursor() {
 		return nil
 	}
 	fi, hi, li := m.diffCursor.FileIdx, m.diffCursor.HunkIdx, m.diffCursor.LineIdx

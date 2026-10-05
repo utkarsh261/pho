@@ -140,18 +140,8 @@ func (m *PRDetailModel) jumpToFile(idx int) {
 	m.leftPanel.LastOpenedIndex = idx
 	m.switchTab(TabDiff)
 	m.leftPanel.Focus = FocusContent
-	fileOffset := 0
-	for i := range idx {
-		fileOffset += diffFileDisplayRows(&m.Diff.Files[i])
-	}
-	contentHeight := m.contentViewportHeight()
-	diffRows := m.diffSectionRowCount()
-	// When fileOffset falls beyond the rendered diff (truncated large diffs), show
-	// the truncation banner instead.
-	if fileOffset >= diffRows {
-		m.ContentScroll = clamp(max(0, diffRows-contentHeight), 0, m.maxContentScroll())
-		return
-	}
+	m.expandFileForJump(idx)
+	fileOffset := m.rows().fileStart[idx]
 	m.ContentScroll = clamp(fileOffset, 0, m.maxContentScroll())
 	// Position the diff cursor at the first diff line of the target file
 	// (skipping binary files to find the next navigable line).
@@ -464,6 +454,8 @@ func (m *PRDetailModel) handleRefresh() (*PRDetailModel, tea.Cmd) {
 	m.reloadDependentsIfHeadUnknown = false
 	m.Detail = nil
 	m.Diff = nil
+	m.DiffErr = nil
+	m.fileViews, m.viewsFor, m.collapseTouched = nil, nil, false
 	m.DetailLoading = true
 	m.DiffLoading = true
 	m.leftPanel.Loading = true
@@ -489,6 +481,7 @@ func (m *PRDetailModel) handleCommitRefresh() (*PRDetailModel, tea.Cmd) {
 		return m, nil
 	}
 	m.Diff = nil
+	m.DiffErr = nil
 	m.DiffLoading = true
 	m.leftPanel.Loading = true
 	m.searchIndex = nil

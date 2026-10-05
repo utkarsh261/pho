@@ -1,6 +1,8 @@
 package app
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -13,6 +15,7 @@ import (
 
 	"github.com/utkarsh261/pho/internal/domain"
 	"github.com/utkarsh261/pho/internal/ui/keymap"
+	"github.com/utkarsh261/pho/internal/ui/views/prdetail"
 )
 
 func nowPtr(t time.Time) *time.Time {
@@ -155,6 +158,23 @@ func browserURL(repo domain.Repository, fallbackRepo string, number int) string 
 		return ""
 	}
 	return fmt.Sprintf("https://%s/%s/pull/%d", host, fullName, number)
+}
+
+// fileBrowserURL links to one file's diff on GitHub: in the PR's "Files
+// changed" page, or in the commit page. GitHub anchors each file as
+// "diff-" + hex(sha256(path)); hosts that anchor differently still land on
+// the right page.
+func fileBrowserURL(repo domain.Repository, msg prdetail.OpenBrowserFile) string {
+	sum := sha256.Sum256([]byte(msg.Path))
+	anchor := "#diff-" + hex.EncodeToString(sum[:])
+	if msg.CommitSHA != "" {
+		return fmt.Sprintf("https://%s/%s/commit/%s", repoHost(msg.CommitRepo), msg.CommitRepo.FullName, msg.CommitSHA) + anchor
+	}
+	base := browserURL(repo, msg.Repo, msg.Number)
+	if base == "" {
+		return ""
+	}
+	return base + "/files" + anchor
 }
 
 func openURL(url string) error {

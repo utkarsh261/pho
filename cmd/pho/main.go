@@ -49,6 +49,7 @@ import (
 	pholog "github.com/utkarsh261/pho/internal/log"
 	"github.com/utkarsh261/pho/internal/ui/app"
 	"github.com/utkarsh261/pho/internal/ui/theme"
+	"github.com/utkarsh261/pho/internal/ui/views/prdetail"
 )
 
 var version = "dev"
@@ -323,6 +324,13 @@ func main() {
 		Host:            profiles[0].Host,
 		MaxJumpPRs:      cfg.Palette.MaxPRs,
 		MaxDashboardPRs: cfg.Dashboard.MaxPRs,
+		DiffLimits: prdetail.DiffLimits{
+			CollapseLines:     cfg.Diff.CollapseLines,
+			CollapseLineWidth: cfg.Diff.CollapseLineWidth,
+			MaxLines:          cfg.Diff.MaxLines,
+			MaxLineWidth:      cfg.Diff.MaxLineWidth,
+			RowBudget:         cfg.Diff.RowBudget,
+		},
 		InitialPRNumber: inv.PRNumber,
 		Logger:          logger,
 	}
