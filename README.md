@@ -16,7 +16,6 @@
 - **Open a PR directly** - `pho pr 123` to launch straight into a PR's detail view.
 - **PR detail** - Browse description, diff, comments, and commits. Sidebar for files and CI checks.
 - **Diff navigation** - Line-by-line cursor, `gg`/`G`, `Ctrl+d`/`Ctrl+u`, visual mode for selecting ranges.
-- **Large diffs** - Generated and very large files start collapsed (`z` / `Z` to toggle, `O` to open a file on GitHub). PRs with more than 300 files load file by file.
 - **Inline reviews** - Draft inline comments on diff lines, edit, discard, and batch-submit with a review event. Just like Github web UI.
 - **Comments & approvals** - Post top-level comments, review comments, or approve directly.
 - **PR actions** - Edit title/body, merge (with method selection), close/reopen, and checkout the branch locally.
