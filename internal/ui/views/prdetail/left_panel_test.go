@@ -1070,9 +1070,16 @@ func TestLeftPanelActiveHeaderLabelAccented(t *testing.T) {
 	if headerLine == "" {
 		t.Fatal("expected FILES header line")
 	}
-	// Focus is signalled by the accent-coloured "Files" label (#A78BFA → 167;139;250).
-	if !strings.Contains(headerLine, "167;139;250") {
+	// Focus is signalled by the accent-coloured "Files" label. Compare against
+	// the theme's own rendering so the check holds under any colour profile.
+	th := theme.Default()
+	accented := lipgloss.NewStyle().Bold(true).Foreground(th.AccentText).Render("Files")
+	if !strings.Contains(headerLine, accented) {
 		t.Errorf("expected focused header label in accent colour, got: %q", headerLine)
+	}
+	unfocused := makePanelWithFiles(files, FocusCI)
+	if strings.Contains(unfocused.View(12, "⠋"), accented) {
+		t.Error("expected the unfocused header label not to use the accent colour")
 	}
 }
 

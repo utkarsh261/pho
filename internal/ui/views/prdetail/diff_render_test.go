@@ -187,13 +187,16 @@ func TestDiffRenderFileHeaderMuted(t *testing.T) {
 	if !ansiRe.MatchString(headerLine) {
 		t.Errorf("expected ANSI styling in file header bar, got plain: %q", headerLine)
 	}
-	// Must NOT use plain green (addition color).
-	if strings.Contains(headerLine, "\x1b[32m") {
-		t.Errorf("file header must not use green addition color: %q", headerLine)
+	// The path itself must use the header text style, not the green/red of
+	// diff content lines. (Only the "+N -N" stats and change bar are coloured.)
+	th := theme.Default()
+	if !strings.Contains(headerLine, lipgloss.NewStyle().Bold(true).Foreground(th.Text).Render("internal/server.go")) {
+		t.Errorf("expected the path in the header text style, got: %q", headerLine)
 	}
-	// Must NOT use plain red (deletion color).
-	if strings.Contains(headerLine, "\x1b[31m") {
-		t.Errorf("file header must not use red deletion color: %q", headerLine)
+	for _, s := range []lipgloss.Style{th.DiffAddition, th.DiffDeletion, th.Additions, th.Deletions} {
+		if strings.Contains(headerLine, s.Render("internal/server.go")) {
+			t.Errorf("file header path must not use a diff add/delete colour: %q", headerLine)
+		}
 	}
 }
 
