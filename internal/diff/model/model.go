@@ -27,6 +27,9 @@ type DiffFile struct {
 	Deletions int
 	Hunks     []DiffHunk
 
+	// MaxLineLen is the byte length of the longest line in Hunks.
+	MaxLineLen int
+
 	// total number of display rows this file contributes
 	// to the content viewport (1 file header + sum of all hunk display rows).
 	// Used for file-level virtualization.

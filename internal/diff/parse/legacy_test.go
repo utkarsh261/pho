@@ -1,15 +1,18 @@
 package parse
 
+// This is a verbatim copy of the bufio.Scanner-based parser that the current
+// parser replaced. Tests compare the two so the rewrite cannot change how
+// diff lines are numbered (and therefore where inline comments land).
+
 import (
+	"bufio"
 	"strconv"
 	"strings"
 
 	"github.com/utkarsh261/pho/internal/diff/model"
 )
 
-// Parse parses a unified diff. DiffLine.Raw values are substrings of raw, so
-// the parsed model shares raw's memory instead of copying every line.
-func Parse(raw string) (*model.DiffModel, error) {
+func parseLegacy(raw string) (*model.DiffModel, error) {
 	dm := &model.DiffModel{
 		FileIndex: make(map[string]int),
 	}
@@ -18,15 +21,13 @@ func Parse(raw string) (*model.DiffModel, error) {
 		return dm, nil
 	}
 
-	// Split on "diff --git" lines into per-file blocks. Every "\n"-separated
-	// element of raw is a line, including the empty element after a trailing
-	// newline; lines before the first "diff --git" form a block of their own.
-	var block []string
-	flush := func() {
-		if len(block) == 0 {
-			return
+	// Split on "diff --git" to get per-file sections.
+	parts := splitOnDiffGitLegacy(raw)
+	for _, part := range parts {
+		file, err := parseFileBlockLegacy(part)
+		if err != nil {
+			return nil, err
 		}
-		file := parseFileBlock(block)
 		fileIndex := len(dm.Files)
 		dm.Files = append(dm.Files, file)
 		if file.NewPath != "" {
@@ -35,34 +36,45 @@ func Parse(raw string) (*model.DiffModel, error) {
 		if file.OldPath != "" && file.NewPath != file.OldPath {
 			dm.FileIndex[file.OldPath] = fileIndex
 		}
-		block = block[:0]
 	}
-	for rest := raw; ; {
-		line, tail, more := strings.Cut(rest, "\n")
-		if strings.HasPrefix(line, "diff --git ") {
-			flush()
-		}
-		block = append(block, line)
-		if !more {
-			break
-		}
-		rest = tail
-	}
-	flush()
 
-	computeStats(dm)
+	computeStatsLegacy(dm)
 	return dm, nil
 }
 
-// parseFileBlock parses the lines of one "diff --git ..." block into a DiffFile.
-func parseFileBlock(lines []string) model.DiffFile {
+// splitOnDiffGit splits the raw diff on "diff --git" markers.
+func splitOnDiffGitLegacy(raw string) []string {
+	lines := strings.Split(raw, "\n")
+	var parts []string
+	var current strings.Builder
+
+	for _, line := range lines {
+		if strings.HasPrefix(line, "diff --git ") {
+			if current.Len() > 0 {
+				parts = append(parts, current.String())
+			}
+			current.Reset()
+		}
+		current.WriteString(line)
+		current.WriteString("\n")
+	}
+	if current.Len() > 0 {
+		parts = append(parts, current.String())
+	}
+	return parts
+}
+
+// parseFileBlock parses one "diff --git ..." block into a DiffFile.
+func parseFileBlockLegacy(block string) (model.DiffFile, error) {
 	f := model.DiffFile{Status: "modified"}
 
+	scanner := bufio.NewScanner(strings.NewReader(block))
+	var hunkLines []string
 	inHunk := false
 	var currentHunk *model.DiffHunk
 
-	for _, line := range lines {
-		line = strings.TrimSuffix(line, "\r")
+	for scanner.Scan() {
+		line := scanner.Text()
 
 		// Detect binary diff marker.
 		if strings.Contains(line, "Binary files ") || strings.Contains(line, "Binary files differ") {
@@ -76,7 +88,7 @@ func parseFileBlock(lines []string) model.DiffFile {
 			if path == "/dev/null" {
 				f.Status = "added"
 			} else {
-				f.OldPath = cleanPath(path)
+				f.OldPath = cleanPathLegacy(path)
 			}
 			continue
 		}
@@ -85,12 +97,12 @@ func parseFileBlock(lines []string) model.DiffFile {
 			if path == "/dev/null" {
 				f.Status = "removed"
 			} else {
-				f.NewPath = cleanPath(path)
+				f.NewPath = cleanPathLegacy(path)
 			}
 			continue
 		}
 
-		// Detect renamed file from "rename from/to" lines.
+		// Detect renamed file from "similarity index" or "rename from/to" lines.
 		if strings.HasPrefix(line, "rename from ") {
 			f.OldPath = strings.TrimPrefix(line, "rename from ")
 			f.Status = "renamed"
@@ -104,10 +116,12 @@ func parseFileBlock(lines []string) model.DiffFile {
 
 		// Parse hunk header: @@ -oldStart,oldCount +newStart,newCount @@
 		if strings.HasPrefix(line, "@@") {
+			// Flush previous hunk.
 			if currentHunk != nil {
 				f.Hunks = append(f.Hunks, *currentHunk)
 			}
-			h := parseHunkHeader(line)
+
+			h := parseHunkHeaderLegacy(line)
 			currentHunk = &h
 			inHunk = true
 			continue
@@ -117,12 +131,18 @@ func parseFileBlock(lines []string) model.DiffFile {
 		if inHunk && currentHunk != nil {
 			if len(line) == 0 {
 				// Empty line in diff — treat as context with empty content.
-				currentHunk.Lines = append(currentHunk.Lines, model.DiffLine{Kind: "context", Raw: ""})
+				dl := model.DiffLine{Kind: "context", Raw: ""}
+				currentHunk.Lines = append(currentHunk.Lines, dl)
 				continue
 			}
-			content := line[1:]
+			prefix := line[0]
+			content := ""
+			if len(line) > 1 {
+				content = line[1:]
+			}
+
 			var dl model.DiffLine
-			switch line[0] {
+			switch prefix {
 			case ' ':
 				dl = model.DiffLine{Kind: "context", Raw: content}
 			case '+':
@@ -138,8 +158,10 @@ func parseFileBlock(lines []string) model.DiffFile {
 				// Unknown prefix — treat as context.
 				dl = model.DiffLine{Kind: "context", Raw: line}
 			}
-			f.MaxLineLen = max(f.MaxLineLen, len(dl.Raw))
 			currentHunk.Lines = append(currentHunk.Lines, dl)
+
+			// Accumulate hunk lines for later display row computation.
+			hunkLines = append(hunkLines, line)
 		}
 	}
 
@@ -149,23 +171,25 @@ func parseFileBlock(lines []string) model.DiffFile {
 	}
 
 	// Populate line numbers for context/addition/deletion lines.
-	populateLineNumbers(&f)
+	populateLineNumbersLegacy(&f)
 
 	// Compute display rows for virtualization.
-	f.DisplayRows = fileDisplayRows(&f)
+	f.DisplayRows = fileDisplayRowsLegacy(&f)
 
-	// Set default paths if not yet set, from "diff --git a/path b/path".
+	// Set default paths if not yet set (from the diff --git line).
 	if f.NewPath == "" && f.OldPath == "" {
-		firstLine := strings.TrimSpace(lines[0])
+		// Try to extract from the first line of the block.
+		firstLine := strings.TrimSpace(strings.Split(block, "\n")[0])
+		// "diff --git a/path b/path"
 		if idx := strings.Index(firstLine, "diff --git "); idx == 0 {
 			rest := strings.TrimPrefix(firstLine, "diff --git ")
 			parts := strings.SplitN(rest, " ", 2)
 			if len(parts) == 2 {
-				f.OldPath = cleanPath(parts[0])
-				f.NewPath = cleanPath(parts[1])
+				f.OldPath = cleanPathLegacy(parts[0])
+				f.NewPath = cleanPathLegacy(parts[1])
 			} else if len(parts) == 1 {
-				f.OldPath = cleanPath(parts[0])
-				f.NewPath = cleanPath(parts[0])
+				f.OldPath = cleanPathLegacy(parts[0])
+				f.NewPath = cleanPathLegacy(parts[0])
 			}
 		}
 	}
@@ -176,11 +200,11 @@ func parseFileBlock(lines []string) model.DiffFile {
 		f.OldPath = f.NewPath
 	}
 
-	return f
+	return f, nil
 }
 
 // cleanPath strips the a/ or b/ prefix that git adds to paths.
-func cleanPath(p string) string {
+func cleanPathLegacy(p string) string {
 	p = strings.TrimSpace(p)
 	if len(p) >= 2 && (p[0] == 'a' || p[0] == 'b') && p[1] == '/' {
 		return p[2:]
@@ -189,7 +213,7 @@ func cleanPath(p string) string {
 }
 
 // parseHunkHeader parses "@@ -oldStart,oldCount +newStart,newCount @@ ..." into a DiffHunk.
-func parseHunkHeader(line string) model.DiffHunk {
+func parseHunkHeaderLegacy(line string) model.DiffHunk {
 	h := model.DiffHunk{Header: line}
 
 	// Find all @@ markers.
@@ -203,16 +227,16 @@ func parseHunkHeader(line string) model.DiffHunk {
 	parts := strings.Fields(rangeStr)
 	for _, part := range parts {
 		if strings.HasPrefix(part, "-") {
-			h.OldStart, h.OldCount = parseRange(part[1:])
+			h.OldStart, h.OldCount = parseRangeLegacy(part[1:])
 		} else if strings.HasPrefix(part, "+") {
-			h.NewStart, h.NewCount = parseRange(part[1:])
+			h.NewStart, h.NewCount = parseRangeLegacy(part[1:])
 		}
 	}
 	return h
 }
 
 // parseRange parses "start" or "start,count" and returns (start, count).
-func parseRange(s string) (start, count int) {
+func parseRangeLegacy(s string) (start, count int) {
 	parts := strings.Split(s, ",")
 	if len(parts) == 0 {
 		return 0, 0
@@ -226,7 +250,7 @@ func parseRange(s string) (start, count int) {
 }
 
 // populateLineNumbers assigns OldLine and NewLine pointers to each DiffLine.
-func populateLineNumbers(f *model.DiffFile) {
+func populateLineNumbersLegacy(f *model.DiffFile) {
 	for i := range f.Hunks {
 		hunk := &f.Hunks[i]
 
@@ -258,7 +282,7 @@ func populateLineNumbers(f *model.DiffFile) {
 
 // fileDisplayRows computes the number of display rows for this file.
 // 1 row for the file header + 1 row per hunk header + 1 row per diff line.
-func fileDisplayRows(f *model.DiffFile) int {
+func fileDisplayRowsLegacy(f *model.DiffFile) int {
 	rows := 1 // file header
 	for _, hunk := range f.Hunks {
 		rows++ // hunk header
@@ -268,7 +292,7 @@ func fileDisplayRows(f *model.DiffFile) int {
 }
 
 // computeStats populates DiffModel.Stats from the file list.
-func computeStats(dm *model.DiffModel) {
+func computeStatsLegacy(dm *model.DiffModel) {
 	dm.Stats.TotalFiles = len(dm.Files)
 	for _, f := range dm.Files {
 		dm.Stats.TotalAdditions += f.Additions

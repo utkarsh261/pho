@@ -3,6 +3,7 @@ package prdetail
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -244,6 +245,8 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 						baseStyle = baseStyle.UnsetBackground()
 						lineBg = ""
 					}
+					bodyW := max(cw-diffGutterWidth, 1)
+					raw := clipForRender(dl.Raw, bodyW)
 					var s string
 					if rg, ok := changed[li]; ok && lineBg != "" && rg.end > rg.start &&
 						len(searchCtx.lineRanges[globalLineIndex]) == 0 {
@@ -252,12 +255,13 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 						if dl.Kind == "deletion" {
 							emphBg = m.theme.DiffDelEmphBg
 						}
-						s = baseStyle.Render(dl.Raw[:rg.start]) +
-							baseStyle.Background(emphBg).Render(dl.Raw[rg.start:rg.end]) +
-							baseStyle.Render(dl.Raw[rg.end:])
+						start, end := min(rg.start, len(raw)), min(rg.end, len(raw))
+						s = baseStyle.Render(raw[:start]) +
+							baseStyle.Background(emphBg).Render(raw[start:end]) +
+							baseStyle.Render(raw[end:])
 					} else {
 						s = m.renderSearchMatchLine(
-							dl.Raw,
+							raw,
 							i,
 							globalLineIndex,
 							searchCtx,
@@ -278,7 +282,6 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 						marker = "draft"
 					}
 					gutter := m.diffGutter(marker, diffLineNumber(dl))
-					bodyW := max(cw-diffGutterWidth, 1)
 
 					switch {
 					case m.theme == nil && (isSelected || isCursor):
@@ -333,6 +336,21 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 	}
 
 	return out
+}
+
+// clipForRender cuts lines far wider than the viewport before they are
+// styled, so a minified megabyte-long line costs no more than a screenful.
+// Lines under the limit are returned unchanged; longer ones keep enough
+// bytes to fill bodyW cells and are cut on a rune boundary.
+func clipForRender(raw string, bodyW int) string {
+	limit := max(bodyW*8, 2048)
+	if len(raw) <= limit {
+		return raw
+	}
+	for limit > 0 && !utf8.RuneStart(raw[limit]) {
+		limit--
+	}
+	return raw[:limit]
 }
 
 // diffGutterWidth is the width of the left gutter on every diff line:
