@@ -1,0 +1,2747 @@
+{
+ "viewer": "kmiller",
+ "reposDir": "repos",
+ "people": {
+  "kate@tidepool.dev": "kmiller",
+  "sarah@tidepool.dev": "sarahhill",
+  "james@tidepool.dev": "jcole",
+  "emma@tidepool.dev": "emward",
+  "tom@tidepool.dev": "tbaker",
+  "amy@tidepool.dev": "aclark",
+  "ben@tidepool.dev": "bhughes",
+  "lucy@tidepool.dev": "lgrant",
+  "49699333+dependabot[bot]@users.noreply.github.com": "dependabot[bot]",
+  "dependabot[bot]@users.noreply.github.com": "dependabot[bot]",
+  "support@github.com": "dependabot[bot]",
+  "29139614+renovate[bot]@users.noreply.github.com": "renovate[bot]",
+  "renovate[bot]@users.noreply.github.com": "renovate[bot]",
+  "bot@renovateapp.com": "renovate[bot]"
+ },
+ "repos": {
+  "tidepool-dev/tidepool": {
+   "extraPRs": [
+    {
+     "number": 478,
+     "title": "Refactor ingest nil checks",
+     "author": "lgrant",
+     "state": "MERGED",
+     "updated": "-1d"
+    },
+    {
+     "number": 477,
+     "title": "Add replay command to tidepoolctl",
+     "author": "tbaker",
+     "state": "CLOSED",
+     "updated": "-3d"
+    },
+    {
+     "number": 476,
+     "title": "Fix tenant shutdown path",
+     "author": "aclark",
+     "state": "MERGED",
+     "updated": "-3d"
+    },
+    {
+     "number": 473,
+     "title": "Add sink error messages",
+     "author": "lgrant",
+     "state": "MERGED",
+     "updated": "-4d"
+    },
+    {
+     "number": 472,
+     "title": "Improve grpc config validation",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-5d"
+    },
+    {
+     "number": 470,
+     "title": "Cover config logging fields",
+     "author": "aclark",
+     "state": "MERGED",
+     "updated": "-5d"
+    },
+    {
+     "number": 468,
+     "title": "Bump google.golang.org/protobuf from 1.34.2 to 1.35.1",
+     "author": "renovate[bot]",
+     "state": "MERGED",
+     "updated": "-7d"
+    },
+    {
+     "number": 467,
+     "title": "Clarify router docs",
+     "author": "emward",
+     "state": "MERGED",
+     "updated": "-6d"
+    },
+    {
+     "number": 463,
+     "title": "Add wal naming",
+     "author": "lgrant",
+     "state": "MERGED",
+     "updated": "-9d"
+    },
+    {
+     "number": 461,
+     "title": "Clarify wal config validation",
+     "author": "bhughes",
+     "state": "MERGED",
+     "updated": "-9d"
+    },
+    {
+     "number": 460,
+     "title": "Refactor batch logging fields",
+     "author": "lgrant",
+     "state": "MERGED",
+     "updated": "-11d"
+    },
+    {
+     "number": 459,
+     "title": "Add metrics logging fields",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-10d"
+    },
+    {
+     "number": 456,
+     "title": "Add router docs",
+     "author": "lgrant",
+     "state": "MERGED",
+     "updated": "-12d"
+    },
+    {
+     "number": 454,
+     "title": "Add health check for WAL disk usage",
+     "author": "emward",
+     "state": "MERGED",
+     "updated": "-13d"
+    },
+    {
+     "number": 452,
+     "title": "Cover batch error messages",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-12d"
+    },
+    {
+     "number": 449,
+     "title": "Remove unused tenant.Legacy field",
+     "author": "emward",
+     "state": "MERGED",
+     "updated": "-13d"
+    },
+    {
+     "number": 448,
+     "title": "Honor context cancellation in sink delivery",
+     "author": "bhughes",
+     "state": "MERGED",
+     "updated": "-15d"
+    },
+    {
+     "number": 447,
+     "title": "Fix metrics retry behaviour",
+     "author": "aclark",
+     "state": "MERGED",
+     "updated": "-16d"
+    },
+    {
+     "number": 446,
+     "title": "Add auth startup ordering",
+     "author": "aclark",
+     "state": "MERGED",
+     "updated": "-17d"
+    },
+    {
+     "number": 444,
+     "title": "Cover batch edge case with empty payloads",
+     "author": "lgrant",
+     "state": "MERGED",
+     "updated": "-16d"
+    },
+    {
+     "number": 440,
+     "title": "Improve sink shutdown path",
+     "author": "emward",
+     "state": "MERGED",
+     "updated": "-17d"
+    },
+    {
+     "number": 439,
+     "title": "Fix tenant lookup cache never expiring",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-20d"
+    },
+    {
+     "number": 438,
+     "title": "Clarify batch config validation",
+     "author": "bhughes",
+     "state": "MERGED",
+     "updated": "-20d"
+    },
+    {
+     "number": 436,
+     "title": "Refactor ingest docs",
+     "author": "tbaker",
+     "state": "CLOSED",
+     "updated": "-20d"
+    },
+    {
+     "number": 434,
+     "title": "Refactor router naming",
+     "author": "bhughes",
+     "state": "CLOSED",
+     "updated": "-23d"
+    },
+    {
+     "number": 433,
+     "title": "Improve metrics naming",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-22d"
+    },
+    {
+     "number": 431,
+     "title": "Clarify ingest retry behaviour",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-22d"
+    },
+    {
+     "number": 430,
+     "title": "Clarify wal edge case with empty payloads",
+     "author": "lgrant",
+     "state": "MERGED",
+     "updated": "-24d"
+    },
+    {
+     "number": 429,
+     "title": "Add Kafka sink SASL/SCRAM support",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-25d"
+    },
+    {
+     "number": 428,
+     "title": "Cover tenant retry behaviour",
+     "author": "sarahhill",
+     "state": "MERGED",
+     "updated": "-26d"
+    },
+    {
+     "number": 426,
+     "title": "Clarify wal error messages",
+     "author": "bhughes",
+     "state": "MERGED",
+     "updated": "-26d"
+    },
+    {
+     "number": 425,
+     "title": "Refactor metrics edge case with empty payloads",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-26d"
+    },
+    {
+     "number": 424,
+     "title": "Fix wal metric labels",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-28d"
+    },
+    {
+     "number": 423,
+     "title": "Add gRPC ingest reflection in dev builds",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-29d"
+    },
+    {
+     "number": 419,
+     "title": "Add sink test coverage",
+     "author": "sarahhill",
+     "state": "CLOSED",
+     "updated": "-29d"
+    },
+    {
+     "number": 417,
+     "title": "Cover router retry behaviour",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-32d"
+    },
+    {
+     "number": 416,
+     "title": "Fix time zone handling in retention config",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-32d"
+    },
+    {
+     "number": 415,
+     "title": "Add sink startup ordering",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-32d"
+    },
+    {
+     "number": 412,
+     "title": "Clarify router metric labels",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-32d"
+    },
+    {
+     "number": 411,
+     "title": "Improve metrics config validation",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-35d"
+    },
+    {
+     "number": 409,
+     "title": "Clarify ingest shutdown path",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-34d"
+    },
+    {
+     "number": 408,
+     "title": "Fix off-by-one in retention sweep",
+     "author": "sarahhill",
+     "state": "MERGED",
+     "updated": "-35d"
+    },
+    {
+     "number": 407,
+     "title": "Clarify batch edge case with empty payloads",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-38d"
+    },
+    {
+     "number": 406,
+     "title": "Bump go.uber.org/zap from 1.27.0 to 1.27.1",
+     "author": "renovate[bot]",
+     "state": "MERGED",
+     "updated": "-38d"
+    },
+    {
+     "number": 405,
+     "title": "Refactor ingest test coverage",
+     "author": "lgrant",
+     "state": "MERGED",
+     "updated": "-39d"
+    },
+    {
+     "number": 403,
+     "title": "Fix router config validation",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-38d"
+    },
+    {
+     "number": 402,
+     "title": "Refactor config edge case with empty payloads",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-40d"
+    },
+    {
+     "number": 399,
+     "title": "Clarify auth error messages",
+     "author": "sarahhill",
+     "state": "MERGED",
+     "updated": "-40d"
+    },
+    {
+     "number": 398,
+     "title": "Fix auth logging fields",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-42d"
+    },
+    {
+     "number": 394,
+     "title": "Clarify metrics test coverage",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-42d"
+    },
+    {
+     "number": 393,
+     "title": "Clarify batch shutdown path",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-42d"
+    },
+    {
+     "number": 389,
+     "title": "Fix flaky TestRouterBackpressure",
+     "author": "aclark",
+     "state": "CLOSED",
+     "updated": "-43d"
+    },
+    {
+     "number": 388,
+     "title": "Fix auth test coverage",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-46d"
+    },
+    {
+     "number": 384,
+     "title": "Improve wal docs",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-46d"
+    },
+    {
+     "number": 381,
+     "title": "Cover sink shutdown path",
+     "author": "lgrant",
+     "state": "MERGED",
+     "updated": "-47d"
+    },
+    {
+     "number": 378,
+     "title": "Add ingest request size histogram",
+     "author": "sarahhill",
+     "state": "MERGED",
+     "updated": "-48d"
+    },
+    {
+     "number": 373,
+     "title": "Fix auth timeout handling",
+     "author": "lgrant",
+     "state": "MERGED",
+     "updated": "-48d"
+    },
+    {
+     "number": 371,
+     "title": "Clarify ingest test coverage",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-48d"
+    },
+    {
+     "number": 369,
+     "title": "Cover grpc startup ordering",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-49d"
+    },
+    {
+     "number": 368,
+     "title": "Clarify tenant timeout handling",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-51d"
+    },
+    {
+     "number": 367,
+     "title": "Cover config retry behaviour",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-51d"
+    },
+    {
+     "number": 364,
+     "title": "Fix CHANGELOG formatting for v0.9",
+     "author": "aclark",
+     "state": "CLOSED",
+     "updated": "-52d"
+    },
+    {
+     "number": 360,
+     "title": "Add router metric labels",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-54d"
+    },
+    {
+     "number": 359,
+     "title": "Clarify sink nil checks",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-54d"
+    },
+    {
+     "number": 358,
+     "title": "Truncate oversized attribute values at 4KiB",
+     "author": "sarahhill",
+     "state": "MERGED",
+     "updated": "-56d"
+    },
+    {
+     "number": 355,
+     "title": "Return 413 for oversized batches",
+     "author": "lgrant",
+     "state": "MERGED",
+     "updated": "-55d"
+    },
+    {
+     "number": 353,
+     "title": "Make WAL segment size configurable",
+     "author": "emward",
+     "state": "CLOSED",
+     "updated": "-57d"
+    },
+    {
+     "number": 352,
+     "title": "Add grpc metric labels",
+     "author": "sarahhill",
+     "state": "MERGED",
+     "updated": "-56d"
+    },
+    {
+     "number": 350,
+     "title": "Refactor rule matcher to precompile glob patterns",
+     "author": "bhughes",
+     "state": "CLOSED",
+     "updated": "-59d"
+    },
+    {
+     "number": 349,
+     "title": "Refactor metrics shutdown path",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-58d"
+    },
+    {
+     "number": 348,
+     "title": "Refactor wal metric labels",
+     "author": "emward",
+     "state": "MERGED",
+     "updated": "-61d"
+    },
+    {
+     "number": 347,
+     "title": "Improve router timeout handling",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-60d"
+    },
+    {
+     "number": 346,
+     "title": "Clarify metrics docs",
+     "author": "lgrant",
+     "state": "MERGED",
+     "updated": "-62d"
+    },
+    {
+     "number": 344,
+     "title": "Improve wal metric labels",
+     "author": "kmiller",
+     "state": "CLOSED",
+     "updated": "-61d"
+    },
+    {
+     "number": 343,
+     "title": "Return structured errors from ingest API",
+     "author": "jcole",
+     "state": "CLOSED",
+     "updated": "-63d"
+    },
+    {
+     "number": 342,
+     "title": "Switch WAL checksums to crc32c",
+     "author": "lgrant",
+     "state": "MERGED",
+     "updated": "-63d"
+    },
+    {
+     "number": 340,
+     "title": "Fix grpc error messages",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-65d"
+    },
+    {
+     "number": 339,
+     "title": "Add webhook sink HMAC signing",
+     "author": "aclark",
+     "state": "CLOSED",
+     "updated": "-66d"
+    },
+    {
+     "number": 330,
+     "title": "Clarify router edge case with empty payloads",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-66d"
+    },
+    {
+     "number": 328,
+     "title": "Fix ingest naming",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-66d"
+    },
+    {
+     "number": 326,
+     "title": "Cover config shutdown path",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-67d"
+    },
+    {
+     "number": 321,
+     "title": "Clarify auth startup ordering",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-70d"
+    },
+    {
+     "number": 320,
+     "title": "Refactor grpc timeout handling",
+     "author": "sarahhill",
+     "state": "CLOSED",
+     "updated": "-70d"
+    },
+    {
+     "number": 319,
+     "title": "Add tenant docs",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-70d"
+    },
+    {
+     "number": 318,
+     "title": "Improve wal config validation",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-73d"
+    },
+    {
+     "number": 315,
+     "title": "Improve batch timeout handling",
+     "author": "aclark",
+     "state": "MERGED",
+     "updated": "-72d"
+    },
+    {
+     "number": 314,
+     "title": "Add auth docs",
+     "author": "sarahhill",
+     "state": "MERGED",
+     "updated": "-73d"
+    },
+    {
+     "number": 313,
+     "title": "Handle SIGTERM by draining router before closing WAL",
+     "author": "bhughes",
+     "state": "MERGED",
+     "updated": "-74d"
+    },
+    {
+     "number": 312,
+     "title": "Move metrics registration out of init()",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-74d"
+    },
+    {
+     "number": 311,
+     "title": "Add golangci-lint to CI",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-76d"
+    },
+    {
+     "number": 310,
+     "title": "Clarify auth docs",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-77d"
+    },
+    {
+     "number": 309,
+     "title": "Reduce allocations in event decoder",
+     "author": "lgrant",
+     "state": "MERGED",
+     "updated": "-77d"
+    },
+    {
+     "number": 308,
+     "title": "Document rule syntax with examples",
+     "author": "kmiller",
+     "state": "CLOSED",
+     "updated": "-77d"
+    },
+    {
+     "number": 305,
+     "title": "Cover auth error messages",
+     "author": "aclark",
+     "state": "MERGED",
+     "updated": "-80d"
+    },
+    {
+     "number": 304,
+     "title": "Add tenant timeout handling",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-80d"
+    },
+    {
+     "number": 301,
+     "title": "Add batch shutdown path",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-81d"
+    },
+    {
+     "number": 299,
+     "title": "Add sink retry behaviour",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-83d"
+    },
+    {
+     "number": 295,
+     "title": "Add wal timeout handling",
+     "author": "emward",
+     "state": "MERGED",
+     "updated": "-81d"
+    },
+    {
+     "number": 294,
+     "title": "Clarify metrics nil checks",
+     "author": "sarahhill",
+     "state": "MERGED",
+     "updated": "-83d"
+    },
+    {
+     "number": 292,
+     "title": "Add auth nil checks",
+     "author": "bhughes",
+     "state": "MERGED",
+     "updated": "-83d"
+    },
+    {
+     "number": 287,
+     "title": "Refactor config startup ordering",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-84d"
+    },
+    {
+     "number": 285,
+     "title": "Refactor wal config validation",
+     "author": "jcole",
+     "state": "CLOSED",
+     "updated": "-85d"
+    },
+    {
+     "number": 281,
+     "title": "Cover sink startup ordering",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-88d"
+    },
+    {
+     "number": 278,
+     "title": "Add auth error messages",
+     "author": "emward",
+     "state": "MERGED",
+     "updated": "-86d"
+    },
+    {
+     "number": 276,
+     "title": "Cover ingest edge case with empty payloads",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-89d"
+    },
+    {
+     "number": 275,
+     "title": "Add grpc docs",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-90d"
+    },
+    {
+     "number": 274,
+     "title": "Fix ingest shutdown path",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-90d"
+    },
+    {
+     "number": 272,
+     "title": "Add tenant-scoped API key rotation",
+     "author": "aclark",
+     "state": "MERGED",
+     "updated": "-91d"
+    },
+    {
+     "number": 268,
+     "title": "Refactor auth naming",
+     "author": "aclark",
+     "state": "MERGED",
+     "updated": "-91d"
+    },
+    {
+     "number": 266,
+     "title": "Fix duplicate delivery after sink reconnect",
+     "author": "emward",
+     "state": "MERGED",
+     "updated": "-91d"
+    },
+    {
+     "number": 265,
+     "title": "Cover router error messages",
+     "author": "aclark",
+     "state": "MERGED",
+     "updated": "-94d"
+    },
+    {
+     "number": 264,
+     "title": "Clarify sink naming",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-94d"
+    },
+    {
+     "number": 262,
+     "title": "Clarify grpc metric labels",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-96d"
+    },
+    {
+     "number": 261,
+     "title": "Drop legacy ingest v0",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-97d"
+    },
+    {
+     "number": 260,
+     "title": "Improve wal shutdown path",
+     "author": "sarahhill",
+     "state": "CLOSED",
+     "updated": "-96d"
+    },
+    {
+     "number": 257,
+     "title": "Add /readyz endpoint with sink health",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-97d"
+    },
+    {
+     "number": 256,
+     "title": "Cover wal startup ordering",
+     "author": "sarahhill",
+     "state": "MERGED",
+     "updated": "-98d"
+    },
+    {
+     "number": 255,
+     "title": "Add router config validation",
+     "author": "sarahhill",
+     "state": "MERGED",
+     "updated": "-98d"
+    },
+    {
+     "number": 254,
+     "title": "Refactor grpc docs",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-99d"
+    },
+    {
+     "number": 252,
+     "title": "Bump github.com/segmentio/kafka-go from 0.4.46 to 0.4.47",
+     "author": "dependabot[bot]",
+     "state": "MERGED",
+     "updated": "-101d"
+    },
+    {
+     "number": 249,
+     "title": "Use buf for proto linting in CI",
+     "author": "sarahhill",
+     "state": "MERGED",
+     "updated": "-101d"
+    },
+    {
+     "number": 247,
+     "title": "Cover auth config validation",
+     "author": "bhughes",
+     "state": "CLOSED",
+     "updated": "-101d"
+    },
+    {
+     "number": 246,
+     "title": "Refactor batch retry behaviour",
+     "author": "bhughes",
+     "state": "CLOSED",
+     "updated": "-102d"
+    },
+    {
+     "number": 243,
+     "title": "Cache compiled routing rules per tenant",
+     "author": "aclark",
+     "state": "MERGED",
+     "updated": "-103d"
+    },
+    {
+     "number": 242,
+     "title": "Fix config nil checks",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-104d"
+    },
+    {
+     "number": 241,
+     "title": "Bump golang.org/x/net from 0.28.0 to 0.30.0",
+     "author": "renovate[bot]",
+     "state": "MERGED",
+     "updated": "-105d"
+    },
+    {
+     "number": 237,
+     "title": "Add config nil checks",
+     "author": "jcole",
+     "state": "CLOSED",
+     "updated": "-106d"
+    },
+    {
+     "number": 236,
+     "title": "Refactor batch metric labels",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-108d"
+    },
+    {
+     "number": 232,
+     "title": "Bump github.com/prometheus/client_golang from 1.19.1 to 1.20.4",
+     "author": "dependabot[bot]",
+     "state": "MERGED",
+     "updated": "-108d"
+    },
+    {
+     "number": 231,
+     "title": "Fix S3 sink key prefix when tenant ID contains slash",
+     "author": "emward",
+     "state": "MERGED",
+     "updated": "-110d"
+    },
+    {
+     "number": 230,
+     "title": "Clarify metrics retry behaviour",
+     "author": "emward",
+     "state": "MERGED",
+     "updated": "-110d"
+    },
+    {
+     "number": 228,
+     "title": "Cover batch shutdown path",
+     "author": "lgrant",
+     "state": "MERGED",
+     "updated": "-111d"
+    },
+    {
+     "number": 222,
+     "title": "Add grpc config validation",
+     "author": "lgrant",
+     "state": "MERGED",
+     "updated": "-111d"
+    },
+    {
+     "number": 219,
+     "title": "Add --config-check flag to validate rules offline",
+     "author": "bhughes",
+     "state": "MERGED",
+     "updated": "-112d"
+    },
+    {
+     "number": 218,
+     "title": "Update Dockerfile to distroless static base",
+     "author": "bhughes",
+     "state": "MERGED",
+     "updated": "-114d"
+    },
+    {
+     "number": 217,
+     "title": "Improve metrics metric labels",
+     "author": "lgrant",
+     "state": "MERGED",
+     "updated": "-113d"
+    },
+    {
+     "number": 214,
+     "title": "Retry transient Kafka produce errors",
+     "author": "lgrant",
+     "state": "MERGED",
+     "updated": "-114d"
+    },
+    {
+     "number": 213,
+     "title": "Add grpc error messages",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-116d"
+    },
+    {
+     "number": 212,
+     "title": "Improve ingest naming",
+     "author": "bhughes",
+     "state": "MERGED",
+     "updated": "-117d"
+    },
+    {
+     "number": 208,
+     "title": "Refactor grpc test coverage",
+     "author": "emward",
+     "state": "CLOSED",
+     "updated": "-116d"
+    },
+    {
+     "number": 207,
+     "title": "Pin CI to Go 1.25",
+     "author": "emward",
+     "state": "MERGED",
+     "updated": "-119d"
+    },
+    {
+     "number": 205,
+     "title": "Cover sink logging fields",
+     "author": "lgrant",
+     "state": "MERGED",
+     "updated": "-118d"
+    },
+    {
+     "number": 199,
+     "title": "Improve sink test coverage",
+     "author": "bhughes",
+     "state": "MERGED",
+     "updated": "-121d"
+    },
+    {
+     "number": 198,
+     "title": "Fix sink retry behaviour",
+     "author": "emward",
+     "state": "MERGED",
+     "updated": "-121d"
+    },
+    {
+     "number": 197,
+     "title": "Improve metrics test coverage",
+     "author": "emward",
+     "state": "CLOSED",
+     "updated": "-121d"
+    },
+    {
+     "number": 195,
+     "title": "Improve grpc shutdown path",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-121d"
+    },
+    {
+     "number": 190,
+     "title": "Fix WAL replay skipping last record after crash",
+     "author": "sarahhill",
+     "state": "MERGED",
+     "updated": "-123d"
+    },
+    {
+     "number": 188,
+     "title": "Cover config docs",
+     "author": "lgrant",
+     "state": "MERGED",
+     "updated": "-123d"
+    },
+    {
+     "number": 186,
+     "title": "Fix race in webhook sink shutdown",
+     "author": "emward",
+     "state": "MERGED",
+     "updated": "-126d"
+    },
+    {
+     "number": 185,
+     "title": "Add router timeout handling",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-127d"
+    },
+    {
+     "number": 182,
+     "title": "Add benchmark for ingest hot path",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-127d"
+    },
+    {
+     "number": 177,
+     "title": "Bump actions/setup-go from 5.0.2 to 5.1.0",
+     "author": "dependabot[bot]",
+     "state": "MERGED",
+     "updated": "-128d"
+    },
+    {
+     "number": 174,
+     "title": "Refactor grpc error messages",
+     "author": "bhughes",
+     "state": "MERGED",
+     "updated": "-127d"
+    },
+    {
+     "number": 170,
+     "title": "Log tenant ID on rejected API keys",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-128d"
+    },
+    {
+     "number": 169,
+     "title": "Add S3 sink retries",
+     "author": "sarahhill",
+     "state": "MERGED",
+     "updated": "-131d"
+    },
+    {
+     "number": 168,
+     "title": "Fix tenant config validation",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-131d"
+    },
+    {
+     "number": 167,
+     "title": "Clarify wal test coverage",
+     "author": "aclark",
+     "state": "MERGED",
+     "updated": "-133d"
+    },
+    {
+     "number": 164,
+     "title": "Improve wal startup ordering",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-132d"
+    },
+    {
+     "number": 163,
+     "title": "Clarify tenant retry behaviour",
+     "author": "bhughes",
+     "state": "MERGED",
+     "updated": "-133d"
+    },
+    {
+     "number": 162,
+     "title": "Refactor grpc startup ordering",
+     "author": "emward",
+     "state": "CLOSED",
+     "updated": "-133d"
+    },
+    {
+     "number": 160,
+     "title": "Fix router shutdown path",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-135d"
+    },
+    {
+     "number": 158,
+     "title": "Expose WAL segment count as a metric",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-135d"
+    },
+    {
+     "number": 157,
+     "title": "Add metrics startup ordering",
+     "author": "lgrant",
+     "state": "CLOSED",
+     "updated": "-136d"
+    },
+    {
+     "number": 153,
+     "title": "Clarify metrics edge case with empty payloads",
+     "author": "bhughes",
+     "state": "MERGED",
+     "updated": "-137d"
+    },
+    {
+     "number": 152,
+     "title": "Fix metrics docs",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-139d"
+    },
+    {
+     "number": 149,
+     "title": "Speed up router tests by sharing fixtures",
+     "author": "sarahhill",
+     "state": "MERGED",
+     "updated": "-138d"
+    },
+    {
+     "number": 147,
+     "title": "Improve batch shutdown path",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-141d"
+    },
+    {
+     "number": 145,
+     "title": "Add batch edge case with empty payloads",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-140d"
+    },
+    {
+     "number": 144,
+     "title": "Clarify config timeout handling",
+     "author": "lgrant",
+     "state": "MERGED",
+     "updated": "-143d"
+    },
+    {
+     "number": 141,
+     "title": "Document sink delivery guarantees",
+     "author": "emward",
+     "state": "MERGED",
+     "updated": "-141d"
+    },
+    {
+     "number": 138,
+     "title": "Fix sink error messages",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-142d"
+    },
+    {
+     "number": 137,
+     "title": "Fix grpc metric labels",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-144d"
+    },
+    {
+     "number": 133,
+     "title": "Fix sink edge case with empty payloads",
+     "author": "emward",
+     "state": "MERGED",
+     "updated": "-146d"
+    },
+    {
+     "number": 132,
+     "title": "Improve auth shutdown path",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-145d"
+    },
+    {
+     "number": 131,
+     "title": "Fix metrics error messages",
+     "author": "aclark",
+     "state": "MERGED",
+     "updated": "-146d"
+    },
+    {
+     "number": 129,
+     "title": "Clarify auth retry behaviour",
+     "author": "aclark",
+     "state": "MERGED",
+     "updated": "-147d"
+    },
+    {
+     "number": 128,
+     "title": "Fix panic on empty batch in ingest decoder",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-147d"
+    },
+    {
+     "number": 127,
+     "title": "Fix sink shutdown path",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-149d"
+    },
+    {
+     "number": 126,
+     "title": "Add ingest edge case with empty payloads",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-149d"
+    },
+    {
+     "number": 125,
+     "title": "Fix memory leak in idle gRPC streams",
+     "author": "aclark",
+     "state": "MERGED",
+     "updated": "-152d"
+    }
+   ]
+  },
+  "tidepool-dev/tidepool-web": {
+   "extraPRs": [
+    {
+     "number": 213,
+     "title": "Update dependency prettier to v3.3.3",
+     "author": "dependabot[bot]",
+     "state": "MERGED",
+     "updated": "-3d"
+    },
+    {
+     "number": 212,
+     "title": "Fix layout shift on settings page",
+     "author": "lgrant",
+     "state": "MERGED",
+     "updated": "-5d"
+    },
+    {
+     "number": 210,
+     "title": "Update dependency typescript to v5.6.3",
+     "author": "dependabot[bot]",
+     "state": "CLOSED",
+     "updated": "-7d"
+    },
+    {
+     "number": 208,
+     "title": "Bump jsdom from 25.0.0 to 25.0.1",
+     "author": "renovate[bot]",
+     "state": "MERGED",
+     "updated": "-11d"
+    },
+    {
+     "number": 207,
+     "title": "Fix redirect after login",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-13d"
+    },
+    {
+     "number": 203,
+     "title": "Add retry on failed chart fetch",
+     "author": "emward",
+     "state": "MERGED",
+     "updated": "-13d"
+    },
+    {
+     "number": 200,
+     "title": "Fix sidebar collapsing on route change",
+     "author": "aclark",
+     "state": "MERGED",
+     "updated": "-15d"
+    },
+    {
+     "number": 199,
+     "title": "Add changelog link in footer",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-18d"
+    },
+    {
+     "number": 197,
+     "title": "Add dark mode for charts",
+     "author": "aclark",
+     "state": "CLOSED",
+     "updated": "-21d"
+    },
+    {
+     "number": 195,
+     "title": "Update dependency vite to v6.0.1",
+     "author": "renovate[bot]",
+     "state": "MERGED",
+     "updated": "-23d"
+    },
+    {
+     "number": 194,
+     "title": "Add Playwright smoke test",
+     "author": "aclark",
+     "state": "MERGED",
+     "updated": "-25d"
+    },
+    {
+     "number": 192,
+     "title": "Fix flaky tenant page test",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-25d"
+    },
+    {
+     "number": 191,
+     "title": "Fix a11y labels on icon buttons",
+     "author": "sarahhill",
+     "state": "MERGED",
+     "updated": "-27d"
+    },
+    {
+     "number": 185,
+     "title": "Fix wrong unit label for events/sec",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-31d"
+    },
+    {
+     "number": 184,
+     "title": "Fix date range picker timezone off-by-one",
+     "author": "emward",
+     "state": "MERGED",
+     "updated": "-33d"
+    },
+    {
+     "number": 181,
+     "title": "Switch charts to uPlot",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-34d"
+    },
+    {
+     "number": 180,
+     "title": "Reduce initial bundle by 90KB",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-36d"
+    },
+    {
+     "number": 176,
+     "title": "Cache tenant list across navigations",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-38d"
+    },
+    {
+     "number": 174,
+     "title": "Add storybook for table components",
+     "author": "sarahhill",
+     "state": "MERGED",
+     "updated": "-39d"
+    },
+    {
+     "number": 173,
+     "title": "Preload fonts to cut CLS",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-43d"
+    },
+    {
+     "number": 171,
+     "title": "Update dependency eslint to v9.12.0",
+     "author": "dependabot[bot]",
+     "state": "CLOSED",
+     "updated": "-45d"
+    },
+    {
+     "number": 167,
+     "title": "Add skeleton loaders to dashboard",
+     "author": "emward",
+     "state": "CLOSED",
+     "updated": "-45d"
+    },
+    {
+     "number": 166,
+     "title": "Align spacing in settings forms",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-47d"
+    },
+    {
+     "number": 165,
+     "title": "Remove unused Tailwind safelist",
+     "author": "emward",
+     "state": "MERGED",
+     "updated": "-50d"
+    },
+    {
+     "number": 163,
+     "title": "Support org switcher in nav",
+     "author": "sarahhill",
+     "state": "CLOSED",
+     "updated": "-51d"
+    },
+    {
+     "number": 160,
+     "title": "Add tenant search to header",
+     "author": "sarahhill",
+     "state": "CLOSED",
+     "updated": "-55d"
+    },
+    {
+     "number": 158,
+     "title": "Lazy-load chart bundle",
+     "author": "sarahhill",
+     "state": "MERGED",
+     "updated": "-55d"
+    },
+    {
+     "number": 157,
+     "title": "Add tenants table sorting",
+     "author": "bhughes",
+     "state": "MERGED",
+     "updated": "-57d"
+    },
+    {
+     "number": 156,
+     "title": "Add error boundary around charts",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-61d"
+    },
+    {
+     "number": 151,
+     "title": "Show sink health in sidebar",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-61d"
+    },
+    {
+     "number": 148,
+     "title": "Fix 401 loop when session cookie expires",
+     "author": "jcole",
+     "state": "CLOSED",
+     "updated": "-63d"
+    },
+    {
+     "number": 147,
+     "title": "Fix pagination reset on filter change",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-67d"
+    },
+    {
+     "number": 146,
+     "title": "Debounce stream search input",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-67d"
+    },
+    {
+     "number": 145,
+     "title": "Fix build warning for unused imports",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-70d"
+    },
+    {
+     "number": 142,
+     "title": "Show WAL lag on dashboard",
+     "author": "lgrant",
+     "state": "CLOSED",
+     "updated": "-72d"
+    },
+    {
+     "number": 140,
+     "title": "Add loading state to save button",
+     "author": "aclark",
+     "state": "CLOSED",
+     "updated": "-74d"
+    },
+    {
+     "number": 139,
+     "title": "Handle 429s with a retry banner",
+     "author": "bhughes",
+     "state": "MERGED",
+     "updated": "-76d"
+    },
+    {
+     "number": 137,
+     "title": "Fix API key copy button on Safari",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-78d"
+    },
+    {
+     "number": 135,
+     "title": "Add sink delivery status badges",
+     "author": "sarahhill",
+     "state": "CLOSED",
+     "updated": "-80d"
+    },
+    {
+     "number": 133,
+     "title": "Bump react-router from 7.0.1 to 7.0.2",
+     "author": "dependabot[bot]",
+     "state": "CLOSED",
+     "updated": "-83d"
+    },
+    {
+     "number": 132,
+     "title": "Update dependency zod to v3.23.8",
+     "author": "renovate[bot]",
+     "state": "MERGED",
+     "updated": "-83d"
+    },
+    {
+     "number": 131,
+     "title": "Add empty state for tenants with no streams",
+     "author": "aclark",
+     "state": "MERGED",
+     "updated": "-85d"
+    },
+    {
+     "number": 130,
+     "title": "Document local dev proxy setup",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-88d"
+    },
+    {
+     "number": 127,
+     "title": "Show last-seen time for API keys",
+     "author": "sarahhill",
+     "state": "MERGED",
+     "updated": "-89d"
+    },
+    {
+     "number": 125,
+     "title": "Migrate to React 19",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-92d"
+    },
+    {
+     "number": 123,
+     "title": "Fix focus ring on dropdown menus",
+     "author": "emward",
+     "state": "MERGED",
+     "updated": "-94d"
+    },
+    {
+     "number": 119,
+     "title": "Update dependency @tanstack/react-query to v5.59.0",
+     "author": "dependabot[bot]",
+     "state": "MERGED",
+     "updated": "-95d"
+    },
+    {
+     "number": 117,
+     "title": "Fix missing key warning in rule list",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-99d"
+    },
+    {
+     "number": 115,
+     "title": "Fix scroll restoration in stream detail",
+     "author": "emward",
+     "state": "MERGED",
+     "updated": "-99d"
+    },
+    {
+     "number": 113,
+     "title": "Add rule editor syntax highlighting",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-102d"
+    },
+    {
+     "number": 112,
+     "title": "Update dependency @types/react to v19.0.1",
+     "author": "renovate[bot]",
+     "state": "CLOSED",
+     "updated": "-104d"
+    },
+    {
+     "number": 109,
+     "title": "Bump vitest from 2.1.1 to 2.1.3",
+     "author": "renovate[bot]",
+     "state": "CLOSED",
+     "updated": "-107d"
+    },
+    {
+     "number": 108,
+     "title": "Add audit log page",
+     "author": "sarahhill",
+     "state": "MERGED",
+     "updated": "-108d"
+    },
+    {
+     "number": 105,
+     "title": "Upgrade to Node 22 in CI",
+     "author": "aclark",
+     "state": "MERGED",
+     "updated": "-110d"
+    },
+    {
+     "number": 104,
+     "title": "Replace moment with date-fns",
+     "author": "emward",
+     "state": "MERGED",
+     "updated": "-112d"
+    },
+    {
+     "number": 102,
+     "title": "Add CSV export for stream list",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-114d"
+    },
+    {
+     "number": 98,
+     "title": "Add keyboard shortcuts to command palette",
+     "author": "sarahhill",
+     "state": "MERGED",
+     "updated": "-116d"
+    },
+    {
+     "number": 96,
+     "title": "Show tenant plan in header",
+     "author": "emward",
+     "state": "MERGED",
+     "updated": "-118d"
+    },
+    {
+     "number": 94,
+     "title": "Bump msw from 2.4.9 to 2.4.11",
+     "author": "dependabot[bot]",
+     "state": "MERGED",
+     "updated": "-120d"
+    }
+   ]
+  },
+  "tidepool-dev/infra": {
+   "extraPRs": [
+    {
+     "number": 73,
+     "title": "Fix IAM policy for S3 sink bucket",
+     "author": "bhughes",
+     "state": "CLOSED",
+     "updated": "-2d"
+    },
+    {
+     "number": 70,
+     "title": "Add cost allocation tags",
+     "author": "bhughes",
+     "state": "MERGED",
+     "updated": "-7d"
+    },
+    {
+     "number": 69,
+     "title": "Move Terraform state to per-env buckets",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-11d"
+    },
+    {
+     "number": 68,
+     "title": "Add alerting for WAL disk usage above 80%",
+     "author": "aclark",
+     "state": "MERGED",
+     "updated": "-15d"
+    },
+    {
+     "number": 67,
+     "title": "Fix tflint warnings",
+     "author": "aclark",
+     "state": "MERGED",
+     "updated": "-17d"
+    },
+    {
+     "number": 66,
+     "title": "Bump terraform-aws-modules/eks/aws from 20.24.0 to 20.24.3",
+     "author": "renovate[bot]",
+     "state": "MERGED",
+     "updated": "-23d"
+    },
+    {
+     "number": 64,
+     "title": "Update dependency hashicorp/aws to v5.70.0",
+     "author": "dependabot[bot]",
+     "state": "MERGED",
+     "updated": "-27d"
+    },
+    {
+     "number": 62,
+     "title": "Set topology spread constraints on ingest",
+     "author": "aclark",
+     "state": "MERGED",
+     "updated": "-29d"
+    },
+    {
+     "number": 61,
+     "title": "Document disaster recovery runbook",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-34d"
+    },
+    {
+     "number": 60,
+     "title": "Add ExternalDNS for staging",
+     "author": "aclark",
+     "state": "CLOSED",
+     "updated": "-38d"
+    },
+    {
+     "number": 59,
+     "title": "Tighten security group egress rules",
+     "author": "aclark",
+     "state": "MERGED",
+     "updated": "-43d"
+    },
+    {
+     "number": 57,
+     "title": "Add network policy for ingest pods",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-47d"
+    },
+    {
+     "number": 56,
+     "title": "Add PodDisruptionBudget for ingest",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-50d"
+    },
+    {
+     "number": 55,
+     "title": "Add cert-manager ClusterIssuer",
+     "author": "tbaker",
+     "state": "MERGED",
+     "updated": "-53d"
+    },
+    {
+     "number": 54,
+     "title": "Enable gp3 for WAL volumes",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-57d"
+    },
+    {
+     "number": 53,
+     "title": "Raise ingest memory limits to 2Gi",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-63d"
+    },
+    {
+     "number": 47,
+     "title": "Fix helm values drift in staging",
+     "author": "aclark",
+     "state": "MERGED",
+     "updated": "-67d"
+    },
+    {
+     "number": 45,
+     "title": "Fix Karpenter node pool taints",
+     "author": "aclark",
+     "state": "CLOSED",
+     "updated": "-71d"
+    },
+    {
+     "number": 44,
+     "title": "Add Prometheus ServiceMonitor for router",
+     "author": "bhughes",
+     "state": "MERGED",
+     "updated": "-75d"
+    },
+    {
+     "number": 43,
+     "title": "Pin Helm chart versions in production",
+     "author": "aclark",
+     "state": "MERGED",
+     "updated": "-77d"
+    },
+    {
+     "number": 39,
+     "title": "Bump actions/checkout from 4.1.7 to 4.2.0",
+     "author": "dependabot[bot]",
+     "state": "MERGED",
+     "updated": "-81d"
+    },
+    {
+     "number": 35,
+     "title": "Rotate staging KMS key",
+     "author": "bhughes",
+     "state": "CLOSED",
+     "updated": "-87d"
+    },
+    {
+     "number": 34,
+     "title": "Add Grafana dashboard for WAL metrics",
+     "author": "bhughes",
+     "state": "MERGED",
+     "updated": "-90d"
+    },
+    {
+     "number": 30,
+     "title": "Update dependency terraform to v1.9.7",
+     "author": "dependabot[bot]",
+     "state": "MERGED",
+     "updated": "-94d"
+    },
+    {
+     "number": 28,
+     "title": "Enable EKS control plane logging",
+     "author": "bhughes",
+     "state": "MERGED",
+     "updated": "-99d"
+    }
+   ]
+  },
+  "tidepool-dev/sdk-go": {
+   "extraPRs": [
+    {
+     "number": 56,
+     "title": "Add context to Client.Send",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-7d"
+    },
+    {
+     "number": 54,
+     "title": "Bump golang.org/x/sync from 0.8.0 to 0.9.0",
+     "author": "dependabot[bot]",
+     "state": "MERGED",
+     "updated": "-12d"
+    },
+    {
+     "number": 50,
+     "title": "Add example for streaming events",
+     "author": "aclark",
+     "state": "MERGED",
+     "updated": "-18d"
+    },
+    {
+     "number": 47,
+     "title": "Add Go 1.25 to CI matrix",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-22d"
+    },
+    {
+     "number": 46,
+     "title": "Clarify README quickstart",
+     "author": "aclark",
+     "state": "MERGED",
+     "updated": "-26d"
+    },
+    {
+     "number": 45,
+     "title": "Fix User-Agent version string",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-31d"
+    },
+    {
+     "number": 43,
+     "title": "Add WithHTTPClient option",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-38d"
+    },
+    {
+     "number": 41,
+     "title": "Return typed errors for 4xx responses",
+     "author": "aclark",
+     "state": "MERGED",
+     "updated": "-41d"
+    },
+    {
+     "number": 40,
+     "title": "Wrap errors with %w consistently",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-47d"
+    },
+    {
+     "number": 36,
+     "title": "Fix data race in connection pool",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-51d"
+    },
+    {
+     "number": 35,
+     "title": "Expose request IDs on errors",
+     "author": "sarahhill",
+     "state": "MERGED",
+     "updated": "-57d"
+    },
+    {
+     "number": 34,
+     "title": "Support gzip request bodies",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-62d"
+    },
+    {
+     "number": 32,
+     "title": "Add Client.Ping",
+     "author": "jcole",
+     "state": "MERGED",
+     "updated": "-68d"
+    },
+    {
+     "number": 31,
+     "title": "Add golangci-lint config",
+     "author": "aclark",
+     "state": "MERGED",
+     "updated": "-73d"
+    },
+    {
+     "number": 27,
+     "title": "Reduce allocations in JSON encoding",
+     "author": "kmiller",
+     "state": "MERGED",
+     "updated": "-76d"
+    },
+    {
+     "number": 26,
+     "title": "Bump github.com/stretchr/testify from 1.9.0 to 1.10.0",
+     "author": "dependabot[bot]",
+     "state": "MERGED",
+     "updated": "-83d"
+    },
+    {
+     "number": 24,
+     "title": "Fix flaky TestClientTimeout",
+     "author": "aclark",
+     "state": "CLOSED",
+     "updated": "-88d"
+    },
+    {
+     "number": 23,
+     "title": "Document retry semantics",
+     "author": "sarahhill",
+     "state": "MERGED",
+     "updated": "-91d"
+    },
+    {
+     "number": 21,
+     "title": "Fix nil pointer when API key unset",
+     "author": "sarahhill",
+     "state": "MERGED",
+     "updated": "-97d"
+    }
+   ]
+  }
+ },
+ "prs": [
+  {
+   "repo": "tidepool-dev/tidepool",
+   "number": 482,
+   "branch": "feat/tenant-rate-limits",
+   "title": "Add per-tenant rate limiting to ingest API",
+   "body": "## Summary\nAdds a per-tenant token bucket in front of the ingest API so one noisy tenant can't starve the WAL writer for everyone else. Requests over the limit get a `429` with a `Retry-After` hint.\n\n## Changes\n- `internal/ratelimit`: token bucket with burst support and a `Limiter` that keeps one bucket per tenant\n- Idle buckets are evicted by a background sweep (default TTL 10m)\n- `internal/ingest`: rate-limit check ahead of batch decoding; per-tenant overrides via `tenant.RateLimit`\n- Prometheus counters for allowed/rejected requests, labelled by tenant\n- `docs/rate-limiting.md` and a README/CHANGELOG entry\n\nResponses on `/v1/events` now carry:\n\n| Header | Meaning |\n| --- | --- |\n| `X-RateLimit-Limit` | Sustained events/sec allowed for the tenant |\n| `X-RateLimit-Remaining` | Tokens left in the bucket after this request |\n| `X-RateLimit-Reset` | Seconds until the bucket is full again |\n| `Retry-After` | Seconds to wait before retrying (only on `429`) |\n\n## Config\n| Variable | Default | Description |\n| --- | --- | --- |\n| `TIDEPOOL_DEFAULT_RATE_LIMIT_EPS` | `1000` | Default sustained rate per tenant (events/sec) |\n| `TIDEPOOL_DEFAULT_RATE_LIMIT_BURST` | `2000` | Default burst size per tenant |\n\nTenants with their own `rate_limit` in the tenant config override both.\n\n## Testing\n- Unit tests for refill, burst, and concurrent `Allow` calls (`go test -race ./internal/ratelimit/...`)\n- Ran against staging with the replay harness at 3x peak traffic; rejected requests were all from the throttled tenant\n",
+   "author": "sarahhill",
+   "created": "-3d",
+   "updated": "-25m",
+   "labels": [
+    {
+     "name": "enhancement",
+     "color": "a2eeef"
+    },
+    {
+     "name": "go",
+     "color": "00add8"
+    },
+    {
+     "name": "area/ingest",
+     "color": "5319e7"
+    }
+   ],
+   "reviewRequests": [
+    "kmiller",
+    "jcole"
+   ],
+   "reviews": [
+    {
+     "author": "jcole",
+     "state": "COMMENTED",
+     "body": "Left a few comments, mostly around the refill clock and what a token represents.",
+     "at": "-1d"
+    }
+   ],
+   "reviewThreads": [
+    {
+     "path": "internal/ratelimit/bucket.go",
+     "line": 31,
+     "resolved": true,
+     "resolvedBy": "sarahhill",
+     "comments": [
+      {
+       "author": "jcole",
+       "body": "Should refill use a monotonic clock? time.Now() will jump on NTP sync and either starve or flood the bucket.",
+       "at": "-1d"
+      },
+      {
+       "author": "sarahhill",
+       "body": "Good catch — switched to the injected clock's monotonic reading in 3b0de4e.",
+       "at": "-20h"
+      }
+     ]
+    },
+    {
+     "path": "internal/ingest/ratelimit.go",
+     "line": 32,
+     "resolved": false,
+     "comments": [
+      {
+       "author": "jcole",
+       "body": "This charges one token per request, but the limit is documented in events/sec. A 500-event batch costs the same as a single event.",
+       "at": "-1d"
+      },
+      {
+       "author": "sarahhill",
+       "body": "Intentional for v1 — batches are capped at 1k events by the handler. I'd rather ship request-based limits now and follow up with weighted cost.",
+       "at": "-19h"
+      }
+     ]
+    },
+    {
+     "path": "internal/ratelimit/limiter.go",
+     "line": 12,
+     "resolved": false,
+     "comments": [
+      {
+       "author": "jcole",
+       "body": "nit: 10m eviction feels long for tenants that burst once a day — maybe make it configurable?",
+       "at": "-1d"
+      }
+     ]
+    }
+   ],
+   "comments": [
+    {
+     "author": "tbaker",
+     "body": "Ran this against staging with the replay harness — p99 ingest latency unchanged (4.1ms → 4.2ms). 👍",
+     "at": "-6h"
+    }
+   ],
+   "checks": [
+    {
+     "name": "lint",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "test (ubuntu-latest, go1.25)",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "test (macos-latest, go1.25)",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "build",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "codecov/patch",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "e2e",
+     "status": "IN_PROGRESS",
+     "turnsSuccessAfter": 40
+    }
+   ],
+   "mergeable": "MERGEABLE",
+   "mergeStateStatus": "CLEAN"
+  },
+  {
+   "repo": "tidepool-dev/tidepool",
+   "number": 497,
+   "branch": "chore/proto-v2-regen",
+   "title": "Regenerate protobufs for v2 event schema",
+   "body": "Regenerated `gen/` with protoc-gen-go v1.35.2 via `buf generate`. No hand edits.\n\n- Picks up the v2 `Event` schema (`attributes` map, `received_at`)\n- Bumps the generated header, hence the large file count\n\nTo reproduce: `make proto` on a clean checkout produces an identical tree.\n",
+   "author": "tbaker",
+   "created": "-1d",
+   "updated": "-6h",
+   "labels": [
+    {
+     "name": "generated",
+     "color": "cfd3d7"
+    },
+    {
+     "name": "go",
+     "color": "00add8"
+    }
+   ],
+   "reviewRequests": [
+    "kmiller"
+   ],
+   "reviews": [
+    {
+     "author": "bhughes",
+     "state": "APPROVED",
+     "body": "Spot-checked the schema diff, generated output matches `make proto`.",
+     "at": "-8h"
+    }
+   ],
+   "checks": [
+    {
+     "name": "lint",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "test (ubuntu-latest, go1.25)",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "build",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "codecov/patch",
+     "conclusion": "SUCCESS"
+    }
+   ]
+  },
+  {
+   "repo": "tidepool-dev/tidepool",
+   "number": 489,
+   "branch": "fix/wal-fsync-on-rotate",
+   "title": "Fix WAL segment fsync on rotation",
+   "body": "## Summary\nWhen a WAL segment rotates we closed the old file without syncing it, so a crash right after rotation could lose the tail of the previous segment even though the writer had acked it.\n\n## Changes\n- fsync the segment (and its directory entry) before opening the next one\n- Regression test that kills the writer mid-rotation\n\n## Testing\n`go test -race ./internal/wal/...`\n",
+   "author": "kmiller",
+   "created": "-2d",
+   "updated": "-1d",
+   "labels": [
+    {
+     "name": "bug",
+     "color": "d73a4a"
+    },
+    {
+     "name": "go",
+     "color": "00add8"
+    }
+   ],
+   "reviewRequests": [
+    "bhughes"
+   ],
+   "reviews": [],
+   "checks": [
+    {
+     "name": "lint",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "test (ubuntu-latest, go1.25)",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "build",
+     "conclusion": "SUCCESS"
+    }
+   ]
+  },
+  {
+   "repo": "tidepool-dev/tidepool",
+   "number": 491,
+   "branch": "feat/otel-trace-propagation",
+   "title": "Propagate W3C trace context through router",
+   "body": "Extracts `traceparent` on ingest and carries it on each routed event so spans from sinks link back to the originating request.\n\n- New `trace` helper in the router\n- Events without a header start a new root span\n\nFollow-up: propagate through the webhook sink headers.\n",
+   "author": "jcole",
+   "created": "-4d",
+   "updated": "-8h",
+   "labels": [
+    {
+     "name": "enhancement",
+     "color": "a2eeef"
+    },
+    {
+     "name": "area/router",
+     "color": "1d76db"
+    }
+   ],
+   "reviewRequests": [
+    "kmiller"
+   ],
+   "reviews": [],
+   "checks": [
+    {
+     "name": "lint",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "test (ubuntu-latest, go1.25)",
+     "conclusion": "FAILURE"
+    },
+    {
+     "name": "test (macos-latest, go1.25)",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "build",
+     "conclusion": "SUCCESS"
+    }
+   ]
+  },
+  {
+   "repo": "tidepool-dev/tidepool",
+   "number": 486,
+   "branch": "refactor/router-worker-pool",
+   "title": "Replace router channel fan-out with bounded worker pool",
+   "body": "WIP. Replaces the goroutine-per-rule fan-out with a fixed pool sized by `GOMAXPROCS`, so a slow sink can no longer spawn unbounded goroutines.\n\n- [x] pool + backpressure\n- [ ] benchmarks\n- [ ] shutdown draining\n",
+   "author": "bhughes",
+   "created": "-6d",
+   "updated": "-2d",
+   "labels": [
+    {
+     "name": "refactor",
+     "color": "fef2c0"
+    },
+    {
+     "name": "area/router",
+     "color": "1d76db"
+    },
+    {
+     "name": "work in progress",
+     "color": "ededed"
+    }
+   ],
+   "reviewRequests": [],
+   "reviews": [],
+   "checks": [
+    {
+     "name": "lint",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "build",
+     "conclusion": "SUCCESS"
+    }
+   ],
+   "isDraft": true
+  },
+  {
+   "repo": "tidepool-dev/tidepool",
+   "number": 493,
+   "branch": "dependabot/go_modules/google.golang.org/grpc-1.68.0",
+   "title": "Bump google.golang.org/grpc from 1.66.2 to 1.68.0",
+   "body": "Bumps [google.golang.org/grpc](https://github.com/grpc/grpc-go) from 1.66.2 to 1.68.0.\n\n<details><summary>Release notes</summary>\nSourced from grpc's releases. Release 1.68.0: dns resolver now respects TTL; xds: fix race in cluster updates.\n</details>\n\nDependabot will resolve any conflicts with this PR as long as you don't alter it yourself.",
+   "author": "dependabot[bot]",
+   "created": "-2d",
+   "updated": "-2d",
+   "labels": [
+    {
+     "name": "dependencies",
+     "color": "0366d6"
+    },
+    {
+     "name": "go",
+     "color": "00add8"
+    }
+   ],
+   "reviewRequests": [],
+   "reviews": [],
+   "checks": [
+    {
+     "name": "lint",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "test (ubuntu-latest, go1.25)",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "build",
+     "conclusion": "SUCCESS"
+    }
+   ]
+  },
+  {
+   "repo": "tidepool-dev/tidepool",
+   "number": 495,
+   "branch": "fix/kafka-sink-retry-jitter",
+   "title": "Add jitter to Kafka sink retry backoff",
+   "body": "Retries after a broker blip all fired on the same exponential schedule, which caused a thundering herd on reconnect. Adds full jitter (`rand(0, backoff)`) and caps at 30s.\n\nTest: table test over seeded RNG checking bounds.\n",
+   "author": "aclark",
+   "created": "-5d",
+   "updated": "-1d",
+   "labels": [
+    {
+     "name": "bug",
+     "color": "d73a4a"
+    },
+    {
+     "name": "area/sinks",
+     "color": "0e8a16"
+    }
+   ],
+   "reviewRequests": [
+    "kmiller"
+   ],
+   "reviews": [
+    {
+     "author": "emward",
+     "state": "APPROVED",
+     "body": "LGTM",
+     "at": "-1d"
+    }
+   ],
+   "checks": [
+    {
+     "name": "lint",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "test (ubuntu-latest, go1.25)",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "build",
+     "conclusion": "SUCCESS"
+    }
+   ]
+  },
+  {
+   "repo": "tidepool-dev/tidepool",
+   "number": 498,
+   "branch": "docs/config-reference",
+   "title": "Document TIDEPOOL_* environment variables",
+   "body": "Adds `docs/configuration.md` listing every env var the binary reads, with defaults and units, and links it from the README.\n",
+   "author": "kmiller",
+   "created": "-1d",
+   "updated": "-3h",
+   "labels": [
+    {
+     "name": "documentation",
+     "color": "0075ca"
+    }
+   ],
+   "reviewRequests": [],
+   "reviews": [],
+   "checks": [
+    {
+     "name": "lint",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "build",
+     "conclusion": "SUCCESS"
+    }
+   ]
+  },
+  {
+   "repo": "tidepool-dev/tidepool-web",
+   "number": 214,
+   "branch": "feat/rate-limit-usage-chart",
+   "title": "Show per-tenant rate limit usage on tenant page",
+   "body": "Adds a usage chart to the tenant detail page: events/sec against the tenant's limit over the last hour, with throttled requests overlaid.\n\n- `RateLimitChart` component + `useRateLimitUsage` hook\n- Reads from `/v1/tenants/:id/usage` (needs tidepool#482)\n\nScreenshot in the thread below.",
+   "author": "emward",
+   "created": "-2d",
+   "updated": "-4h",
+   "labels": [
+    {
+     "name": "enhancement",
+     "color": "a2eeef"
+    },
+    {
+     "name": "area/web",
+     "color": "c5def5"
+    }
+   ],
+   "reviewRequests": [
+    "kmiller"
+   ],
+   "reviews": [],
+   "checks": [
+    {
+     "name": "lint",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "typecheck",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "test",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "build",
+     "conclusion": "SUCCESS"
+    }
+   ]
+  },
+  {
+   "repo": "tidepool-dev/tidepool-web",
+   "number": 211,
+   "branch": "fix/stream-table-virtualization",
+   "title": "Virtualize stream table for tenants with 10k+ streams",
+   "body": "The streams table rendered every row, which froze the tab for large tenants. Switches to `@tanstack/react-virtual` with a fixed row height.\n\nBefore: ~2.8s to first paint at 12k rows. After: ~90ms.",
+   "author": "lgrant",
+   "created": "-5d",
+   "updated": "-2d",
+   "labels": [
+    {
+     "name": "bug",
+     "color": "d73a4a"
+    },
+    {
+     "name": "area/web",
+     "color": "c5def5"
+    }
+   ],
+   "reviewRequests": [],
+   "reviews": [
+    {
+     "author": "emward",
+     "state": "APPROVED",
+     "body": "Scrolls smoothly now.",
+     "at": "-2d"
+    }
+   ],
+   "checks": [
+    {
+     "name": "lint",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "typecheck",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "test",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "build",
+     "conclusion": "SUCCESS"
+    }
+   ]
+  },
+  {
+   "repo": "tidepool-dev/tidepool-web",
+   "number": 217,
+   "branch": "renovate/vite-6.x",
+   "title": "Update dependency vite to v6.0.3",
+   "body": "This PR contains the following updates:\n\n| Package | Change |\n| --- | --- |\n| vite | `6.0.1` -> `6.0.3` |\n\n---\nRenovate will keep this PR rebased until merged.",
+   "author": "renovate[bot]",
+   "created": "-3d",
+   "updated": "-3d",
+   "labels": [
+    {
+     "name": "dependencies",
+     "color": "0366d6"
+    },
+    {
+     "name": "javascript",
+     "color": "f1e05a"
+    }
+   ],
+   "reviewRequests": [],
+   "reviews": [],
+   "checks": [
+    {
+     "name": "lint",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "typecheck",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "build",
+     "conclusion": "SUCCESS"
+    }
+   ]
+  },
+  {
+   "repo": "tidepool-dev/tidepool-web",
+   "number": 209,
+   "branch": "feat/settings-theme-toggle",
+   "title": "Add theme toggle to settings",
+   "body": "Adds a light/dark/system toggle on the settings page. Choice persists in localStorage and `system` follows `prefers-color-scheme`.\n",
+   "author": "kmiller",
+   "created": "-3d",
+   "updated": "-1d",
+   "labels": [
+    {
+     "name": "enhancement",
+     "color": "a2eeef"
+    },
+    {
+     "name": "area/web",
+     "color": "c5def5"
+    }
+   ],
+   "reviewRequests": [
+    "emward"
+   ],
+   "reviews": [
+    {
+     "author": "lgrant",
+     "state": "CHANGES_REQUESTED",
+     "body": "Flash of wrong theme on first load — can we set the class before hydration?",
+     "at": "-1d"
+    }
+   ],
+   "checks": [
+    {
+     "name": "lint",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "typecheck",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "test",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "build",
+     "conclusion": "SUCCESS"
+    }
+   ]
+  },
+  {
+   "repo": "tidepool-dev/infra",
+   "number": 77,
+   "branch": "feat/keda-ingest-autoscaling",
+   "title": "Scale ingest pods on WAL queue depth with KEDA",
+   "body": "Installs KEDA in production and adds a `ScaledObject` for the ingest deployment driven by the `tidepool_wal_queue_depth` Prometheus metric.\n\n- min 3 / max 24 replicas, 60s cooldown\n- Scale target: 5k queued events per pod\n\nTerraform plan shows only the helm release and the Helm values change.",
+   "author": "tbaker",
+   "created": "-2d",
+   "updated": "-5h",
+   "labels": [
+    {
+     "name": "infra",
+     "color": "fbca04"
+    }
+   ],
+   "reviewRequests": [
+    "kmiller"
+   ],
+   "reviews": [],
+   "checks": [
+    {
+     "name": "terraform fmt",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "terraform plan (production)",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "helm lint",
+     "conclusion": "SUCCESS"
+    }
+   ]
+  },
+  {
+   "repo": "tidepool-dev/infra",
+   "number": 75,
+   "branch": "chore/staging-eu-central-1",
+   "title": "Move staging cluster to eu-central-1",
+   "body": "Staging moves to eu-central-1 to be closer to the team and to match prod's second region. State is rebuilt, so expect a short window with no staging.\n\n- cluster, VPC and node group vars updated\n- CI plan job and README region references\n",
+   "author": "kmiller",
+   "created": "-4d",
+   "updated": "-2d",
+   "labels": [
+    {
+     "name": "infra",
+     "color": "fbca04"
+    }
+   ],
+   "reviewRequests": [
+    "tbaker"
+   ],
+   "reviews": [
+    {
+     "author": "tbaker",
+     "state": "APPROVED",
+     "body": "Plan looks right. Ship it after the standup.",
+     "at": "-2d"
+    }
+   ],
+   "checks": [
+    {
+     "name": "terraform fmt",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "terraform plan (staging)",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "helm lint",
+     "conclusion": "SUCCESS"
+    }
+   ]
+  },
+  {
+   "repo": "tidepool-dev/sdk-go",
+   "number": 61,
+   "branch": "fix/retry-after-429",
+   "title": "Respect Retry-After on 429 responses",
+   "body": "The client retried 429s on its own backoff and ignored `Retry-After`. It now honours the header (seconds or HTTP-date) for 429 and 503, falling back to backoff when absent.\n\nNeeded for tidepool#482 which starts returning it.",
+   "author": "aclark",
+   "created": "-3d",
+   "updated": "-6h",
+   "labels": [
+    {
+     "name": "bug",
+     "color": "d73a4a"
+    },
+    {
+     "name": "area/sdk",
+     "color": "bfd4f2"
+    }
+   ],
+   "reviewRequests": [],
+   "reviews": [],
+   "checks": [
+    {
+     "name": "lint",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "test (ubuntu-latest, go1.25)",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "build",
+     "conclusion": "SUCCESS"
+    }
+   ],
+   "comments": [
+    {
+     "author": "aclark",
+     "body": "@kmiller does this match what the router expects?",
+     "at": "-6h"
+    }
+   ]
+  },
+  {
+   "repo": "tidepool-dev/sdk-go",
+   "number": 58,
+   "branch": "feat/batch-client",
+   "title": "Add batching client with flush on size or interval",
+   "body": "Adds `Batcher`, which buffers events and flushes when either `MaxBatch` events are queued or `FlushInterval` elapses, whichever comes first. `Close` flushes and waits.\n",
+   "author": "jcole",
+   "created": "-6d",
+   "updated": "-3d",
+   "labels": [
+    {
+     "name": "enhancement",
+     "color": "a2eeef"
+    },
+    {
+     "name": "area/sdk",
+     "color": "bfd4f2"
+    }
+   ],
+   "reviewRequests": [
+    "aclark"
+   ],
+   "reviews": [],
+   "checks": [
+    {
+     "name": "lint",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "test (ubuntu-latest, go1.25)",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "build",
+     "conclusion": "SUCCESS"
+    }
+   ]
+  }
+ ]
+}
