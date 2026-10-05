@@ -6,7 +6,9 @@
   A TUI for GitHub pull requests.
 </p>
 
-<img width="1468" height="889" alt="image" src="https://github.com/user-attachments/assets/f83b174f-afd9-4602-bc98-7355b698cb71" />
+
+<img width="3840" height="2160" alt="readme-dashboard" src="https://github.com/user-attachments/assets/5fdade54-6e16-4c7f-9819-1e5bc8884fdc" />
+
 
 
 ## Features
@@ -21,6 +23,7 @@
 - **PR actions** - Edit title/body, merge (with method selection), close/reopen, and checkout the branch locally.
 - **Commit view** - Inspect individual commits and their diffs.
 - **Search** - `/` to search within diffs and descriptions; `n`/`N` to jump between matches.
+- Works with Github Enterprise as well.
 
 ## Install
 
