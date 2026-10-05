@@ -1,12 +1,15 @@
 package prdetail
 
 import (
+	"context"
 	"testing"
 
+	"github.com/utkarsh261/pho/internal/application/cmds"
 	"github.com/utkarsh261/pho/internal/diff/anchor"
 	"github.com/utkarsh261/pho/internal/diff/difftest"
 	diffmodel "github.com/utkarsh261/pho/internal/diff/model"
 	"github.com/utkarsh261/pho/internal/diff/parse"
+	"github.com/utkarsh261/pho/internal/domain"
 )
 
 // legacyDiffIndices is the nested-map index the flat lookup replaced, kept
@@ -114,5 +117,50 @@ func TestDiffIndicesFollowTheCurrentDiff(t *testing.T) {
 	m.Diff = small
 	if m.lookupDiffLine(path, line) != "" {
 		t.Fatal("lookup must not use positions from the previous diff")
+	}
+}
+
+// draftsStub returns fixed drafts for every PR.
+type draftsStub struct {
+	prServiceStub
+	drafts []domain.DraftInlineComment
+}
+
+func (s *draftsStub) LoadDraftComments(context.Context, domain.Repository, int, string) ([]domain.DraftInlineComment, error) {
+	return s.drafts, nil
+}
+
+func loadWithDrafts(t *testing.T, drafts []domain.DraftInlineComment) *PRDetailModel {
+	t.Helper()
+	dm, err := parse.Parse(difftest.RawDiffs()[0].Raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dm.HeadSHA = placementSHA
+	anchor.Generate(dm, placementSHA)
+	m := makePRDetail(120, 40, nil, nil)
+	m.PRService = &draftsStub{drafts: drafts}
+	m.DiffLoading = true
+	m, _ = m.Update(cmds.DiffLoaded{Repo: "owner/repo", Number: 1, Diff: *dm})
+	return m
+}
+
+func TestDiffIndexNotBuiltOnLoadWithoutDrafts(t *testing.T) {
+	t.Parallel()
+	m := loadWithDrafts(t, nil)
+	if m.diffAnchors != nil {
+		t.Fatal("loading a diff with no drafts must not build the line index")
+	}
+	if m.lookupDiffLine("multi.go", 13) == "" || m.diffAnchors == nil {
+		t.Fatal("the first lookup must build the index")
+	}
+}
+
+func TestDraftsStillHighlightedAfterLazyIndex(t *testing.T) {
+	t.Parallel()
+	m := loadWithDrafts(t, []domain.DraftInlineComment{{Path: "multi.go", Line: 13, Side: "RIGHT", HeadSHA: placementSHA}})
+	fi, hi, li, ok := m.findDiffLineAnchor("multi.go", 13, "RIGHT")
+	if !ok || !m.draftCovered[hunkLineKey{fi, hi, li}] {
+		t.Fatalf("draft line not covered (found=%v, covered=%v)", ok, m.draftCovered)
 	}
 }

@@ -241,7 +241,8 @@ func (m *PRDetailModel) rebuildDraftCovered() {
 		m.draftCovered = nil
 		return
 	}
-	m.ensureDiffIndices()
+	// No ensureDiffIndices here: lookups build the index on first use, so a
+	// PR without drafts never pays for it.
 	m.draftCovered = make(map[hunkLineKey]bool)
 	for _, d := range m.drafts {
 		fi, hi, endLI, ok := m.findDiffLineAnchor(d.Path, d.Line, d.Side)
