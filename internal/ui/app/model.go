@@ -48,6 +48,8 @@ type Dependencies struct {
 	Host string
 
 	MaxJumpPRs int
+	// MaxDashboardPRs caps how many open PRs the All tab loads.
+	MaxDashboardPRs int
 
 	// InitialPRNumber, when > 0, deep-links startup: after repo discovery the
 	// app opens this PR's detail view directly (`pho pr <number>`).
@@ -98,6 +100,7 @@ type Model struct {
 
 	currentDashboard domain.DashboardSnapshot
 	currentInvolving domain.InvolvingSnapshot
+	openPages        openPRPages
 
 	hydratedRepos     map[string]struct{}
 	hydrationInFlight map[string]bool
@@ -699,6 +702,9 @@ func (m *Model) applyMessage(msg tea.Msg) tea.Cmd {
 	case cmds.PreviewLoaded:
 		return m.handlePreviewLoaded(msg)
 	case cmds.SearchIndexRebuilt:
+		if msg.Err == nil && msg.Repo != "" {
+			m.reappendOpenPRPages(msg.Repo)
+		}
 		return nil
 	case cmds.RefreshStarted:
 		m.state.Jobs.InFlight[msg.Key] = true
@@ -733,6 +739,8 @@ func (m *Model) applyMessage(msg tea.Msg) tea.Cmd {
 		return m.selectRepoByFullName(msg.Repo, false)
 	case cmds.AllPRsPageLoaded:
 		return m.handleAllPRsPage(msg)
+	case cmds.OpenPRsPageLoaded:
+		return m.handleOpenPRsPage(msg)
 	case overlay.OpenPR:
 		m.closePalette()
 		return m.openPRDetailForJump(msg.Summary)
@@ -841,12 +849,15 @@ func (m *Model) handleDashboardLoaded(msg cmds.DashboardLoaded) tea.Cmd {
 
 	if msg.Err == nil {
 		m.clearErrors()
+		// GitHub is reachable again, so let the All tab retry a failed page.
+		m.openPages.failed = false
 	}
 	m.currentDashboard = msg.Snapshot
 	m.hydratedRepos[msg.Repo] = struct{}{}
 	m.state.Dashboard.LastRefreshAt[domain.TabMyPRs] = msg.Snapshot.FetchedAt
 	m.state.Dashboard.FreshnessByTab[domain.TabMyPRs] = freshnessFor(msg.Err)
 	m.state.Dashboard.FreshnessByTab[domain.TabNeedsReview] = freshnessFor(msg.Err)
+	m.state.Dashboard.FreshnessByTab[domain.TabAll] = freshnessFor(msg.Err)
 	m.rebuildDashboardTabs()
 	m.syncPaletteStats()
 
@@ -859,7 +870,7 @@ func (m *Model) handleDashboardLoaded(msg cmds.DashboardLoaded) tea.Cmd {
 	if m.deps.Search != nil {
 		rebuild = cmds.RebuildPRIndexCmd(m.deps.Search, repo, msg.Snapshot)
 	}
-	return batch(m.syncCurrentSelectionForce(wasRefreshing), rebuild)
+	return batch(m.syncCurrentSelectionForce(wasRefreshing), rebuild, m.maybeLoadMoreOpenPRs())
 }
 
 func (m *Model) handleInvolvingLoaded(msg cmds.InvolvingLoaded) tea.Cmd {
@@ -878,6 +889,7 @@ func (m *Model) handleInvolvingLoaded(msg cmds.InvolvingLoaded) tea.Cmd {
 	if msg.Err == nil {
 		m.clearErrors()
 	}
+	prev, hadPrev := m.currentSelectedPR()
 	m.currentInvolving = msg.Snapshot
 	m.hydratedRepos[msg.Repo] = struct{}{}
 	m.state.Dashboard.PRsByTab[domain.TabInvolving] = append([]domain.PullRequestSummary(nil), msg.Snapshot.PRs...)
@@ -885,8 +897,7 @@ func (m *Model) handleInvolvingLoaded(msg cmds.InvolvingLoaded) tea.Cmd {
 	m.state.Dashboard.FreshnessByTab[domain.TabInvolving] = freshnessFor(msg.Err)
 	m.prList.SetTabSnapshot(domain.TabInvolving, msg.Snapshot.PRs, msg.Snapshot.TotalCount, msg.Snapshot.Truncated)
 	m.prList.Active = m.state.Dashboard.ActiveTab
-	m.prList.Cursor = clampIndex(m.prList.Cursor, len(m.currentPRsForTab(m.prList.Active)))
-	m.state.Dashboard.SelectedIndex = m.prList.Cursor
+	m.restoreSelection(prev, hadPrev)
 	m.syncPaletteStats()
 
 	delete(m.state.Jobs.InFlight, jobKey(msg.Repo, "involving"))
@@ -959,7 +970,7 @@ func (m *Model) handleSelectPRMsg(msg dashboard.SelectPRMsg) tea.Cmd {
 	}
 	m.state.Dashboard.PreviewLoading = m.preview.Loading || m.preview.PendingFetch
 	m.syncStatus()
-	return cmd
+	return batch(cmd, m.maybeLoadMoreOpenPRs())
 }
 
 func (m *Model) handleChangeTabMsg(msg dashboard.ChangeTabMsg) tea.Cmd {
@@ -974,7 +985,7 @@ func (m *Model) handleChangeTabMsg(msg dashboard.ChangeTabMsg) tea.Cmd {
 	m.preview.SetTheme(m.theme)
 	m.preview.SetRect(m.layout.Current.Preview, m.bodyHeight()-2)
 	m.syncStatus()
-	return m.syncCurrentSelection()
+	return batch(m.syncCurrentSelection(), m.maybeLoadMoreOpenPRs())
 }
 
 func (m *Model) handlePreviewFetchMsg(msg dashboard.PreviewFetchMsg) tea.Cmd {
@@ -1148,6 +1159,13 @@ func (m *Model) refreshSelectedRepo(force bool) tea.Cmd {
 		m.state.Jobs.InFlight[jobKey(repo.FullName, "involving")] = true
 	}
 
+	// A manual refresh starts the All tab over from the first page, which
+	// also clears a failed page load so it can be retried.
+	if force {
+		m.openPages.reset(repo.FullName)
+		m.syncOpenPRsPaging()
+	}
+
 	// Trigger status bar update to show loading spinner
 	m.syncStatus()
 
@@ -1187,6 +1205,8 @@ func (m *Model) selectRepoAt(index int, repo domain.Repository, force bool) tea.
 	m.prList.Scroll = 0
 	m.state.Dashboard.SelectedIndex = 0
 	m.resetDashboardsForRepo()
+	m.openPages.reset(repo.FullName)
+	m.prList.Paging = dashboard.PageStatus{}
 	m.resetPreviewState()
 	m.loadViewedHistory(repo)
 	m.palette.SetActiveRepo(repo.FullName)
@@ -1425,15 +1445,26 @@ func (m *Model) rebuildDashboardTabs() {
 	if repo, ok := m.selectedRepo(); ok {
 		viewer = m.state.Session.ViewerByHost[repo.Host]
 	}
-	classified := m.classifier.Classify(viewer, m.currentDashboard.PRs)
+	prev, hadPrev := m.currentSelectedPR()
+
+	// My PRs and Needs Review are classified from every loaded open PR, so
+	// pages loaded by the All tab also fill them in for repos with >100 open.
+	open := m.allOpenPRs()
+	_, hasMore := m.nextOpenPRsPage()
+	total := m.currentDashboard.TotalCount
+	classified := m.classifier.Classify(viewer, open)
 	m.state.Dashboard.PRsByTab[domain.TabMyPRs] = append([]domain.PullRequestSummary(nil), classified[domain.TabMyPRs]...)
 	m.state.Dashboard.PRsByTab[domain.TabNeedsReview] = append([]domain.PullRequestSummary(nil), classified[domain.TabNeedsReview]...)
-	m.state.Dashboard.TotalCount = m.currentDashboard.TotalCount
-	m.state.Dashboard.Truncated = m.currentDashboard.Truncated
-	m.state.Dashboard.LastRefreshAt[domain.TabMyPRs] = m.currentDashboard.FetchedAt
-	m.state.Dashboard.LastRefreshAt[domain.TabNeedsReview] = m.currentDashboard.FetchedAt
-	m.prList.SetTabSnapshot(domain.TabMyPRs, m.state.Dashboard.PRsByTab[domain.TabMyPRs], m.currentDashboard.TotalCount, m.currentDashboard.Truncated)
-	m.prList.SetTabSnapshot(domain.TabNeedsReview, m.state.Dashboard.PRsByTab[domain.TabNeedsReview], m.currentDashboard.TotalCount, m.currentDashboard.Truncated)
+	m.state.Dashboard.PRsByTab[domain.TabAll] = open
+	m.state.Dashboard.TotalCount = total
+	m.state.Dashboard.Truncated = hasMore
+	for _, tab := range []domain.DashboardTab{domain.TabMyPRs, domain.TabNeedsReview, domain.TabAll} {
+		m.state.Dashboard.LastRefreshAt[tab] = m.currentDashboard.FetchedAt
+		m.prList.SetTabSnapshot(tab, m.state.Dashboard.PRsByTab[tab], total, hasMore)
+	}
+	m.prList.SetTabScanned(domain.TabMyPRs, len(open))
+	m.prList.SetTabScanned(domain.TabNeedsReview, len(open))
+	m.syncOpenPRsPaging()
 
 	// Build Recent tab from per-repo viewed history.
 	recent, lastViewed := m.recentTabPRs()
@@ -1448,8 +1479,7 @@ func (m *Model) rebuildDashboardTabs() {
 	}
 
 	m.prList.Active = m.state.Dashboard.ActiveTab
-	m.prList.Cursor = clampIndex(m.prList.Cursor, len(m.currentPRsForTab(m.prList.Active)))
-	m.state.Dashboard.SelectedIndex = m.prList.Cursor
+	m.restoreSelection(prev, hadPrev)
 }
 
 func (m *Model) recentTabPRs() ([]domain.PullRequestSummary, time.Time) {

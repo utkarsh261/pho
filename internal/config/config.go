@@ -42,6 +42,7 @@ type rawConfig struct {
 	Dashboard struct {
 		DefaultTab  string `toml:"default_tab"`
 		RecentHours int    `toml:"recent_hours"`
+		MaxPRs      int    `toml:"max_prs"`
 	} `toml:"dashboard"`
 	Cache struct {
 		Dir            string   `toml:"dir"`
@@ -71,6 +72,7 @@ type Config struct {
 	Dashboard struct {
 		DefaultTab  string
 		RecentHours int
+		MaxPRs      int // cap on open PRs the All tab loads
 	}
 	Cache struct {
 		Dir            string
@@ -138,6 +140,7 @@ func defaults() Config {
 	cfg.Discovery.ExcludeDirs = []string{}
 	cfg.Dashboard.DefaultTab = "my_prs"
 	cfg.Dashboard.RecentHours = 24
+	cfg.Dashboard.MaxPRs = 300
 	cfg.Cache.MaxMemoryMB = 16
 	cfg.Cache.DashboardTTL = 2 * time.Minute
 	cfg.Cache.DiscoveryTTL = 1 * time.Hour
@@ -160,6 +163,9 @@ func applyDefaults(cfg *Config, def Config) {
 	}
 	if cfg.Dashboard.RecentHours == 0 {
 		cfg.Dashboard.RecentHours = def.Dashboard.RecentHours
+	}
+	if cfg.Dashboard.MaxPRs == 0 {
+		cfg.Dashboard.MaxPRs = def.Dashboard.MaxPRs
 	}
 	if cfg.Cache.MaxMemoryMB == 0 {
 		cfg.Cache.MaxMemoryMB = def.Cache.MaxMemoryMB
@@ -223,6 +229,7 @@ func Load(path string) (Config, error) {
 	cfg.Repos.Exclude = raw.Repos.Exclude
 	cfg.Dashboard.DefaultTab = raw.Dashboard.DefaultTab
 	cfg.Dashboard.RecentHours = raw.Dashboard.RecentHours
+	cfg.Dashboard.MaxPRs = raw.Dashboard.MaxPRs
 	cfg.Cache.Dir = raw.Cache.Dir
 	cfg.Cache.MaxMemoryMB = raw.Cache.MaxMemoryMB
 	cfg.Cache.DashboardTTL = raw.Cache.DashboardTTL.Duration

@@ -322,6 +322,7 @@ func main() {
 		Root:            rootDir,
 		Host:            profiles[0].Host,
 		MaxJumpPRs:      cfg.Palette.MaxPRs,
+		MaxDashboardPRs: cfg.Dashboard.MaxPRs,
 		InitialPRNumber: inv.PRNumber,
 		Logger:          logger,
 	}

@@ -16,10 +16,20 @@ type tabSnapshot struct {
 	PRs        []domain.PullRequestSummary
 	TotalCount int
 	Truncated  bool
+	// Scanned is how many open PRs a filtered tab was classified from.
+	Scanned int
+}
+
+// PageStatus is the lazy-loading state of the All tab.
+type PageStatus struct {
+	Loading bool
+	Failed  bool
+	Capped  bool
 }
 
 type PRListPanelModel struct {
 	Tabs    map[domain.DashboardTab]tabSnapshot
+	Paging  PageStatus
 	Active  domain.DashboardTab
 	Cursor  int
 	Scroll  int
@@ -58,6 +68,35 @@ func (m *PRListPanelModel) SetTabSnapshot(tab domain.DashboardTab, prs []domain.
 		Truncated:  truncated,
 	}
 	m.ensureVisible()
+}
+
+// SetTabScanned records how many open PRs a filtered tab was built from, so
+// its footer can say the list may be incomplete.
+func (m *PRListPanelModel) SetTabScanned(tab domain.DashboardTab, scanned int) {
+	if m.Tabs == nil {
+		return
+	}
+	snap := m.Tabs[tab]
+	snap.Scanned = scanned
+	m.Tabs[tab] = snap
+}
+
+// SelectNumber moves the cursor to the PR with this number in the active tab.
+// Returns false (cursor unchanged) when the PR isn't in the list.
+func (m *PRListPanelModel) SelectNumber(number int) bool {
+	for i, pr := range m.currentPRs() {
+		if pr.Number == number {
+			m.Cursor = i
+			m.ensureVisible()
+			return true
+		}
+	}
+	return false
+}
+
+// VisibleItemCount is how many PR rows fit in the panel.
+func (m *PRListPanelModel) VisibleItemCount() int {
+	return m.visibleItemCount()
 }
 
 func (m *PRListPanelModel) SetActiveTab(tab domain.DashboardTab) {
@@ -371,23 +410,68 @@ func (m *PRListPanelModel) renderTabBar() string {
 	return strings.Join(parts, " | ")
 }
 
+// tabBarTier controls how much of the tab bar is shown; higher tiers are
+// more compact and are used when the panel is too narrow.
+type tabBarTier int
+
+const (
+	tabBarFull       tabBarTier = iota // full labels, every count
+	tabBarShort                        // short labels, every count
+	tabBarActiveOnly                   // short labels, count on the active tab
+	tabBarSingle                       // only the active tab, with position
+)
+
+// renderTabBarThemed picks the widest tab bar tier that fits the panel, so
+// the active tab is never clipped off the end.
 func (m *PRListPanelModel) renderTabBarThemed() string {
 	if m.theme == nil {
 		return m.renderTabBar()
 	}
-	parts := make([]string, 0, len(dashboardTabOrder))
+	for _, tier := range []tabBarTier{tabBarFull, tabBarShort, tabBarActiveOnly} {
+		if bar := m.renderTabBarTier(tier); lipgloss.Width(bar) <= m.Width {
+			return bar
+		}
+	}
+	return m.renderTabBarTier(tabBarSingle)
+}
+
+func (m *PRListPanelModel) renderTabBarTier(tier tabBarTier) string {
+	th := m.theme
+	if tier == tabBarSingle {
+		idx := max(indexOfTab(m.Active), 0)
+		active := th.TabActive.Render(fmt.Sprintf("%s %d", tabShortLabel(m.Active), m.tabCount(m.Active)))
+		pos := th.FaintTxt.Render(fmt.Sprintf("%d/%d", idx+1, len(dashboardTabOrder)))
+		return th.FaintTxt.Render("‹") + active + th.FaintTxt.Render("›") + " " + pos
+	}
+	parts := make([]string, 0, 2*len(dashboardTabOrder))
 	for i, tab := range dashboardTabOrder {
-		count := len(m.currentSnapshotFor(tab).PRs)
+		label := tabLabel(tab)
+		if tier != tabBarFull {
+			label = tabShortLabel(tab)
+		}
+		count := m.tabCount(tab)
 		if tab == m.Active {
-			parts = append(parts, m.theme.TabActive.Render(fmt.Sprintf("%s %d", tabLabel(tab), count)))
+			parts = append(parts, th.TabActive.Render(fmt.Sprintf("%s %d", label, count)))
+		} else if tier == tabBarActiveOnly {
+			parts = append(parts, th.TabInactive.Render(label))
 		} else {
-			parts = append(parts, m.theme.TabInactive.Render(tabLabel(tab)+" "+m.theme.FaintTxt.Render(fmt.Sprint(count))))
+			parts = append(parts, th.TabInactive.Render(label+" "+th.FaintTxt.Render(fmt.Sprint(count))))
 		}
 		if i < len(dashboardTabOrder)-1 {
 			parts = append(parts, " ")
 		}
 	}
 	return strings.Join(parts, "")
+}
+
+// tabCount is the number shown next to a tab label. The All tab shows the
+// repo's open-PR total rather than how many pages have loaded so far.
+func (m *PRListPanelModel) tabCount(tab domain.DashboardTab) int {
+	snap := m.currentSnapshotFor(tab)
+	if tab == domain.TabAll && snap.TotalCount > len(snap.PRs) {
+		return snap.TotalCount
+	}
+	return len(snap.PRs)
 }
 
 func (m *PRListPanelModel) ciIconStyled(status domain.CIStatus) string {
@@ -447,11 +531,31 @@ func (m *PRListPanelModel) footerLine() string {
 	if !snap.Truncated {
 		return ""
 	}
-	total := snap.TotalCount
-	if total < len(snap.PRs) {
-		total = len(snap.PRs)
+	total := max(snap.TotalCount, len(snap.PRs))
+	var line string
+	switch m.Active {
+	case domain.TabAll:
+		line = fmt.Sprintf("%d of %d open", len(snap.PRs), total)
+		switch {
+		case m.Paging.Failed:
+			line += " · couldn't load more · R to retry"
+		case m.Paging.Loading:
+			line += " · loading…"
+		case m.Paging.Capped:
+			line += " · limit reached · search the palette for more"
+		default:
+			line += " · ↓ for more"
+		}
+	case domain.TabMyPRs, domain.TabNeedsReview:
+		// Filtered tabs are classified from the loaded open PRs only.
+		line = fmt.Sprintf("%d from newest %d of %d open", len(snap.PRs), max(snap.Scanned, len(snap.PRs)), total)
+	default:
+		line = fmt.Sprintf("Showing %d of %d open PRs", len(snap.PRs), total)
 	}
-	return fmt.Sprintf("Showing %d of %d open PRs", len(snap.PRs), total)
+	if m.theme != nil {
+		return " " + m.theme.MutedTxt.Render(line)
+	}
+	return line
 }
 
 func (m *PRListPanelModel) visibleItemCount() int {

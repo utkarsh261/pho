@@ -26,6 +26,7 @@ type DashboardService interface {
 	LoadInvolving(ctx context.Context, repo domain.Repository, viewer string, force bool) (domain.InvolvingSnapshot, error)
 	LoadPreview(ctx context.Context, repo string, number int, force bool) (domain.PRPreviewSnapshot, error)
 	LoadAllPRsPage(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
+	LoadOpenPRsPage(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
 	InvalidateRepo(ctx context.Context, repo domain.Repository) error
 }
 
@@ -141,6 +142,18 @@ type AllPRsPageLoaded struct {
 	HasMore    bool
 	NextCursor string
 	PagesLeft  int
+	Err        error
+}
+
+// OpenPRsPageLoaded is emitted when an All-tab page of open PRs arrives.
+// Cursor and Generation identify the request so stale pages can be dropped.
+type OpenPRsPageLoaded struct {
+	Repo       string
+	Cursor     string
+	Generation int
+	Entries    []domain.PullRequestSummary
+	HasMore    bool
+	NextCursor string
 	Err        error
 }
 
@@ -306,6 +319,22 @@ func FetchAllPRsPageCmd(svc DashboardService, repo domain.Repository, cursor str
 			HasMore:    hasMore,
 			NextCursor: nextCursor,
 			PagesLeft:  pagesLeft,
+			Err:        err,
+		}
+	}
+}
+
+// FetchOpenPRsPageCmd fetches the open-PR page after cursor for the All tab.
+func FetchOpenPRsPageCmd(svc DashboardService, repo domain.Repository, cursor string, generation int) tea.Cmd {
+	return func() tea.Msg {
+		entries, hasMore, nextCursor, err := svc.LoadOpenPRsPage(context.Background(), repo, cursor)
+		return OpenPRsPageLoaded{
+			Repo:       repoKey(repo),
+			Cursor:     cursor,
+			Generation: generation,
+			Entries:    entries,
+			HasMore:    hasMore,
+			NextCursor: nextCursor,
 			Err:        err,
 		}
 	}

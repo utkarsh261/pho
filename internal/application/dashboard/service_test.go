@@ -54,6 +54,10 @@ func (f *fakeGitHubClient) SubmitReviewWithComments(_ context.Context, _, _, _, 
 	return nil
 }
 
+func (f *fakeGitHubClient) FetchOpenPRsPage(_ context.Context, _ domain.Repository, _ string) ([]domain.PullRequestSummary, bool, string, error) {
+	return nil, false, "", nil
+}
+
 func (f *fakeGitHubClient) FetchAllPRs(_ context.Context, _ domain.Repository, _ string) ([]domain.PullRequestSummary, bool, string, error) {
 	return nil, false, "", nil
 }

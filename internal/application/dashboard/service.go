@@ -28,6 +28,7 @@ type DashboardService interface {
 	LoadInvolving(ctx context.Context, repo domain.Repository, viewer string, force bool) (domain.InvolvingSnapshot, error)
 	LoadPreview(ctx context.Context, repo string, number int, force bool) (domain.PRPreviewSnapshot, error)
 	LoadAllPRsPage(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
+	LoadOpenPRsPage(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
 }
 
 type Service struct {
@@ -216,6 +217,16 @@ func (s *Service) LoadAllPRsPage(ctx context.Context, repo domain.Repository, cu
 		return nil, false, "", err
 	}
 	return s.Client.FetchAllPRs(ctx, normalizeRepository(repo), cursor)
+}
+
+// LoadOpenPRsPage fetches the open-PR page after cursor. Pages beyond the
+// first are not cached; the All tab holds them in memory only.
+func (s *Service) LoadOpenPRsPage(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error) {
+	defer s.log().Timer("dashboard load open prs page", pholog.FieldRepo, repo.FullName)()
+	if err := s.ensureReady(); err != nil {
+		return nil, false, "", err
+	}
+	return s.Client.FetchOpenPRsPage(ctx, normalizeRepository(repo), cursor)
 }
 
 // InvalidateRepo clears all cached dashboard and preview data for a repository.

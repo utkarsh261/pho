@@ -273,6 +273,26 @@ func (c *Client) FetchDashboardPRs(ctx context.Context, repo domain.Repository) 
 	return summaries, total, truncated, cursor, nil
 }
 
+// FetchOpenPRsPage loads the open-PR page after cursor, using the dashboard query.
+func (c *Client) FetchOpenPRsPage(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error) {
+	c.log.Debug("fetch open prs page", "repo", repo.FullName, "host", repo.Host, "cursor", cursor)
+	resp, err := queryGraphQL[model.DashboardData](c, ctx, repo.Host, func(profile githubpkg.GitHubHostProfile) string {
+		return buildDashboardQuery(profile)
+	}, map[string]any{
+		"owner": repoOwner(repo),
+		"name":  repoName(repo),
+		"after": cursor,
+	})
+	if err != nil {
+		return nil, false, "", err
+	}
+	summaries, _, hasMore, nextCursor, err := normalizeDashboardResponse(repo, resp.Data)
+	if err != nil {
+		return nil, false, "", err
+	}
+	return summaries, hasMore, nextCursor, nil
+}
+
 // FetchInvolvingPRs loads the repo-scoped involving search results.
 func (c *Client) FetchInvolvingPRs(ctx context.Context, repo domain.Repository, viewer string) ([]domain.PullRequestSummary, int, bool, error) {
 	c.log.Debug("fetch involving", "repo", repo.FullName, "host", repo.Host, "viewer", viewer)

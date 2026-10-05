@@ -16,6 +16,7 @@ var dashboardTabOrder = []domain.DashboardTab{
 	domain.TabMyPRs,
 	domain.TabNeedsReview,
 	domain.TabInvolving,
+	domain.TabAll,
 	domain.TabRecent,
 }
 
@@ -58,10 +59,26 @@ func tabLabel(tab domain.DashboardTab) string {
 		return "Needs Review"
 	case domain.TabInvolving:
 		return "Involving"
+	case domain.TabAll:
+		return "All"
 	case domain.TabRecent:
 		return "Recent"
 	default:
 		return string(tab)
+	}
+}
+
+// tabShortLabel is used when the full tab labels don't fit the panel.
+func tabShortLabel(tab domain.DashboardTab) string {
+	switch tab {
+	case domain.TabMyPRs:
+		return "Mine"
+	case domain.TabNeedsReview:
+		return "Review"
+	case domain.TabInvolving:
+		return "Involved"
+	default:
+		return tabLabel(tab)
 	}
 }
 
