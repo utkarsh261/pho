@@ -399,7 +399,7 @@ func TestCommentsLinesScreenshotExample(t *testing.T) {
 		t.Error("expected no │ prefix on reply lines")
 	}
 	// Verify reply is indented by 2 spaces.
-	if !strings.Contains(got, "  @utkarsh261") {
+	if !strings.Contains(got, "  ● utkarsh261") {
 		t.Error("expected reply header to be indented by 2 spaces")
 	}
 	// Verify correct order: review summary first.

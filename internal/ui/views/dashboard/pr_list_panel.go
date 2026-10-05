@@ -3,11 +3,13 @@ package dashboard
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/utkarsh261/pho/internal/domain"
 	"github.com/utkarsh261/pho/internal/ui/theme"
+	"github.com/utkarsh261/pho/internal/ui/timefmt"
 )
 
 type tabSnapshot struct {
@@ -142,12 +144,11 @@ func (m *PRListPanelModel) View() string {
 	if m.Width <= 0 || m.Height <= 0 {
 		return ""
 	}
-	header := "▸ PRs"
+	header := " Pull requests"
 	if m.theme != nil {
-		header = m.theme.Header.Width(m.Width).Render(header)
-	} else {
-		header = fitLine(header, m.Width)
+		header = m.theme.Header.Render(header)
 	}
+	header = fitLine(header, m.Width)
 	lines := []string{
 		header,
 		fitLine("", m.Width),
@@ -156,7 +157,7 @@ func (m *PRListPanelModel) View() string {
 	}
 	rows := m.visibleRows()
 	if len(rows) == 0 {
-		empty := "No PRs in this tab"
+		empty := "  No pull requests here"
 		if m.theme != nil {
 			empty = m.theme.MutedTxt.Render(empty)
 		}
@@ -279,38 +280,82 @@ func (m *PRListPanelModel) visibleRows() []prRow {
 
 func (m *PRListPanelModel) renderRow(pr domain.PullRequestSummary, index int) prRow {
 	selected := index == m.Cursor
-	bar := " "
+	if m.theme == nil {
+		return m.renderRowPlain(pr, selected)
+	}
+	th := m.theme
+
+	edge := " "
 	if selected {
-		bar = "▌"
+		edge = th.PrimaryTxt.Render("▎")
 	}
+	glyph := m.stateGlyph(pr)
+	num := th.Number.Render(fmt.Sprintf("#%d", pr.Number))
+	meta := m.ciIconStyled(pr.CIStatus) + " " + m.reviewIconStyled(pr.ReviewDecision, pr.IsDraft)
 
-	meta := fmt.Sprintf("%s %s", m.ciIconStyled(pr.CIStatus), m.reviewIconStyled(pr.ReviewDecision, pr.IsDraft))
-	prefix := m.prNumberStyled(pr.Number)
-	minGap := 2
-	metaW := lipgloss.Width(meta)
-	titleMax := m.Width - lipgloss.Width(bar) - lipgloss.Width(prefix) - 1 - metaW - minGap
-	if titleMax < 1 {
-		titleMax = 1
+	prefixW := 1 + 1 + 1 + lipgloss.Width(num) + 1 // edge glyph sp num sp
+	metaW := lipgloss.Width(meta) + 1              // trailing pad
+	titleMax := max(m.Width-prefixW-metaW-2, 1)
+	titleStyle := lipgloss.NewStyle().Foreground(th.Text)
+	if selected {
+		titleStyle = titleStyle.Bold(true).Foreground(th.TextBright)
 	}
-	title := truncateText(pr.Title, titleMax)
-	if selected && m.theme != nil {
-		title = m.theme.Bold.Render(title)
-	}
-	line1 := fmt.Sprintf("%s%s %s  %s", bar, prefix, title, meta)
-
-	if selected && m.theme != nil {
-		line1 = m.theme.SelectedRow.Render(line1)
-	}
+	title := titleStyle.Render(truncateText(pr.Title, titleMax))
+	left := edge + glyph + " " + num + " " + title
+	gap := max(m.Width-lipgloss.Width(left)-metaW, 1)
+	line1 := left + strings.Repeat(" ", gap) + meta + " "
 
 	branch := pr.HeadRefName
 	if branch == "" {
 		branch = pr.BaseRefName
 	}
-	line2 := strings.TrimRight(bar+" "+branch, " ")
-	if selected && m.theme != nil {
-		line2 = m.theme.SelectedRow.Render(m.theme.MutedTxt.Render(line2))
+	var sub []string
+	if branch != "" {
+		sub = append(sub, branch)
+	}
+	if pr.Author != "" {
+		sub = append(sub, pr.Author)
+	}
+	if age := timefmt.Relative(pr.UpdatedAt, time.Now()); age != "" {
+		sub = append(sub, age)
+	}
+	line2 := edge + "   " + th.MutedTxt.Render(strings.Join(sub, " · "))
+
+	if selected {
+		line1 = theme.FillBg(th.Highlight, m.Width, line1)
+		line2 = theme.FillBg(th.Highlight, m.Width, line2)
 	}
 	return prRow{line1: line1, line2: line2}
+}
+
+func (m *PRListPanelModel) renderRowPlain(pr domain.PullRequestSummary, selected bool) prRow {
+	bar := " "
+	if selected {
+		bar = "▌"
+	}
+	meta := fmt.Sprintf("%s %s", ciIcon(pr.CIStatus), reviewIcon(pr.ReviewDecision, pr.IsDraft))
+	prefix := m.prNumberStyled(pr.Number)
+	titleMax := max(m.Width-lipgloss.Width(bar)-lipgloss.Width(prefix)-1-lipgloss.Width(meta)-2, 1)
+	line1 := fmt.Sprintf("%s%s %s  %s", bar, prefix, truncateText(pr.Title, titleMax), meta)
+	branch := pr.HeadRefName
+	if branch == "" {
+		branch = pr.BaseRefName
+	}
+	return prRow{line1: line1, line2: strings.TrimRight(bar+" "+branch, " ")}
+}
+
+// stateGlyph renders a coloured dot for the PR's state.
+func (m *PRListPanelModel) stateGlyph(pr domain.PullRequestSummary) string {
+	c := m.theme.StateOpen
+	switch {
+	case pr.IsDraft:
+		c = m.theme.StateDraft
+	case pr.State == domain.PRStateMerged:
+		c = m.theme.StateMerged
+	case pr.State == domain.PRStateClosed:
+		c = m.theme.StateClosed
+	}
+	return lipgloss.NewStyle().Foreground(c).Render("●")
 }
 
 func (m *PRListPanelModel) renderTabBar() string {
@@ -333,11 +378,10 @@ func (m *PRListPanelModel) renderTabBarThemed() string {
 	parts := make([]string, 0, len(dashboardTabOrder))
 	for i, tab := range dashboardTabOrder {
 		count := len(m.currentSnapshotFor(tab).PRs)
-		label := fmt.Sprintf("%s(%d)", tabLabel(tab), count)
 		if tab == m.Active {
-			parts = append(parts, m.theme.TabActive.Render(label))
+			parts = append(parts, m.theme.TabActive.Render(fmt.Sprintf("%s %d", tabLabel(tab), count)))
 		} else {
-			parts = append(parts, m.theme.TabInactive.Render(label))
+			parts = append(parts, m.theme.TabInactive.Render(tabLabel(tab)+" "+m.theme.FaintTxt.Render(fmt.Sprint(count))))
 		}
 		if i < len(dashboardTabOrder)-1 {
 			parts = append(parts, " ")

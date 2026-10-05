@@ -158,14 +158,10 @@ func TestDiffRenderHunkHeaderColor(t *testing.T) {
 	if !strings.Contains(plainText(hunkLine), hunkHeader) {
 		t.Errorf("expected hunk header text in row 3, got: %q", plainText(hunkLine))
 	}
-	if !ansiRe.MatchString(hunkLine) {
-		t.Errorf("expected ANSI escape codes in hunk header (cyan+bold), got plain: %q", hunkLine)
+	// Hunk headers are deliberately quiet: coloured with the theme's hunk style, not bold.
+	if !strings.Contains(hunkLine, theme.Default().DiffHunkHeader.Render(hunkHeader)) {
+		t.Errorf("expected hunk header rendered with DiffHunkHeader style, got: %q", hunkLine)
 	}
-	// Must be bold: either standalone \x1b[1m or combined \x1b[1;... (bold merged with color).
-	if !strings.Contains(hunkLine, "\x1b[1m") && !strings.Contains(hunkLine, "\x1b[1;") {
-		t.Errorf("expected bold ANSI code in hunk header, got: %q", hunkLine)
-	}
-	// ANSI codes confirmed above; cyan is the intent (exact escape depends on terminal profile).
 }
 
 // TestDiffRenderFileHeaderMuted verifies the file header bar is styled (not plain)
@@ -181,7 +177,7 @@ func TestDiffRenderFileHeaderMuted(t *testing.T) {
 	if len(lines) < 3 {
 		t.Fatalf("expected at least 3 rows, got %d", len(lines))
 	}
-	headerLine := lines[2]
+	headerLine := lines[1]
 
 	// Must contain filename.
 	if !strings.Contains(plainText(headerLine), "internal/server.go") {
@@ -201,7 +197,8 @@ func TestDiffRenderFileHeaderMuted(t *testing.T) {
 	}
 }
 
-// TestDiffRenderContextLineNormal verifies context lines have no ANSI color codes.
+// TestDiffRenderContextLineNormal verifies context-line code carries no ANSI
+// colour: only the line-number gutter in front of it is styled.
 func TestDiffRenderContextLineNormal(t *testing.T) {
 	t.Parallel()
 
@@ -213,12 +210,12 @@ func TestDiffRenderContextLineNormal(t *testing.T) {
 	}
 	ctxLine := lines[4]
 
-	// Context lines must be the raw text with NO ANSI codes.
-	if ansiRe.MatchString(ctxLine) {
-		t.Errorf("expected NO ANSI codes in context line, got: %q", ctxLine)
+	// The code itself must be the raw text with no ANSI codes after the gutter.
+	if !strings.HasSuffix(ctxLine, "\x1b[0munchanged context line") {
+		t.Errorf("expected unstyled raw text after the gutter, got: %q", ctxLine)
 	}
-	if ctxLine != "unchanged context line" {
-		t.Errorf("expected exact raw text for context line, got: %q", ctxLine)
+	if strings.TrimSpace(plainText(ctxLine)) != "unchanged context line" {
+		t.Errorf("expected exact raw text for context line, got: %q", plainText(ctxLine))
 	}
 }
 
@@ -245,14 +242,14 @@ func TestDiffRenderBinaryFilePlaceholder(t *testing.T) {
 
 	lines := m.renderDiffSectionLines(0, f.DisplayRows, 80)
 
-	// Row layout: 0=blank, 1=separator, 2=file header, 3=binary placeholder
+	// Row layout: 0=blank, 1=file header, 2=blank, 3=binary placeholder
 	if len(lines) < 4 {
-		t.Fatalf("expected 4 rows for binary file (blank+sep+header+placeholder), got %d", len(lines))
+		t.Fatalf("expected 4 rows for binary file (blank+header+blank+placeholder), got %d", len(lines))
 	}
 
 	// Placeholder text must appear at row 3.
 	placeholder := plainText(lines[3])
-	if !strings.Contains(placeholder, "📄 Binary file (no diff available)") {
+	if !strings.Contains(placeholder, "Binary file (no diff available)") {
 		t.Errorf("expected binary placeholder at row 3, got: %q", placeholder)
 	}
 
@@ -291,7 +288,7 @@ func TestDiffRenderRenamedFileHeader(t *testing.T) {
 	if len(lines) < 3 {
 		t.Fatalf("expected at least 3 rows, got %d", len(lines))
 	}
-	header := plainText(lines[2])
+	header := plainText(lines[1])
 
 	if !strings.Contains(header, "pkg/old/server.go") {
 		t.Errorf("expected old path in renamed file header, got: %q", header)

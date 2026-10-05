@@ -61,10 +61,7 @@ func (m *LeftPanelModel) renderFilesHeaderLabel(totalAdd, totalDel int) string {
 	if !hasStats {
 		label := "FILES"
 		if m.theme != nil {
-			if m.Focus == FocusFiles {
-				return m.theme.TabActive.Render(label)
-			}
-			return m.theme.TabInactive.Render(label)
+			return m.panelLabel("Files", FocusFiles)
 		}
 		if m.Focus == FocusFiles {
 			return "[" + label + "]"
@@ -73,15 +70,12 @@ func (m *LeftPanelModel) renderFilesHeaderLabel(totalAdd, totalDel int) string {
 	}
 
 	if m.theme != nil {
-		if m.Focus == FocusFiles {
-			statsPlain := formatFileStats(totalAdd, totalDel)
-			gap := max((lpInner-2)-len([]rune("FILES"))-lpStatsWidth, 0)
-			content := "FILES" + strings.Repeat(" ", gap) + statsPlain
-			return m.theme.TabActive.Render(content)
+		labelStyled := m.panelLabel("Files", FocusFiles) + m.theme.MutedTxt.Render(fmt.Sprintf(" %d", len(m.Files)))
+		statsColored := m.theme.Additions.Render(fmt.Sprintf("+%d", totalAdd)) + " " + m.theme.Deletions.Render(fmt.Sprintf("-%d", totalDel))
+		if lipgloss.Width(labelStyled)+1+lipgloss.Width(statsColored) > lpInner {
+			statsColored = formatFileStatsColored(totalAdd, totalDel, m.theme)
 		}
-		labelStyled := m.theme.TabInactive.Render("FILES")
-		statsColored := formatFileStatsColored(totalAdd, totalDel, m.theme)
-		gap := max(lpInner-lipgloss.Width(labelStyled)-lpStatsWidth, 0)
+		gap := max(lpInner-lipgloss.Width(labelStyled)-lipgloss.Width(statsColored), 1)
 		return labelStyled + strings.Repeat(" ", gap) + statsColored
 	}
 
@@ -144,7 +138,7 @@ func (m *LeftPanelModel) renderFilesArea(outerHeight int, spinnerFrame string) s
 		Render(tabLabel)
 
 	bodyBox := lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
+		Border(lipgloss.RoundedBorder()).
 		BorderTop(false).
 		BorderForeground(borderColor).
 		Padding(0, 1).
@@ -223,39 +217,61 @@ func (m *LeftPanelModel) renderFileRow(f diffmodel.DiffFile, idx int) string {
 
 	path := truncatePathLeft(f.NewPath, lpPathMax) // exactly lpPathMax visible chars
 
-	var stats string
-	if (isSelected || isOpened) && m.theme != nil {
-		// Plain stats so the row style controls foreground uniformly.
-		stats = formatFileStats(f.Additions, f.Deletions)
-	} else if m.theme != nil {
-		stats = formatFileStatsColored(f.Additions, f.Deletions, m.theme)
-	} else {
-		stats = formatFileStats(f.Additions, f.Deletions)
+	if m.theme == nil {
+		content := "  " + path + formatFileStats(f.Additions, f.Deletions)
+		if isSelected || isOpened {
+			return lipgloss.NewStyle().Reverse(true).Width(lpInner).Render(content)
+		}
+		return fitLine(content, lpInner)
 	}
 
-	// 2-char left padding, matching the command palette row layout.
-	content := "  " + path + stats
-
+	th := m.theme
+	// Dim the directory, emphasise the file name.
+	trimmed := strings.TrimRight(path, " ")
+	pad := strings.Repeat(" ", len([]rune(path))-len([]rune(trimmed)))
+	dir, base := "", trimmed
+	if i := strings.LastIndex(trimmed, "/"); i >= 0 {
+		dir, base = trimmed[:i+1], trimmed[i+1:]
+	}
+	baseStyle := lipgloss.NewStyle().Foreground(th.Text)
 	if isSelected {
-		if m.theme != nil {
-			return m.theme.ListSelected.Width(lpInner).Render(content)
-		}
-		return lipgloss.NewStyle().Reverse(true).Width(lpInner).Render(content)
+		baseStyle = baseStyle.Bold(true).Foreground(th.TextBright)
 	}
+	styledPath := th.MutedTxt.Render(dir) + baseStyle.Render(base) + pad
 
-	if isOpened {
-		if m.theme != nil {
-			return m.theme.ListOpened.Width(lpInner).Render(content)
-		}
-		return lipgloss.NewStyle().Reverse(true).Width(lpInner).Render(content)
+	content := fileStatusLetter(f, th) + " " + styledPath + formatFileStatsColored(f.Additions, f.Deletions, th)
+
+	switch {
+	case isSelected:
+		return theme.FillBg(th.Highlight, lpInner, content)
+	case isOpened:
+		return theme.FillBg(th.Subtle, lpInner, content)
 	}
-
-	// Use dashboard's fitLine to strictly prevent random word wrapping on borders.
 	return fitLine(content, lpInner)
 }
 
-// formatFileStatsColored returns a stats string of exactly lpStatsWidth visible chars
-// with additions rendered in green and deletions in red.
+// fileStatusLetter renders a coloured A/M/D/R marker for the file's change type.
+func fileStatusLetter(f diffmodel.DiffFile, th *theme.Theme) string {
+	switch f.Status {
+	case "added":
+		return th.Additions.Render("A")
+	case "removed":
+		return th.Deletions.Render("D")
+	case "renamed":
+		return th.CIPending.Render("R")
+	default:
+		return th.DimTxt.Render("M")
+	}
+}
+
+// panelLabel renders a sidebar panel title, accented when focused.
+func (m *LeftPanelModel) panelLabel(label string, target PRDetailFocus) string {
+	if m.Focus == target {
+		return lipgloss.NewStyle().Bold(true).Foreground(m.theme.AccentText).Render(label)
+	}
+	return lipgloss.NewStyle().Bold(true).Foreground(m.theme.TextDim).Render(label)
+}
+
 func formatFileStatsColored(additions, deletions int, th *theme.Theme) string {
 	addPart := fmt.Sprintf("+%d", additions)
 	delPart := fmt.Sprintf("-%d", deletions)
@@ -276,11 +292,7 @@ func (m *LeftPanelModel) renderCIArea(outerHeight int) string {
 
 	tabLabel := "CI"
 	if m.theme != nil {
-		if m.Focus == FocusCI {
-			tabLabel = m.theme.TabActive.Render(tabLabel)
-		} else {
-			tabLabel = m.theme.TabInactive.Render(tabLabel)
-		}
+		tabLabel = m.panelLabel("Checks", FocusCI)
 	} else {
 		if m.Focus == FocusCI {
 			tabLabel = "[" + tabLabel + "]"
@@ -313,7 +325,7 @@ func (m *LeftPanelModel) renderCIArea(outerHeight int) string {
 		Render(tabLabel)
 
 	bodyBox := lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
+		Border(lipgloss.RoundedBorder()).
 		BorderTop(false).
 		BorderForeground(borderColor).
 		Padding(0, 1).
@@ -327,10 +339,10 @@ func (m *LeftPanelModel) renderCIArea(outerHeight int) string {
 func (m *LeftPanelModel) renderCIRow(check domain.PreviewCheckRow, idx int) string {
 	isSelected := idx == m.CICursor && m.Focus == FocusCI
 
-	// Use a plain icon for selected rows so ANSI reset codes inside the styled
-	// icon don't wipe out the ListSelected background highlight.
+	// FillBg (used for the selected row) re-applies the background after each
+	// reset, so the coloured icon is safe on the highlighted row too.
 	icon := ciIconChar(check)
-	if m.theme != nil && !isSelected {
+	if m.theme != nil {
 		icon = ciIconStyled(check, m.theme)
 	}
 
@@ -340,7 +352,9 @@ func (m *LeftPanelModel) renderCIRow(check domain.PreviewCheckRow, idx int) stri
 	row := icon + " " + name + " " + status
 	if isSelected {
 		if m.theme != nil {
-			return m.theme.ListSelected.Width(lpInner).Render(row)
+			// Bold the text separately: the icon's own reset would end a bold
+			// span that wrapped the whole row.
+			return theme.FillBg(m.theme.Highlight, lpInner, icon+" "+m.theme.Bold.Render(name+" "+status))
 		}
 		return lipgloss.NewStyle().Reverse(true).Width(lpInner).Render(row)
 	}

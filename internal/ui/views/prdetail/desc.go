@@ -74,6 +74,13 @@ func (m *PRDetailModel) loadErrorLines(contentWidth int) []string {
 // and viewport dimensions. Returns exactly contentH lines (blank-padded).
 func (m *PRDetailModel) renderDescriptionTab(scroll, contentH, contentWidth int) []string {
 	lines := m.descriptionLines(contentWidth)
+	if lines == nil && m.Detail != nil {
+		msg := "No description provided."
+		if m.theme != nil {
+			msg = m.theme.MutedTxt.Italic(true).Render(msg)
+		}
+		lines = []string{"", msg}
+	}
 	blank := strings.Repeat(" ", max(contentWidth, 0))
 	out := make([]string, contentH)
 	for i := range contentH {

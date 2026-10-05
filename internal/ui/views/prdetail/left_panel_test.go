@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/utkarsh261/pho/internal/application/cmds"
 	diffmodel "github.com/utkarsh261/pho/internal/diff/model"
@@ -250,8 +251,8 @@ func TestLeftPanelCIHiddenWhenEmpty(t *testing.T) {
 	panel := LeftPanelModel{Files: makeFiles("main.go"), Checks: nil, Loading: false, Focus: FocusFiles}
 	output := panel.View(30, "⠋")
 	// The border for CI would produce extra box-drawing chars.
-	// Count the number of NormalBorder top-border chars "┌" — should be 1 (files only).
-	topBorderCount := strings.Count(output, "┌")
+	// Count the number of NormalBorder top-border chars "╭" — should be 1 (files only).
+	topBorderCount := strings.Count(output, "╭")
 	if topBorderCount != 1 {
 		t.Errorf("expected 1 sub-area (files only), got %d top-border chars in:\n%s", topBorderCount, output)
 	}
@@ -632,7 +633,7 @@ func TestViewRendersFileListAfterDiffLoad(t *testing.T) {
 	})
 	m = next
 
-	output := m.View()
+	output := descStripANSI(m.View())
 	if !strings.Contains(output, "cmd/main.go") {
 		t.Errorf("expected 'cmd/main.go' in view after DiffLoaded, output:\n%s", output)
 	}
@@ -648,11 +649,11 @@ func TestLeftPanelFullUIRender(t *testing.T) {
 	m.Files = files
 
 	out := stripANSI(m.View(20, "⠋"))
-	expected := `┌────────────────────────────────────────┐
-│  FILES                         +10 -4  │
+	expected := `╭────────────────────────────────────────╮
+│ Files 2                         +10 -4 │
 ├────────────────────────────────────────┤
-│   cmd/main.go                    +5 -2 │
-│   internal/app/app.go            +5 -2 │
+│ M cmd/main.go                    +5 -2 │
+│ M internal/app/app.go            +5 -2 │
 │                                        │
 │                                        │
 │                                        │
@@ -661,13 +662,13 @@ func TestLeftPanelFullUIRender(t *testing.T) {
 │                                        │
 │                                        │
 │                                        │
-└────────────────────────────────────────┘
-┌────────────────────────────────────────┐
-│  CI                                    │
+╰────────────────────────────────────────╯
+╭────────────────────────────────────────╮
+│ Checks                                 │
 ├────────────────────────────────────────┤
 │ ✓ build                          pass  │
 │ ✓ lint                           pass  │
-└────────────────────────────────────────┘`
+╰────────────────────────────────────────╯`
 
 	if strings.TrimSpace(out) != strings.TrimSpace(expected) {
 		t.Errorf("full UI render mismatch.\nExpected:\n%s\n\nGot:\n%s", expected, out)
@@ -965,7 +966,7 @@ func TestLeftPanelFilesHeaderNoStatsWhenLoading(t *testing.T) {
 
 	var headerLine string
 	for _, line := range strings.Split(out, "\n") {
-		if strings.Contains(line, "FILES") {
+		if strings.Contains(line, "Files") {
 			headerLine = line
 			break
 		}
@@ -988,7 +989,7 @@ func TestLeftPanelFilesHeaderNoStatsWhenEmpty(t *testing.T) {
 
 	var headerLine string
 	for _, line := range strings.Split(out, "\n") {
-		if strings.Contains(line, "FILES") {
+		if strings.Contains(line, "Files") {
 			headerLine = line
 			break
 		}
@@ -1014,7 +1015,7 @@ func TestLeftPanelFilesHeaderLargeNumbersTruncated(t *testing.T) {
 
 	var headerLine string
 	for _, line := range strings.Split(out, "\n") {
-		if strings.Contains(line, "FILES") {
+		if strings.Contains(line, "Files") {
 			headerLine = line
 			break
 		}
@@ -1022,9 +1023,13 @@ func TestLeftPanelFilesHeaderLargeNumbersTruncated(t *testing.T) {
 	if headerLine == "" {
 		t.Fatal("expected FILES header line")
 	}
+	// Large totals must never overflow the panel: either shown in full or truncated with "…".
 	plain := stripANSI(headerLine)
-	if !strings.Contains(plain, "…") {
-		t.Errorf("expected truncated stats with … in header, got: %s", plain)
+	if lipgloss.Width(plain) != LeftPanelWidth {
+		t.Errorf("expected header to stay %d wide, got %d: %s", LeftPanelWidth, lipgloss.Width(plain), plain)
+	}
+	if !strings.Contains(plain, "+99999999") && !strings.Contains(plain, "…") {
+		t.Errorf("expected full or truncated stats in header, got: %s", plain)
 	}
 }
 
@@ -1036,7 +1041,7 @@ func TestLeftPanelInactiveHeaderContainsColoredANSI(t *testing.T) {
 
 	var headerLine string
 	for _, line := range strings.Split(out, "\n") {
-		if strings.Contains(line, "FILES") {
+		if strings.Contains(line, "Files") {
 			headerLine = line
 			break
 		}
@@ -1049,7 +1054,7 @@ func TestLeftPanelInactiveHeaderContainsColoredANSI(t *testing.T) {
 	}
 }
 
-func TestLeftPanelActiveHeaderPlainNoColoredANSI(t *testing.T) {
+func TestLeftPanelActiveHeaderLabelAccented(t *testing.T) {
 	t.Parallel()
 	files := makeFiles("a.go", "b.go")
 	panel := makePanelWithFiles(files, FocusFiles)
@@ -1057,7 +1062,7 @@ func TestLeftPanelActiveHeaderPlainNoColoredANSI(t *testing.T) {
 
 	var headerLine string
 	for _, line := range strings.Split(out, "\n") {
-		if strings.Contains(line, "FILES") {
+		if strings.Contains(line, "Files") {
 			headerLine = line
 			break
 		}
@@ -1065,10 +1070,9 @@ func TestLeftPanelActiveHeaderPlainNoColoredANSI(t *testing.T) {
 	if headerLine == "" {
 		t.Fatal("expected FILES header line")
 	}
-	// The theme's Additions color is Success = #10B981 → \x1b[38;2;16;185;129m
-	// The theme's Deletions color is Error = #EF4444 → \x1b[38;2;239;68;68m
-	if strings.Contains(headerLine, "16;185;129") || strings.Contains(headerLine, "239;68;68") {
-		t.Errorf("expected active header stats to be plain (no green/red ANSI), got: %q", headerLine)
+	// Focus is signalled by the accent-coloured "Files" label (#A78BFA → 167;139;250).
+	if !strings.Contains(headerLine, "167;139;250") {
+		t.Errorf("expected focused header label in accent colour, got: %q", headerLine)
 	}
 }
 
@@ -1085,7 +1089,7 @@ func TestLeftPanelInactiveHeaderTotalsRightAligned(t *testing.T) {
 
 	var headerLine string
 	for _, line := range lines {
-		if strings.Contains(line, "FILES") {
+		if strings.Contains(line, "Files") {
 			headerLine = line
 			break
 		}

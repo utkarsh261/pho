@@ -48,110 +48,69 @@ func (m *PRDetailModel) renderHeader() string {
 	if m.CommitMode {
 		return m.renderCommitHeader()
 	}
+	th := m.theme
+	if th == nil {
+		th = theme.Default()
+	}
+	innerW := max(m.Width-2, 1)
+	contentW := max(innerW-2, 1) // 1-col padding each side
 
+	// Line 1: "#9 Title" on the left, key hints on the right.
+	hints := ""
+	if m.Width >= 80 {
+		hints = th.RenderHints("o: Browser | Esc: Back")
+	}
+	baseTitle := fmt.Sprintf("#%d %s", m.Summary.Number, m.Summary.Title)
+	if m.Summary.Title == "" {
+		baseTitle = fmt.Sprintf("Pull Request #%d", m.Summary.Number)
+	}
+	titleBudget := max(contentW-lipgloss.Width(hints)-2, 5)
+	line1 := th.Header.Render(truncateText(baseTitle, titleBudget))
+	if hints != "" {
+		line1 += strings.Repeat(" ", max(contentW-lipgloss.Width(line1)-lipgloss.Width(hints), 1)) + hints
+	}
+
+	// Line 2: author, state (+ merge state, unresolved count), then reviewers.
 	author := m.Summary.Author
 	if author == "" {
 		author = "unknown"
 	}
-
 	state := "OPEN"
 	if m.Detail != nil {
 		state = string(m.Detail.State)
 	}
-
-	var authorStr string
-	var stateStr string
 	mergeSuffix := ""
 	if m.Detail != nil && m.Detail.Mergeable != "" && m.Detail.Mergeable != "MERGEABLE" && m.Detail.Mergeable != "UNKNOWN" {
 		mergeSuffix = " · " + humanizeMergeState(m.Detail.MergeState)
 	}
-	// Unresolved thread count badge — gated at Width >= 80 to protect the title budget.
 	if m.Detail != nil && m.Width >= 80 {
 		if n := m.unresolvedThreadCount(); n > 0 {
 			mergeSuffix += fmt.Sprintf(" · %d unresolved", n)
 		}
 	}
-	if m.theme != nil {
-		authorStr = m.theme.PrimaryTxt.Render(author)
-		switch state {
-		case "OPEN":
-			stateStr = lipgloss.NewStyle().Foreground(m.theme.Secondary).Render("OPEN" + mergeSuffix)
-		case "MERGED":
-			stateStr = m.theme.PrimaryTxt.Render("MERGED" + mergeSuffix)
-		case "CLOSED":
-			stateStr = m.theme.ReviewChanges.Render("CLOSED" + mergeSuffix)
-		default:
-			stateStr = m.theme.ReviewRequired.Render(state + mergeSuffix)
-		}
-		// Override color for conflicting state.
-		if m.Detail != nil && m.Detail.Mergeable == "CONFLICTING" {
-			stateStr = m.theme.ReviewChanges.Render(state + mergeSuffix)
-		}
-	} else {
-		authorStr = author
-		stateStr = state + mergeSuffix
+	var stateStr string
+	switch state {
+	case "OPEN":
+		stateStr = lipgloss.NewStyle().Foreground(th.Secondary).Render("OPEN" + mergeSuffix)
+	case "MERGED":
+		stateStr = th.PrimaryTxt.Render("MERGED" + mergeSuffix)
+	case "CLOSED":
+		stateStr = th.ReviewChanges.Render("CLOSED" + mergeSuffix)
+	default:
+		stateStr = th.ReviewRequired.Render(state + mergeSuffix)
+	}
+	if m.Detail != nil && m.Detail.Mergeable == "CONFLICTING" {
+		stateStr = th.ReviewChanges.Render(state + mergeSuffix)
+	}
+	line2 := truncateText(th.PrimaryTxt.Render(author)+" "+stateStr, contentW)
+	if strip := m.renderHeaderReviewers(contentW - lipgloss.Width(line2) - 5); strip != "" {
+		line2 += th.FaintTxt.Render("  │  ") + strip
 	}
 
-	metaStr := authorStr + " " + stateStr
-	metaLen := lipgloss.Width(metaStr)
-
-	hints := "[o: Browser | Esc: Back]"
-	if m.Width < 80 {
-		hints = ""
-	}
-	hintsLen := lipgloss.Width(hints)
-
-	innerW := max(m.Width-2, 1)
-
-	reservedSpace := metaLen
-	if hintsLen > 0 {
-		reservedSpace += 1 + hintsLen
-	}
-
-	baseTitle := fmt.Sprintf("#%d %s", m.Summary.Number, m.Summary.Title)
-	if m.Summary.Title == "" {
-		baseTitle = fmt.Sprintf("Pull Request #%d", m.Summary.Number)
-	}
-
-	titleBudget := innerW - reservedSpace - 2 // -2 just for padding
-	if titleBudget < 5 {
-		titleBudget = 5
-	}
-
-	truncTitle := baseTitle
-	if lipgloss.Width(baseTitle) > titleBudget {
-		truncTitle = truncateText(baseTitle, titleBudget)
-	}
-
-	leftPart := truncTitle + " " + metaStr
-
-	var finalHeader string
-	if hintsLen > 0 {
-		leftWidth := lipgloss.Width(leftPart)
-		padWidth := max(innerW-leftWidth-hintsLen, 1)
-		finalHeader = leftPart + strings.Repeat(" ", padWidth) + hints
-	} else {
-		finalHeader = leftPart + strings.Repeat(" ", max(0, innerW-lipgloss.Width(leftPart)))
-	}
-
-	if strip := m.renderReviewerStrip(innerW); strip != "" {
-		finalHeader = lipgloss.JoinVertical(lipgloss.Left, finalHeader, strip)
-	}
-
-	var content string
-	var borderColor lipgloss.Color
-	if m.theme != nil {
-		content = m.theme.Header.Width(innerW).Render(finalHeader)
-		borderColor = m.theme.Border
-	} else {
-		content = lipgloss.NewStyle().Width(innerW).Render(finalHeader)
-		borderColor = theme.Default().Border
-	}
-
+	content := lipgloss.NewStyle().Padding(0, 1).Width(innerW).Render(line1 + "\n" + line2)
 	return lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
-		BorderForeground(borderColor).
-		Width(innerW).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(th.Border).
 		Render(content)
 }
 
@@ -172,36 +131,38 @@ func (m *PRDetailModel) renderCommitHeader() string {
 		th = theme.Default()
 	}
 
-	hints := "[o: Browser | Esc: Back]"
-	if m.Width < 80 {
-		hints = ""
+	hints := ""
+	if m.Width >= 80 {
+		hints = th.RenderHints("o: Browser | Esc: Back")
 	}
 	hintsLen := lipgloss.Width(hints)
 
 	innerW := max(m.Width-2, 1)
+	contentW := max(innerW-2, 1) // 1-col padding each side, matching the PR header
 
 	title := fmt.Sprintf("Commit %s — %s", sha, m.Commit.MessageHeadline)
 	meta := fmt.Sprintf("%s · %s", author, relTime)
 	metaRendered := th.MutedTxt.Render(meta)
 
 	leftPart := title + "  " + metaRendered
+	if budget := contentW - hintsLen - 1; lipgloss.Width(leftPart) > budget {
+		leftPart = truncateText(leftPart, max(budget, 5))
+	}
 	leftWidth := lipgloss.Width(leftPart)
 
 	var finalHeader string
 	if hintsLen > 0 {
-		padWidth := max(innerW-leftWidth-hintsLen, 1)
+		padWidth := max(contentW-leftWidth-hintsLen, 1)
 		finalHeader = leftPart + strings.Repeat(" ", padWidth) + hints
 	} else {
-		finalHeader = leftPart + strings.Repeat(" ", max(0, innerW-leftWidth))
+		finalHeader = leftPart + strings.Repeat(" ", max(0, contentW-leftWidth))
 	}
 
-	var content string
-	content = th.Header.Width(innerW).Render(finalHeader)
+	content := lipgloss.NewStyle().Padding(0, 1).Width(innerW).Render(th.Header.Render(finalHeader))
 
 	return lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
+		Border(lipgloss.RoundedBorder()).
 		BorderForeground(th.Border).
-		Width(innerW).
 		Render(content)
 }
 
@@ -233,8 +194,11 @@ func (m *PRDetailModel) renderRightViewport(width, height int) string {
 	contentStr := renderBlock(lines, innerW, contentH)
 
 	// Build tab indicators based on active tab.
-	tabsStr := m.renderSectionTabs()
-	tabsStr = " " + tabsStr
+	tabsStr := " " + m.renderSectionTabs()
+	if lipgloss.Width(tabsStr) > innerW {
+		// Narrow panel: drop the padding so all four numbered tabs still fit.
+		tabsStr = truncateText(m.renderSectionTabsCompact(), innerW)
+	}
 
 	var borderColor lipgloss.Color
 	if m.theme != nil {
@@ -257,7 +221,7 @@ func (m *PRDetailModel) renderRightViewport(width, height int) string {
 		Render(tabsStr)
 
 	bodyBox := lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
+		Border(lipgloss.RoundedBorder()).
 		BorderTop(false).
 		BorderForeground(borderColor).
 		Width(innerW).
@@ -267,41 +231,51 @@ func (m *PRDetailModel) renderRightViewport(width, height int) string {
 	return lipgloss.JoinVertical(lipgloss.Left, headBox, bodyBox)
 }
 
-// renderSectionTabs builds the "1:Desc 2:Diff 3:Comments" indicator string.
-// Active tab is highlighted.
+// renderSectionTabs builds the "● Desc 2:Diff 3:Comments 4:Commits" indicator.
+// The numbers double as key hints; the active tab is highlighted.
 func (m *PRDetailModel) renderSectionTabs() string {
+	return m.sectionTabs(1)
+}
+
+// renderSectionTabsCompact is the narrow-terminal fallback: the same numbered
+// labels with no padding, single-space separated.
+func (m *PRDetailModel) renderSectionTabsCompact() string {
+	return m.sectionTabs(0)
+}
+
+func (m *PRDetailModel) sectionTabs(gap int) string {
 	th := m.theme
 	if th == nil {
 		th = theme.Default()
 	}
-
-	if m.CommitMode {
-		return th.TabActive.Render("● Diff")
+	active, inactive := th.SectionTabActive, th.TabInactive
+	if gap == 0 {
+		active, inactive = active.Padding(0), inactive.Padding(0)
 	}
 
-	type tabDef struct {
+	if m.CommitMode {
+		return active.Render("● Diff")
+	}
+
+	tabs := []struct {
 		num  ContentTab
 		key  string
 		name string
-	}
-	tabs := []tabDef{
+	}{
 		{TabDescription, "1", "Desc"},
 		{TabDiff, "2", "Diff"},
 		{TabComments, "3", "Comments"},
 		{TabCommits, "4", "Commits"},
 	}
-
 	parts := make([]string, len(tabs))
 	for i, td := range tabs {
-		var rendered string
 		if m.activeTab == td.num {
-			rendered = th.TabActive.Render("● " + td.name)
+			parts[i] = active.Render("● " + td.name)
 		} else {
-			rendered = th.TabInactive.Render(td.key + ":" + td.name)
+			parts[i] = inactive.Render(td.key + ":" + td.name)
 		}
-		parts[i] = rendered
 	}
-	return strings.Join(parts, " ")
+	return strings.Join(parts, strings.Repeat(" ", max(gap, 1)))
 }
 
 // renderNarrowBody renders the body for terminals < 80 cols (no sidebar).

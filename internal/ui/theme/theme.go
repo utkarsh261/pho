@@ -19,6 +19,33 @@ type Theme struct {
 	Border    lipgloss.Color
 	Subtle    lipgloss.Color
 
+	Text       lipgloss.Color // primary foreground for content
+	TextBright lipgloss.Color // emphasised foreground (selected rows, titles)
+	AccentText lipgloss.Color // lighter accent for text on the dark background
+	TextDim    lipgloss.Color // secondary foreground (descriptions, metadata)
+	Faint      lipgloss.Color // tertiary foreground (gutters, separators in text)
+	Highlight  lipgloss.Color // tinted background for the selected row / cursor
+	Selection  lipgloss.Color // stronger tinted background for range selections
+
+	// PR state pill backgrounds.
+	StateOpen   lipgloss.Color
+	StateMerged lipgloss.Color
+	StateClosed lipgloss.Color
+	StateDraft  lipgloss.Color
+
+	// Review threads still awaiting resolution.
+	UnresolvedBorder lipgloss.Color
+
+	// Colours used to tell comment authors apart.
+	AvatarPalette []lipgloss.Color
+
+	// Diff line backgrounds.
+	DiffAddBg lipgloss.Color
+	DiffDelBg lipgloss.Color
+	// Stronger backgrounds for the words that changed within a line.
+	DiffAddEmphBg lipgloss.Color
+	DiffDelEmphBg lipgloss.Color
+
 	// ── panel borders ──────────────────────────────────────────────
 	Panel        lipgloss.Style // normal panel left border (gray)
 	PanelFocused lipgloss.Style // focused panel left border (violet)
@@ -27,16 +54,15 @@ type Theme struct {
 	Divider lipgloss.Style // horizontal rule in Border color
 
 	// ── row styles ─────────────────────────────────────────────────
-	SelectedRow  lipgloss.Style // subtle background tint
-	NormalRow    lipgloss.Style // no decoration
-	ListSelected lipgloss.Style // full-row primary highlight for panel lists
-	ListOpened   lipgloss.Style // full-row subtle highlight for last-opened file
+	NormalRow lipgloss.Style // no decoration
 
 	// ── text styles ────────────────────────────────────────────────
 	Title        lipgloss.Style // bold
-	Header       lipgloss.Style // panel heading bar (inverted bg + bold label)
+	Header       lipgloss.Style // bold heading text for panels and the PR title
 	Bold         lipgloss.Style // bold, normal fg
 	MutedTxt     lipgloss.Style // muted fg
+	FaintTxt     lipgloss.Style // faint fg for separators and gutters
+	DimTxt       lipgloss.Style // secondary text (names, metadata)
 	PrimaryTxt   lipgloss.Style // primary fg colour
 	SecondaryTxt lipgloss.Style // secondary fg + bold
 	Number       lipgloss.Style // secondary fg + bold (for #123 PR numbers)
@@ -58,13 +84,16 @@ type Theme struct {
 	Deletions lipgloss.Style // red
 
 	// ── diff line colors ───────────────────────────────────────────
-	DiffAddition   lipgloss.Style // bright green for + lines
-	DiffDeletion   lipgloss.Style // red for - lines
-	DiffHunkHeader lipgloss.Style // cyan + bold for @@ headers
+	DiffAddition   lipgloss.Style // light green text on the addition tint
+	DiffDeletion   lipgloss.Style // light red text on the deletion tint
+	DiffHunkHeader lipgloss.Style // quiet blue-grey for @@ headers
 
 	// ── tab bar ────────────────────────────────────────────────────
-	TabActive   lipgloss.Style // violet bg + white text + padding
+	TabActive   lipgloss.Style // accent text, bold + underlined, with padding
 	TabInactive lipgloss.Style // muted text + padding
+
+	// PR detail section tabs ("● Desc 2:Diff 3:Comments 4:Commits").
+	SectionTabActive lipgloss.Style // violet bg + white text + padding
 
 	// ── status bar ─────────────────────────────────────────────────
 	StatusHelp    lipgloss.Style // light gray, readable but not attention-grabbing
@@ -76,10 +105,10 @@ type Theme struct {
 
 	// ── overlay / command palette ──────────────────────────────────
 	BoxBorder   lipgloss.Style // centred box with primary border + dark bg
-	BoxTitle    lipgloss.Style // centred, bold, primary
+	BoxTitle    lipgloss.Style // bold overlay title
 	BoxQuery    lipgloss.Style // near-white query text
 	BoxCursor   lipgloss.Style // primary cursor marker
-	BoxSelected lipgloss.Style // full-row violet highlight (charm-style)
+	BoxSelected lipgloss.Style // tinted full-row highlight for the selected result
 	BoxNormal   lipgloss.Style // readable light text for unselected rows
 	BoxFooter   lipgloss.Style // muted, faint
 	BoxDiv      lipgloss.Style // border colour divider
@@ -95,6 +124,10 @@ type Theme struct {
 	// Keymap overlay styles
 	Keycap       lipgloss.Style // subtle bg + secondary fg key badge
 	KeymapHeader lipgloss.Style // bold primary for category headers
+
+	// Key hints (status bar, compose pane, inline hints).
+	HintKey  lipgloss.Style // the key itself ("enter")
+	HintDesc lipgloss.Style // what it does ("send")
 }
 
 // Default constructs a Theme with the standard "Terminal Workshop" palette.
@@ -106,8 +139,33 @@ func Default() *Theme {
 		Warning:   lipgloss.Color("#F59E0B"),
 		Error:     lipgloss.Color("#EF4444"),
 		Muted:     lipgloss.Color("#6B7280"),
-		Border:    lipgloss.Color("#374151"),
+		Border:    lipgloss.Color("#30363D"),
 		Subtle:    lipgloss.Color("#1F2937"),
+
+		Text:       lipgloss.Color("#E6EDF3"),
+		TextBright: lipgloss.Color("#FFFFFF"),
+		AccentText: lipgloss.Color("#A78BFA"),
+		TextDim:    lipgloss.Color("#9CA3AF"),
+		Faint:      lipgloss.Color("#4B5563"),
+		Highlight:  lipgloss.Color("#262338"),
+		Selection:  lipgloss.Color("#3B2F66"),
+
+		StateOpen:   lipgloss.Color("#238636"),
+		StateMerged: lipgloss.Color("#8957E5"),
+		StateClosed: lipgloss.Color("#DA3633"),
+		StateDraft:  lipgloss.Color("#6E7681"),
+
+		UnresolvedBorder: lipgloss.Color("#7A5A12"),
+		AvatarPalette: []lipgloss.Color{
+			"#F472B6", "#60A5FA", "#34D399", "#FBBF24",
+			"#A78BFA", "#F87171", "#22D3EE", "#FB923C",
+		},
+
+		DiffAddBg: lipgloss.Color("#12261E"),
+		DiffDelBg: lipgloss.Color("#2D1619"),
+
+		DiffAddEmphBg: lipgloss.Color("#1F5A3A"),
+		DiffDelEmphBg: lipgloss.Color("#6E2630"),
 	}
 
 	// Panel borders.
@@ -124,31 +182,22 @@ func Default() *Theme {
 		Foreground(t.Border)
 
 	// Row styles.
-	t.SelectedRow = lipgloss.NewStyle().
-		Background(t.Subtle)
-
 	t.NormalRow = lipgloss.NewStyle()
-
-	t.ListSelected = lipgloss.NewStyle().
-		Background(t.Primary).
-		Foreground(lipgloss.Color("#FFFFFF")).
-		Bold(true)
-
-	t.ListOpened = lipgloss.NewStyle().
-		Background(t.Subtle)
 
 	// Text styles.
 	t.Title = lipgloss.NewStyle().Bold(true)
 
 	t.Header = lipgloss.NewStyle().
-		Background(lipgloss.Color("#1E293B")).
 		Bold(true).
-		Foreground(lipgloss.Color("#E2E8F0"))
+		Foreground(t.Text)
 
 	t.Bold = lipgloss.NewStyle().Bold(true)
 
 	t.MutedTxt = lipgloss.NewStyle().
 		Foreground(t.Muted)
+
+	t.FaintTxt = lipgloss.NewStyle().Foreground(t.Faint)
+	t.DimTxt = lipgloss.NewStyle().Foreground(t.TextDim)
 
 	t.PrimaryTxt = lipgloss.NewStyle().
 		Foreground(t.Primary)
@@ -178,12 +227,18 @@ func Default() *Theme {
 	t.Deletions = lipgloss.NewStyle().Foreground(t.Error)
 
 	// Diff line colors.
-	t.DiffAddition = lipgloss.NewStyle().Foreground(lipgloss.Color("#4ADE80"))
-	t.DiffDeletion = lipgloss.NewStyle().Foreground(t.Error)
-	t.DiffHunkHeader = lipgloss.NewStyle().Foreground(lipgloss.Color("#22D3EE")).Bold(true)
+	t.DiffAddition = lipgloss.NewStyle().Foreground(lipgloss.Color("#7EE2A8")).Background(t.DiffAddBg)
+	t.DiffDeletion = lipgloss.NewStyle().Foreground(lipgloss.Color("#F7A8A8")).Background(t.DiffDelBg)
+	t.DiffHunkHeader = lipgloss.NewStyle().Foreground(lipgloss.Color("#6B8EAE"))
 
 	// Tab bar.
 	t.TabActive = lipgloss.NewStyle().
+		Foreground(t.AccentText).
+		Bold(true).
+		Underline(true).
+		Padding(0, 1)
+
+	t.SectionTabActive = lipgloss.NewStyle().
 		Background(t.Primary).
 		Foreground(lipgloss.Color("#FFFFFF")).
 		Bold(true).
@@ -219,8 +274,7 @@ func Default() *Theme {
 		BorderForeground(t.Primary)
 
 	t.BoxTitle = lipgloss.NewStyle().
-		Background(t.Primary).
-		Foreground(lipgloss.Color("#FFFFFF")).
+		Foreground(t.Text).
 		Bold(true).
 		Padding(0, 1)
 
@@ -231,7 +285,7 @@ func Default() *Theme {
 		Foreground(t.Primary)
 
 	t.BoxSelected = lipgloss.NewStyle().
-		Background(t.Primary).
+		Background(t.Highlight).
 		Foreground(lipgloss.Color("#FFFFFF")).
 		Bold(true)
 
@@ -260,6 +314,9 @@ func Default() *Theme {
 	t.KeymapHeader = lipgloss.NewStyle().
 		Bold(true).
 		Foreground(t.Primary)
+
+	t.HintKey = lipgloss.NewStyle().Foreground(lipgloss.Color("#C9D1D9")).Bold(true)
+	t.HintDesc = lipgloss.NewStyle().Foreground(t.Muted)
 
 	return t
 }

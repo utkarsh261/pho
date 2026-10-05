@@ -2,11 +2,14 @@ package prdetail
 
 import (
 	"fmt"
+	"hash/fnv"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/utkarsh261/pho/internal/ui/theme"
 )
 
 // commentEntry is a single comment or review entry in the Comments section.
@@ -331,6 +334,9 @@ func (m *PRDetailModel) entryRowCount(e commentEntry, cw int) int {
 	// Resolved summary entries render as 1-2 wrapped lines + trailing blank.
 	if e.isResolvedSummary {
 		innerW := max(cw-2, 1)
+		if e.indentByParentReview {
+			innerW = max(innerW-2, 1) // narrower box under parent review, as commentLines renders it
+		}
 		summaryText := m.buildResolvedSummaryText(e)
 		rows := len(wrapParagraph(summaryText, innerW))
 		rows++ // trailing blank
@@ -352,11 +358,7 @@ func (m *PRDetailModel) entryRowCount(e commentEntry, cw int) int {
 		if e.indentByParentReview {
 			innerW = max(innerW-2, 1) // narrower box under parent review
 		}
-		if m.mdRenderer != nil {
-			rows += len(m.mdRenderer.Render(e.body, innerW))
-		} else {
-			rows += len(wrapParagraph(e.body, innerW))
-		}
+		rows += len(m.commentBodyLines(e.body, innerW))
 	}
 	rows++ // trailing blank separator
 	return rows
@@ -481,17 +483,8 @@ func (m *PRDetailModel) commentLines(contentWidth int, activeIdx int) []string {
 	cw := max(contentWidth, 1)
 	entries := m.commentEntries()
 
-	// Section header: blank + separator + label.
-	var sectionHeader []string
-	sectionHeader = append(sectionHeader, "")
-	sep := strings.Repeat("╌", cw)
-	label := "Comments"
-	if m.theme != nil {
-		sep = m.theme.MutedTxt.Render(sep)
-		label = m.theme.MutedTxt.Bold(true).Render(label)
-	}
-	sectionHeader = append(sectionHeader, sep)
-	sectionHeader = append(sectionHeader, label)
+	// Section header (3 rows): blank + summary line + blank.
+	sectionHeader := []string{"", m.commentsSummaryLine(entries), ""}
 
 	if len(entries) == 0 {
 		msg := "No reviews"
@@ -517,6 +510,9 @@ func (m *PRDetailModel) commentLines(contentWidth int, activeIdx int) []string {
 			}
 			inner := m.buildCommentEntryInner(e, entryInnerW, active)
 			bc := m.theme.Border
+			if e.threadID != "" && !e.isResolved {
+				bc = m.theme.UnresolvedBorder // open threads still need attention
+			}
 			if active {
 				bc = m.theme.Primary
 			}
@@ -563,6 +559,9 @@ func (m *PRDetailModel) commentLines(contentWidth int, activeIdx int) []string {
 			}
 		}
 		bc := m.theme.Border
+		if !entries[g.start].isResolved {
+			bc = m.theme.UnresolvedBorder // open threads still need attention
+		}
 		if groupActive {
 			bc = m.theme.Primary
 		}
@@ -583,8 +582,79 @@ func (m *PRDetailModel) commentLines(contentWidth int, activeIdx int) []string {
 	return lines
 }
 
+// commentsSummaryLine renders "3 comments · 2 unresolved" for the section header.
+// Only entries with text count as comments: a bare approval is a review, not a
+// comment, and a collapsed resolved thread stands for all of its comments.
+func (m *PRDetailModel) commentsSummaryLine(entries []commentEntry) string {
+	n := 0
+	for _, e := range entries {
+		switch {
+		case e.isDraft:
+		case e.isResolvedSummary:
+			n += e.replyCount
+		case e.body != "":
+			n++
+		}
+	}
+	noun := "comments"
+	if n == 1 {
+		noun = "comment"
+	}
+	if m.theme == nil {
+		return fmt.Sprintf("%d %s", n, noun)
+	}
+	th := m.theme
+	bright := lipgloss.NewStyle().Foreground(th.Text).Bold(true)
+	line := bright.Render(fmt.Sprint(n)) + th.MutedTxt.Render(" "+noun)
+	if u := m.unresolvedThreadCount(); u > 0 {
+		line += th.FaintTxt.Render("  ·  ") +
+			th.ReviewRequired.Render(fmt.Sprintf("● %d unresolved", u))
+	}
+	if d := len(m.drafts); d > 0 {
+		label := "pending drafts"
+		if d == 1 {
+			label = "pending draft"
+		}
+		line += th.FaintTxt.Render("  ·  ") + th.CIPending.Render(fmt.Sprintf("%d %s", d, label))
+	}
+	return line
+}
+
+// avatarColor picks a stable colour for login from the theme's avatar palette.
+func avatarColor(login string, palette []lipgloss.Color) lipgloss.Color {
+	if len(palette) == 0 {
+		return ""
+	}
+	h := fnv.New32a()
+	h.Write([]byte(login))
+	return palette[h.Sum32()%uint32(len(palette))]
+}
+
+// reviewVerb renders the action an entry represents ("approved", "commented", ...).
+func (m *PRDetailModel) reviewVerb(e commentEntry) string {
+	th := m.theme
+	switch {
+	case e.isDraft:
+		return th.CIPending.Render("pending draft")
+	case e.state == "APPROVED":
+		return th.ReviewApproved.Render("✓ approved")
+	case e.state == "CHANGES_REQUESTED":
+		return th.ReviewChanges.Render("✗ requested changes")
+	case e.state == "DISMISSED":
+		return th.MutedTxt.Render("dismissed review")
+	case e.state != "":
+		return th.MutedTxt.Render("reviewed")
+	case e.isThreadReply:
+		return th.MutedTxt.Render("replied")
+	default:
+		return th.MutedTxt.Render("commented")
+	}
+}
+
 // buildCommentEntryInner builds the content lines for a single comment entry
 // (header, optional path/context, body, trailing blank) without any border or prefix.
+// Every line is kept within innerW so the enclosing box never re-wraps it;
+// the row count must match entryRowCount exactly.
 func (m *PRDetailModel) buildCommentEntryInner(e commentEntry, innerW int, active bool) []string {
 	// Resolved collapsed summary: one-line entry.
 	if e.isResolvedSummary {
@@ -600,16 +670,35 @@ func (m *PRDetailModel) buildCommentEntryInner(e commentEntry, innerW int, activ
 
 	var headerText string
 	if m.theme != nil {
-		style := m.theme.SecondaryTxt
-		if active {
-			style = m.theme.PrimaryTxt
+		th := m.theme
+		faint := th.FaintTxt
+		if e.isDraft {
+			headerText = th.CIPending.Render("◌ ") + lipgloss.NewStyle().Bold(true).Foreground(th.Text).Render("Draft")
+		} else {
+			nameStyle := lipgloss.NewStyle().Bold(true).Foreground(th.Text)
+			if active {
+				nameStyle = nameStyle.Foreground(th.TextBright)
+			}
+			headerText = lipgloss.NewStyle().Foreground(avatarColor(e.login, th.AvatarPalette)).Render("●") + " " + nameStyle.Render(e.login)
 		}
-		headerText = style.Render("@" + e.login)
-		if e.state != "" {
-			headerText += m.theme.MutedTxt.Render(" · " + e.state)
-		}
+		headerText += "  " + m.reviewVerb(e)
+		// Optional parts are added only while they fit, so narrow cards drop
+		// them whole instead of cutting them mid-word.
+		var optional []string
 		if ts != "" {
-			headerText += m.theme.MutedTxt.Render(" · " + ts)
+			optional = append(optional, faint.Render(ts))
+		}
+		if e.isResolved && e.isThreadStart {
+			badge := "✓ resolved"
+			if e.resolverLogin != "" {
+				badge += " by " + e.resolverLogin
+			}
+			optional = append(optional, th.ReviewApproved.Render(badge))
+		}
+		for _, opt := range optional {
+			if next := headerText + faint.Render(" · ") + opt; lipgloss.Width(next) <= innerW {
+				headerText = next
+			}
 		}
 	} else {
 		headerText = "@" + e.login
@@ -619,73 +708,96 @@ func (m *PRDetailModel) buildCommentEntryInner(e commentEntry, innerW int, activ
 		if ts != "" {
 			headerText += " · " + ts
 		}
-	}
-
-	// Resolved badge on expanded thread start.
-	if e.isResolved && e.isThreadStart && e.resolverLogin != "" {
-		badge := "Resolved ✓ by @" + e.resolverLogin
-		if m.theme != nil {
-			badge = m.theme.MutedTxt.Render(" · " + badge)
-		} else {
-			badge = " · " + badge
+		if e.isResolved && e.isThreadStart {
+			headerText += " · Resolved ✓"
 		}
-		headerText += badge
-	} else if e.isResolved && e.isThreadStart {
-		badge := "Resolved ✓"
-		if m.theme != nil {
-			badge = m.theme.MutedTxt.Render(" · " + badge)
-		} else {
-			badge = " · " + badge
-		}
-		headerText += badge
 	}
 
 	if active {
-		hint := m.buildEntryHint(e)
-		if hint != "" {
+		if hint := m.buildEntryHint(e); hint != "" {
 			if m.theme != nil {
-				hint = m.theme.MutedTxt.Render(hint)
+				hint = m.theme.RenderHints(hint)
 			}
-			pad := innerW - lipgloss.Width(headerText) - lipgloss.Width(hint)
-			if pad > 0 {
+			if pad := innerW - lipgloss.Width(headerText) - lipgloss.Width(hint); pad >= 2 {
 				headerText += strings.Repeat(" ", pad) + hint
-			} else {
-				headerText += " " + hint
 			}
 		}
 	}
 
-	inner = append(inner, headerText)
+	inner = append(inner, truncateText(headerText, innerW))
 
 	if !e.isThreadReply && e.path != "" && e.line > 0 {
 		inner = append(inner, "")
-		loc := fmt.Sprintf("%s:%d", e.path, e.line)
-		if m.theme != nil {
-			loc = m.theme.MutedTxt.Render(loc)
-		}
-		inner = append(inner, loc)
-		ctxLine := e.contextLine
-		if ctxLine == "" {
-			ctxLine = " "
-		}
-		if m.theme != nil {
-			ctxLine = lipgloss.NewStyle().Foreground(m.theme.Muted).Render(ctxLine)
-		}
-		inner = append(inner, ctxLine)
+		inner = append(inner, truncateText(m.renderCommentLocation(e.path, e.line), innerW))
+		inner = append(inner, m.renderCommentContext(e.contextLine, e.line, innerW))
 	}
 
 	if e.body != "" {
 		inner = append(inner, "")
-		var bodyLines []string
-		if m.mdRenderer != nil {
-			bodyLines = m.mdRenderer.Render(e.body, innerW)
-		} else {
-			bodyLines = wrapParagraph(e.body, innerW)
-		}
-		inner = append(inner, bodyLines...)
+		inner = append(inner, m.commentBodyLines(e.body, innerW)...)
 	}
 	inner = append(inner, "")
 	return inner
+}
+
+// commentBodyLines renders a comment body to lines no wider than w. Words
+// longer than w (long URLs, paths) come back from the renderers as over-wide
+// lines; those are hard-wrapped here exactly as the card border would wrap
+// them, so entryRowCount and buildCommentEntryInner always agree on height.
+func (m *PRDetailModel) commentBodyLines(body string, w int) []string {
+	var lines []string
+	if m.mdRenderer != nil {
+		lines = m.mdRenderer.Render(body, w)
+	} else {
+		lines = wrapParagraph(body, w)
+	}
+	out := lines[:0:0]
+	for _, l := range lines {
+		if lipgloss.Width(l) <= w {
+			out = append(out, l)
+			continue
+		}
+		out = append(out, strings.Split(lipgloss.NewStyle().Width(w).Render(l), "\n")...)
+	}
+	return out
+}
+
+// renderCommentLocation renders "dir/" dimmed + "file.go" + ":40".
+func (m *PRDetailModel) renderCommentLocation(path string, line int) string {
+	if m.theme == nil {
+		return fmt.Sprintf("%s:%d", path, line)
+	}
+	th := m.theme
+	dir, base := "", path
+	if i := strings.LastIndex(path, "/"); i >= 0 {
+		dir, base = path[:i+1], path[i+1:]
+	}
+	return th.MutedTxt.Render(dir) +
+		lipgloss.NewStyle().Foreground(th.Text).Render(base) +
+		th.FaintTxt.Render(":") +
+		lipgloss.NewStyle().Foreground(th.Secondary).Render(fmt.Sprint(line))
+}
+
+// renderCommentContext renders the commented diff line as a one-line code
+// snippet: line-number gutter + diff-tinted code, exactly one row.
+func (m *PRDetailModel) renderCommentContext(raw string, line, innerW int) string {
+	if raw == "" {
+		raw = " "
+	}
+	if m.theme == nil {
+		return truncateText(raw, innerW)
+	}
+	th := m.theme
+	gutter := th.FaintTxt.Render(fmt.Sprintf("%4d │ ", line))
+	codeW := max(innerW-lipgloss.Width(gutter), 1)
+	switch {
+	case strings.HasPrefix(raw, "+"):
+		return gutter + theme.FillBg(th.DiffAddBg, codeW, th.DiffAddition.Render(raw))
+	case strings.HasPrefix(raw, "-"):
+		return gutter + theme.FillBg(th.DiffDelBg, codeW, th.DiffDeletion.Render(raw))
+	default:
+		return gutter + truncateText(th.DimTxt.Render(raw), codeW)
+	}
 }
 
 // buildEntryHint returns the active-entry hint string for the given entry,
@@ -695,98 +807,82 @@ func (m *PRDetailModel) buildEntryHint(e commentEntry) string {
 	var parts []string
 
 	if e.isResolvedSummary {
-		parts = append(parts, "Enter: Expand")
-		parts = append(parts, "r: Reply")
+		parts = append(parts, "enter: expand")
+		parts = append(parts, "r: reply")
 	} else if e.path != "" && e.line > 0 {
-		parts = append(parts, "Enter")
-		parts = append(parts, "r: Reply")
+		parts = append(parts, "enter: go to line")
+		parts = append(parts, "r: reply")
 	} else if !e.isDraft {
-		parts = append(parts, "r: Reply")
+		parts = append(parts, "r: reply")
 	}
 
 	// The m: Resolve/Unresolve portion only for thread entries.
 	if e.threadID != "" && m.Width >= 60 {
 		if e.isResolved {
-			parts = append(parts, "m: Unresolve")
+			parts = append(parts, "m: unresolve")
 		} else {
-			parts = append(parts, "m: Resolve")
+			parts = append(parts, "m: resolve")
 		}
 	}
 
 	if len(parts) == 0 {
 		return ""
 	}
-	return "[" + strings.Join(parts, " | ") + "]"
+	return strings.Join(parts, " | ")
 }
 
 // buildResolvedSummaryText returns the plain-text summary string for a collapsed
 // resolved thread (without ANSI styling or hint), used for row-count computation.
 func (m *PRDetailModel) buildResolvedSummaryText(e commentEntry) string {
-	var parts []string
-	parts = append(parts, "✓ Resolved")
-	parts = append(parts, fmt.Sprintf("%d", e.replyCount))
+	parts := []string{"✓ Resolved"}
 	if e.path != "" && e.line > 0 {
-		parts = append(parts, fmt.Sprintf("%s:%d", e.path, e.line))
+		parts[0] += fmt.Sprintf(" thread on %s:%d", e.path, e.line)
 	}
+	noun := "comments"
+	if e.replyCount == 1 {
+		noun = "comment"
+	}
+	parts = append(parts, fmt.Sprintf("%d %s", e.replyCount, noun))
 	if e.resolverLogin != "" {
-		parts = append(parts, "@"+e.resolverLogin)
+		parts = append(parts, "by "+e.resolverLogin)
 	}
 	return strings.Join(parts, " · ")
 }
 
-// buildResolvedSummaryInner renders a collapsed resolved thread as a single
-// one-line summary: ✓ Resolved · N · path:line · @resolver
+// buildResolvedSummaryInner renders a collapsed resolved thread as a muted
+// summary ("✓ Resolved thread on path:line · N comments · by x"), wrapped
+// exactly as entryRowCount expects, plus a trailing blank.
 func (m *PRDetailModel) buildResolvedSummaryInner(e commentEntry, innerW int, active bool) []string {
-	var parts []string
-
-	check := "✓ Resolved"
-	if m.theme != nil {
-		style := m.theme.MutedTxt
-		if active {
-			style = m.theme.MutedTxt.Bold(true)
-		}
-		check = style.Render(check)
-	}
-	parts = append(parts, check)
-
-	count := fmt.Sprintf("%d", e.replyCount)
-	if m.theme != nil {
-		count = m.theme.MutedTxt.Render(count)
-	}
-	parts = append(parts, count)
-
-	if e.path != "" && e.line > 0 {
-		loc := fmt.Sprintf("%s:%d", e.path, e.line)
+	wrapped := wrapParagraph(m.buildResolvedSummaryText(e), innerW)
+	out := make([]string, 0, len(wrapped)+1)
+	for i, l := range wrapped {
+		// A single word longer than the card (a long path) must be cut, not
+		// left for the border to re-wrap, or the row count would drift.
+		l = truncateText(l, innerW)
 		if m.theme != nil {
-			loc = m.theme.MutedTxt.Render(loc)
+			style := m.theme.MutedTxt
+			if active {
+				style = m.theme.DimTxt
+			}
+			if i == 0 && strings.HasPrefix(l, "✓") {
+				l = m.theme.ReviewApproved.Render("✓") + style.Render(strings.TrimPrefix(l, "✓"))
+			} else {
+				l = style.Render(l)
+			}
 		}
-		parts = append(parts, loc)
+		out = append(out, l)
 	}
-
-	if e.resolverLogin != "" {
-		resolver := "@" + e.resolverLogin
-		if m.theme != nil {
-			resolver = m.theme.MutedTxt.Render(resolver)
-		}
-		parts = append(parts, resolver)
-	}
-
-	summaryText := strings.Join(parts, " · ")
-
-	hint := m.buildEntryHint(e)
-	if active && hint != "" {
-		if m.theme != nil {
-			hint = m.theme.MutedTxt.Render(hint)
-		}
-		pad := innerW - lipgloss.Width(summaryText) - lipgloss.Width(hint)
-		if pad > 0 {
-			summaryText += strings.Repeat(" ", pad) + hint
-		} else {
-			summaryText += " " + hint
+	if active && len(out) == 1 {
+		if hint := m.buildEntryHint(e); hint != "" {
+			if m.theme != nil {
+				hint = m.theme.RenderHints(hint)
+			}
+			if pad := innerW - lipgloss.Width(out[0]) - lipgloss.Width(hint); pad >= 2 {
+				out[0] += strings.Repeat(" ", pad) + hint
+			}
 		}
 	}
-
-	return []string{summaryText, ""}
+	return append(out, "")
 }
 
 // renderCommentsTab renders the Comments tab content at the given scroll and

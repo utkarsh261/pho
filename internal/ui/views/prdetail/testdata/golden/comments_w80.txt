@@ -1,15 +1,14 @@
 
-╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
-Comments
+2 comments
+
 ╭──────────────────────────────╮
-│@alice · APPROVED · Mar 10    │
-│2024                          │
+│● alice  ✓ approved           │
 │                              │
 │LGTM! Nice cleanup.           │
 │                              │
 ╰──────────────────────────────╯
 ╭──────────────────────────────╮
-│@bob · Mar 11 2024            │
+│● bob  commented · Mar 11 2024│
 │                              │
 │Should we add error handling  │
 │for nil tokens?               │

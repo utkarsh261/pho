@@ -21,6 +21,7 @@ type StatusBarModel struct {
 	CurrentTab   domain.DashboardTab
 	SelectedRepo string
 	HintOverride string // when non-empty, replaces focus-based hint text
+	Mode         string // diff input mode badge ("VISUAL" or "SEARCH"); "" hides it
 	theme        *theme.Theme
 	spinner      spinner.Model
 
@@ -105,11 +106,14 @@ func (m *StatusBarModel) View() string {
 				Bold(true).
 				Render(helpText)
 		} else {
-			helpText = m.theme.StatusHelp.Render(helpText)
+			helpText = " " + m.theme.RenderHints(helpText)
 		}
 	}
 
 	parts := []string{helpText}
+	if badge := m.modeBadge(); badge != "" {
+		parts[0] = " " + badge + helpText
+	}
 
 	if m.Loading {
 		parts = append(parts, m.spinner.View())
@@ -133,10 +137,23 @@ func (m *StatusBarModel) View() string {
 
 	sep := " | "
 	if m.theme != nil {
-		sep = m.theme.StatusSep.Render(" │ ")
+		sep = m.theme.StatusSep.Render("   ")
 	}
 	joined := fitLine(joinVisible(parts, sep), m.Width)
 	return border + "\n" + joined
+}
+
+// modeBadge renders the input-mode pill shown at the left of the status bar.
+func (m *StatusBarModel) modeBadge() string {
+	if m.Mode == "" || m.theme == nil {
+		return ""
+	}
+	bg := m.theme.Primary
+	if m.Mode == "SEARCH" {
+		bg = m.theme.Warning
+	}
+	return lipgloss.NewStyle().Background(bg).Foreground(m.theme.TextBright).Bold(true).
+		Render(" " + m.Mode + " ")
 }
 
 func (m *StatusBarModel) hintText() string {

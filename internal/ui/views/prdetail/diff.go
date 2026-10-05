@@ -1,25 +1,27 @@
 package prdetail
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 
 	diffmodel "github.com/utkarsh261/pho/internal/diff/model"
+	"github.com/utkarsh261/pho/internal/ui/theme"
 )
 
 // maxDiffDisplayRows is the cap on rendered diff rows before a truncation banner is shown.
 const maxDiffDisplayRows = 20000
 
 // diffFileHeaderRows is the number of display rows before the first hunk
-// header in each diff file: blank padding + dashed separator + file header bar.
+// header in each diff file: blank padding + file header bar + blank padding.
 const diffFileHeaderRows = 3
 
 // diffFileDisplayRows returns the UI display-row count for one DiffFile:
 //
-//	row 0   : blank padding before separator
-//	row 1   : dashed separator line
-//	row 2   : file header bar (styled background + bold)
+//	row 0   : blank padding
+//	row 1   : file header bar (status, path, stats)
+//	row 2   : blank padding
 //	row 3.. : hunk header + diff lines (repeated per hunk)
 //	        : binary files get exactly 1 placeholder row at row 3
 //
@@ -27,9 +29,9 @@ const diffFileHeaderRows = 3
 // diffSectionRowCount and renderDiffSectionLines, so they stay in sync
 // regardless of what f.DisplayRows holds (legacy cache entries may have 0).
 func diffFileDisplayRows(f *diffmodel.DiffFile) int {
-	rows := diffFileHeaderRows // blank + separator + header bar
+	rows := diffFileHeaderRows // blank + header bar + blank
 	if f.IsBinary {
-		return rows + 1 // +1 for the "📄 Binary file (no diff available)" placeholder row
+		return rows + 1 // +1 for the "Binary file (no diff available)" placeholder row
 	}
 	for _, h := range f.Hunks {
 		rows++ // hunk header
@@ -107,8 +109,6 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 	needsTruncation := realTotal > maxDiffDisplayRows
 
 	// Build themed styles once.
-	var separatorLine string
-	var fileHeaderStyle lipgloss.Style
 	var truncStyle lipgloss.Style
 
 	hunkHeaderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#22D3EE")).Bold(true)
@@ -117,20 +117,12 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 	currentWordStyle, otherWordStyle, currentLineBg := m.searchHighlightStyles()
 	searchCtx := m.buildSearchRenderContext()
 
-	dashStr := strings.Repeat("╌", cw)
 	if m.theme != nil {
 		hunkHeaderStyle = m.theme.DiffHunkHeader
 		additionStyle = m.theme.DiffAddition
 		deletionStyle = m.theme.DiffDeletion
-		separatorLine = m.theme.MutedTxt.Render(dashStr)
-		fileHeaderStyle = lipgloss.NewStyle().
-			Background(m.theme.Subtle).
-			Bold(true).
-			Width(cw)
 		truncStyle = m.theme.MutedTxt
 	} else {
-		separatorLine = dashStr
-		fileHeaderStyle = lipgloss.NewStyle().Bold(true).Width(cw)
 		truncStyle = lipgloss.NewStyle()
 	}
 
@@ -178,47 +170,54 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 		// row 0: blank padding
 		rows = append(rows, displayRow{""})
 
-		// row 1: dashed separator
-		rows = append(rows, displayRow{separatorLine})
-
-		// row 2: file header bar
-		var label string
-		if f.Status == "renamed" && f.OldPath != "" && f.OldPath != f.NewPath {
-			label = " " + f.OldPath + " → " + f.NewPath
-		} else if f.NewPath != "" {
-			label = " " + f.NewPath
+		// row 1: file header bar
+		if fileRow+1 >= overlapStart && fileRow+1 < overlapEnd {
+			rows = append(rows, displayRow{m.renderDiffFileHeader(f, cw)})
 		} else {
-			label = " " + f.OldPath
+			rows = append(rows, displayRow{})
 		}
-		rows = append(rows, displayRow{fileHeaderStyle.Render(label)})
+
+		// row 2: breathing room under the header
+		rows = append(rows, displayRow{""})
 
 		if f.IsBinary {
 			// row 3: binary placeholder (no hunk content)
-			rows = append(rows, displayRow{truncStyle.Render("📄 Binary file (no diff available)")})
+			rows = append(rows, displayRow{truncStyle.Render("      Binary file (no diff available)")})
 		} else {
 			// rows 3+: hunk headers + diff lines
+			// Only rows inside [overlapStart, overlapEnd) are styled; the rest get
+			// an empty placeholder so row indices (and globalLineIndex, which
+			// search relies on) stay aligned. This keeps a frame proportional to
+			// the viewport instead of the file.
+			inWindow := func(local int) bool {
+				r := fileRow + local
+				return r >= overlapStart && r < overlapEnd
+			}
 			for hi, hunk := range f.Hunks {
-				rows = append(rows, displayRow{hunkHeaderStyle.Render(hunk.Header)})
-				for li, dl := range hunk.Lines {
-					baseStyle := lipgloss.NewStyle()
-					switch dl.Kind {
-					case "addition":
-						baseStyle = additionStyle
-					case "deletion":
-						baseStyle = deletionStyle
+				hunkStart := len(rows)
+				if inWindow(hunkStart) {
+					rows = append(rows, displayRow{m.diffGutter("", " ⋯") + hunkHeaderStyle.Render(hunk.Header)})
+				} else {
+					rows = append(rows, displayRow{})
+				}
+				if fileRow+hunkStart+1+len(hunk.Lines) <= overlapStart || fileRow+hunkStart+1 >= overlapEnd {
+					// Hunk body entirely outside the window: placeholders only.
+					for range hunk.Lines {
+						rows = append(rows, displayRow{})
 					}
-					s := m.renderSearchMatchLine(
-						dl.Raw,
-						i,
-						globalLineIndex,
-						searchCtx,
-						baseStyle,
-						currentWordStyle,
-						otherWordStyle,
-						currentLineBg,
-					)
-
-					// Apply visual selection highlight, cursor highlight, or draft indicator.
+					globalLineIndex += len(hunk.Lines)
+					continue
+				}
+				var changed map[int]byteRange
+				if m.theme != nil {
+					changed = m.hunkWordDiffs(&f.Hunks[hi])
+				}
+				for li, dl := range hunk.Lines {
+					if !inWindow(len(rows)) {
+						rows = append(rows, displayRow{})
+						globalLineIndex++
+						continue
+					}
 					isSelected := m.visual.Active && m.visual.FileIdx == i && m.visual.HunkIdx == hi &&
 						li >= m.visual.StartLine && li <= m.visual.EndLine
 					isCursor := !isSelected && m.isInDiffSection() &&
@@ -226,18 +225,76 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 						cursorFileIdx == i && cursorHunkIdx == hi && cursorLineIdx == li
 					isDrafted := !isSelected && !isCursor && m.draftCovered[hunkLineKey{i, hi, li}]
 
-					if isSelected {
+					baseStyle := lipgloss.NewStyle()
+					var lineBg lipgloss.Color
+					switch dl.Kind {
+					case "addition":
+						baseStyle = additionStyle
 						if m.theme != nil {
-							s = m.theme.ListSelected.Width(cw).Render(s)
-						} else {
-							s = lipgloss.NewStyle().Reverse(true).Width(cw).Render(s)
+							lineBg = m.theme.DiffAddBg
 						}
-					} else if isCursor {
-						s = lipgloss.NewStyle().Reverse(true).Width(cw).Render(s)
-					} else if isDrafted {
+					case "deletion":
+						baseStyle = deletionStyle
 						if m.theme != nil {
-							s = m.theme.ListOpened.Width(cw).Render(s)
+							lineBg = m.theme.DiffDelBg
 						}
+					}
+					if isSelected || isCursor || isDrafted {
+						// The row tint replaces the add/delete background.
+						baseStyle = baseStyle.UnsetBackground()
+						lineBg = ""
+					}
+					var s string
+					if rg, ok := changed[li]; ok && lineBg != "" && rg.end > rg.start &&
+						len(searchCtx.lineRanges[globalLineIndex]) == 0 {
+						// Emphasise the words that changed against the paired line.
+						emphBg := m.theme.DiffAddEmphBg
+						if dl.Kind == "deletion" {
+							emphBg = m.theme.DiffDelEmphBg
+						}
+						s = baseStyle.Render(dl.Raw[:rg.start]) +
+							baseStyle.Background(emphBg).Render(dl.Raw[rg.start:rg.end]) +
+							baseStyle.Render(dl.Raw[rg.end:])
+					} else {
+						s = m.renderSearchMatchLine(
+							dl.Raw,
+							i,
+							globalLineIndex,
+							searchCtx,
+							baseStyle,
+							currentWordStyle,
+							otherWordStyle,
+							currentLineBg,
+						)
+					}
+
+					marker := ""
+					switch {
+					case isSelected:
+						marker = "selected"
+					case isCursor:
+						marker = "cursor"
+					case isDrafted:
+						marker = "draft"
+					}
+					gutter := m.diffGutter(marker, diffLineNumber(dl))
+					bodyW := max(cw-diffGutterWidth, 1)
+
+					switch {
+					case m.theme == nil && (isSelected || isCursor):
+						s = lipgloss.NewStyle().Reverse(true).Width(cw).Render(gutter + s)
+					case m.theme == nil:
+						s = gutter + truncateText(s, bodyW)
+					case isSelected:
+						s = theme.FillBg(m.theme.Selection, cw, gutter+s)
+					case isCursor:
+						s = theme.FillBg(m.theme.Highlight, cw, gutter+s)
+					case lineBg != "":
+						s = gutter + theme.FillBg(lineBg, bodyW, s)
+					case isDrafted:
+						s = theme.FillBg(m.theme.Subtle, cw, gutter+s)
+					default:
+						s = gutter + truncateText(s, bodyW)
 					}
 
 					rows = append(rows, displayRow{s})
@@ -276,4 +333,113 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 	}
 
 	return out
+}
+
+// diffGutterWidth is the width of the left gutter on every diff line:
+// 1 marker column + a 5-column line-number field. Numbers up to 9999 get a
+// trailing space; 5-digit numbers use the whole field.
+const diffGutterWidth = 6
+
+// diffLineNumber returns the line number shown in the gutter: the new-side
+// number for additions/context, the old-side number for deletions.
+func diffLineNumber(dl diffmodel.DiffLine) string {
+	n := dl.NewLine
+	if n == nil {
+		n = dl.OldLine
+	}
+	if n == nil {
+		return ""
+	}
+	return fmt.Sprintf("%d", *n)
+}
+
+// diffGutter renders the marker + right-aligned line number gutter, always
+// exactly diffGutterWidth cells wide. marker is "", "cursor", "selected" or "draft".
+func (m *PRDetailModel) diffGutter(marker, num string) string {
+	const field = diffGutterWidth - 1
+	numStr := fmt.Sprintf("%4s ", num)
+	if w := lipgloss.Width(numStr); w > field {
+		numStr = fmt.Sprintf("%*s", field, num) // 5 digits: drop the trailing space
+		if r := []rune(numStr); len(r) > field {
+			numStr = "…" + string(r[len(r)-field+1:]) // 6+ digits: keep the low digits, mark the cut
+		}
+	}
+	if m.theme == nil {
+		mk := " "
+		if marker == "draft" {
+			mk = "●"
+		}
+		return mk + numStr
+	}
+	numStyle := m.theme.FaintTxt
+	mk := " "
+	switch marker {
+	case "cursor", "selected":
+		mk = m.theme.PrimaryTxt.Render("▎")
+		numStyle = lipgloss.NewStyle().Foreground(m.theme.Text)
+	case "draft":
+		mk = m.theme.CIPending.Render("●")
+	}
+	return mk + numStyle.Render(numStr)
+}
+
+// renderDiffFileHeader renders the per-file header bar:
+// status letter, path (or old → new), and +/- stats right-aligned.
+func (m *PRDetailModel) renderDiffFileHeader(f *diffmodel.DiffFile, cw int) string {
+	var label string
+	if f.Status == "renamed" && f.OldPath != "" && f.OldPath != f.NewPath {
+		label = f.OldPath + " → " + f.NewPath
+	} else if f.NewPath != "" {
+		label = f.NewPath
+	} else {
+		label = f.OldPath
+	}
+	if m.theme == nil {
+		return lipgloss.NewStyle().Bold(true).Width(cw).Render(" " + label)
+	}
+	th := m.theme
+	stats := th.Additions.Render(fmt.Sprintf("+%d", f.Additions)) + " " + th.Deletions.Render(fmt.Sprintf("-%d", f.Deletions)) +
+		"  " + diffStatBlocks(f.Additions, f.Deletions, th)
+	left := " " + fileStatusLetter(*f, th) + "  " + lipgloss.NewStyle().Bold(true).Foreground(th.Text).Render(label)
+	maxLeft := max(cw-lipgloss.Width(stats)-2, 1)
+	if lipgloss.Width(left) > maxLeft {
+		left = truncateText(left, maxLeft)
+	}
+	gap := max(cw-lipgloss.Width(left)-lipgloss.Width(stats)-1, 1)
+	return theme.FillBg(th.Subtle, cw, left+strings.Repeat(" ", gap)+stats)
+}
+
+// diffStatBlocks renders GitHub's five-square change bar: green squares for
+// the share of added lines, red for deleted, grey when nothing changed.
+func diffStatBlocks(additions, deletions int, th *theme.Theme) string {
+	const n = 5
+	total := additions + deletions
+	if total == 0 {
+		return th.FaintTxt.Render(strings.Repeat("■", n))
+	}
+	green := (additions*n + total/2) / total
+	if additions > 0 && green == 0 {
+		green = 1
+	}
+	if deletions > 0 && green == n {
+		green = n - 1
+	}
+	return th.Additions.Render(strings.Repeat("■", green)) + th.Deletions.Render(strings.Repeat("■", n-green))
+}
+
+// hunkWordDiffs returns the cached intra-line changes for h, computing them
+// on first use. The cache is dropped when m.Diff is replaced.
+func (m *PRDetailModel) hunkWordDiffs(h *diffmodel.DiffHunk) map[int]byteRange {
+	if m.wordDiffsFor != m.Diff {
+		m.wordDiffs, m.wordDiffsFor = nil, m.Diff
+	}
+	if r, ok := m.wordDiffs[h]; ok {
+		return r
+	}
+	if m.wordDiffs == nil {
+		m.wordDiffs = make(map[*diffmodel.DiffHunk]map[int]byteRange)
+	}
+	r := intraLineChanges(h.Lines)
+	m.wordDiffs[h] = r
+	return r
 }

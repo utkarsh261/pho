@@ -61,6 +61,7 @@ func newComposeModel(th *theme.Theme) ComposeModel {
 	ti := textinput.New()
 	ti.CharLimit = 0 // unlimited
 	ti.SetCursorMode(textinput.CursorStatic)
+	ti.Prompt = "" // the compose box draws its own prompt
 	return ComposeModel{
 		input: ti,
 		theme: th,
@@ -175,12 +176,14 @@ func (c ComposeModel) Update(msg tea.Msg) (ComposeModel, tea.Cmd) {
 	}
 }
 
-// View renders the two-row compose pane at the given width.
+// View renders the compose pane at the given width as a 3-row rounded box:
+// the title sits in the top border, the input in the middle, and key hints in
+// the bottom border.
 func (c *ComposeModel) View(width int) string {
 	if !c.active {
 		return ""
 	}
-	w := max(width-2, 1)
+	w := max(width-2, 1) // inner width between the side borders
 
 	var th *theme.Theme
 	if c.theme != nil {
@@ -189,91 +192,109 @@ func (c *ComposeModel) View(width int) string {
 		th = theme.Default()
 	}
 
-	var row1, row2 string
+	title, hint := c.titleAndHint()
+	accent := th.Primary
+	var body string
 
 	switch c.status {
 	case composeStatusPosting:
-		row1 = th.MutedTxt.Render("Posting…")
-		row2 = ""
+		body = th.MutedTxt.Render("Posting…")
+		hint = ""
 
 	case composeStatusSuccess:
 		switch c.mode {
 		case composeModeApprove:
-			row1 = th.CISuccess.Render("✓ Approved")
+			body = th.CISuccess.Render("✓ Approved")
 		case composeModeReviewComment:
-			row1 = th.CISuccess.Render("✓ Review posted")
+			body = th.CISuccess.Render("✓ Review posted")
 		case composeModeEditTitle:
-			row1 = th.CISuccess.Render("✓ Title updated")
+			body = th.CISuccess.Render("✓ Title updated")
 		case composeModeEditBody:
-			row1 = th.CISuccess.Render("✓ Body updated")
+			body = th.CISuccess.Render("✓ Body updated")
 		default:
-			row1 = th.CISuccess.Render("✓ Comment posted")
+			body = th.CISuccess.Render("✓ Comment posted")
 		}
-		row2 = ""
+		accent = th.Success
+		hint = ""
 
 	case composeStatusError:
-		row1 = th.ReviewChanges.Render("✗ Failed: " + c.errMsg)
-		row2 = th.MutedTxt.Render("Esc: Dismiss")
+		body = th.ReviewChanges.Render("✗ Failed: " + c.errMsg)
+		accent = th.Error
+		hint = "Esc: Dismiss"
 
 	default: // idle
-		var prefix string
-		var hint string
-		switch c.mode {
-		case composeModeReply:
-			if c.target.threadID != "" && c.target.path != "" && c.target.line > 0 {
-				prefix = fmt.Sprintf("Reply to thread on %s:%d ▸ ", c.target.path, c.target.line)
-			} else if c.target.login != "" {
-				prefix = "Reply to @" + c.target.login + " ▸ "
-			} else {
-				prefix = "New comment ▸ "
-			}
-			hint = "Enter: Send   Ctrl+E: $EDITOR   Esc: Cancel"
-		case composeModeApprove:
-			prefix = "Approve PR ▸ "
-			if c.draftCount > 0 {
-				hint = fmt.Sprintf("Enter: Approve   Ctrl+E: $EDITOR   Esc: Cancel   (includes +%d draft comments)", c.draftCount)
-			} else {
-				hint = "Enter: Approve   Ctrl+E: $EDITOR   Esc: Cancel"
-			}
-		case composeModeReviewComment:
-			prefix = "Review comment ▸ "
-			if c.draftCount > 0 {
-				hint = fmt.Sprintf("Enter: Send   Ctrl+E: $EDITOR   Esc: Cancel   (includes +%d draft comments)", c.draftCount)
-			} else {
-				hint = "Enter: Send   Ctrl+E: $EDITOR   Esc: Cancel"
-			}
-		case composeModeDraftInline:
-			prefix = "Draft inline comment ▸ "
-			hint = "Enter: Save   Ctrl+E: $EDITOR   Esc: Cancel"
-		case composeModeEditTitle:
-			prefix = "Edit title ▸ "
-			hint = "Enter: Save   Ctrl+E: $EDITOR   Esc: Cancel"
-		case composeModeEditBody:
-			prefix = "Edit body ▸ "
-			hint = "Enter: Save   Ctrl+E: $EDITOR   Esc: Cancel"
-		default:
-			prefix = "New comment ▸ "
-			hint = "Enter: Send   Ctrl+E: $EDITOR   Esc: Cancel"
-		}
-		c.input.Width = max(w-lipgloss.Width(prefix)-1, 10)
-		row1 = prefix + c.input.View()
-		row2 = th.MutedTxt.Render(hint)
+		prompt := lipgloss.NewStyle().Foreground(accent).Bold(true).Render("› ")
+		c.input.Width = max(w-2-lipgloss.Width(prompt)-1, 10)
+		c.input.Placeholder = c.placeholder()
+		c.input.PlaceholderStyle = th.FaintTxt
+		body = prompt + c.input.View()
 	}
 
-	line1 := lipgloss.NewStyle().Width(w).Render(row1)
-	line2 := lipgloss.NewStyle().Width(w).Render(row2)
+	border := lipgloss.NewStyle().Foreground(accent)
+	top := c.borderLine(w, "╭", "╮", lipgloss.NewStyle().Foreground(th.TextBright).Bold(true).Render(title), border)
+	var hintStyled string
+	if hint != "" {
+		hintStyled = th.RenderHints(hint)
+	}
+	bottom := c.borderLine(w, "╰", "╯", hintStyled, border)
+	mid := border.Render("│") + " " + fitLine(body, max(w-2, 1)) + " " + border.Render("│")
+	return top + "\n" + mid + "\n" + bottom
+}
 
-	borderColor := th.Border
-	box := lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
-		BorderTop(true).
-		BorderBottom(false).
-		BorderLeft(false).
-		BorderRight(false).
-		BorderForeground(borderColor).
-		Width(w).
-		Render(line1 + "\n" + line2)
-	return box
+// borderLine renders "╭─ label ───────╮" with the label embedded near the left.
+func (c *ComposeModel) borderLine(w int, left, right, label string, border lipgloss.Style) string {
+	if label == "" {
+		return border.Render(left + strings.Repeat("─", w) + right)
+	}
+	if lipgloss.Width(label) > w-4 {
+		label = truncateText(label, max(w-4, 1))
+	}
+	fill := max(w-3-lipgloss.Width(label), 0)
+	return border.Render(left+"─ ") + label + border.Render(" "+strings.Repeat("─", fill)+right)
+}
+
+// titleAndHint returns the box title and the key-hint string for the current mode.
+func (c *ComposeModel) titleAndHint() (string, string) {
+	drafts := ""
+	if c.draftCount > 0 {
+		drafts = fmt.Sprintf(" · %d draft comments", c.draftCount)
+	}
+	switch c.mode {
+	case composeModeReply:
+		if c.target.threadID != "" && c.target.path != "" && c.target.line > 0 {
+			return fmt.Sprintf("Reply on %s:%d", c.target.path, c.target.line), "Enter: Send | Ctrl+E: Editor | Esc: Cancel"
+		}
+		if c.target.login != "" {
+			return "Reply to " + c.target.login, "Enter: Send | Ctrl+E: Editor | Esc: Cancel"
+		}
+		return "New comment", "Enter: Send | Ctrl+E: Editor | Esc: Cancel"
+	case composeModeApprove:
+		return "Approve" + drafts, "Enter: Approve | Ctrl+E: Editor | Esc: Cancel"
+	case composeModeReviewComment:
+		return "Submit review" + drafts, "Enter: Send | Ctrl+E: Editor | Esc: Cancel"
+	case composeModeDraftInline:
+		return "Draft inline comment", "Enter: Save draft | Ctrl+E: Editor | Esc: Cancel"
+	case composeModeEditTitle:
+		return "Edit title", "Enter: Save | Ctrl+E: Editor | Esc: Cancel"
+	case composeModeEditBody:
+		return "Edit description", "Enter: Save | Ctrl+E: Editor | Esc: Cancel"
+	default:
+		return "New comment", "Enter: Send | Ctrl+E: Editor | Esc: Cancel"
+	}
+}
+
+// placeholder returns the greyed-out prompt shown in an empty input.
+func (c *ComposeModel) placeholder() string {
+	switch c.mode {
+	case composeModeApprove:
+		return "Optional message…"
+	case composeModeReviewComment:
+		return "Summarise your review (optional)…"
+	case composeModeEditTitle, composeModeEditBody:
+		return ""
+	default:
+		return "Write a comment… (markdown supported)"
+	}
 }
 
 // buildReplyBody constructs the GitHub blockquote-prefixed body for a reply.

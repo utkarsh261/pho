@@ -158,11 +158,11 @@ func TestReviewerSummariesEmptyReturnsNil(t *testing.T) {
 func TestReviewerStripEmptyReturnsEmptyString(t *testing.T) {
 	t.Parallel()
 	m := makePRDetail(80, 30, nil, nil)
-	if got := m.renderReviewerStrip(78); got != "" {
+	if got := m.renderHeaderReviewers(78); got != "" {
 		t.Errorf("expected empty strip with no detail, got %q", got)
 	}
 	m.Detail = &domain.PRPreviewSnapshot{}
-	if got := m.renderReviewerStrip(78); got != "" {
+	if got := m.renderHeaderReviewers(78); got != "" {
 		t.Errorf("expected empty strip with empty detail, got %q", got)
 	}
 }
@@ -170,7 +170,7 @@ func TestReviewerStripEmptyReturnsEmptyString(t *testing.T) {
 func TestReviewerStripFitsWhenSpaceAllows(t *testing.T) {
 	t.Parallel()
 	m := makeReviewersModel(200, 30)
-	got := stripANSI(m.renderReviewerStrip(198))
+	got := stripANSI(m.renderHeaderReviewers(198))
 	for _, want := range []string{"@alice", "@dave", "@bob", "@carol"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("expected %q in wide strip, got %q", want, got)
@@ -194,7 +194,7 @@ func TestReviewerStripOverflowIndicator(t *testing.T) {
 			{Login: "reviewer6", State: "APPROVED", SubmittedAt: reviewerTestBase.Add(-6 * time.Hour)},
 		},
 	}
-	got := stripANSI(m.renderReviewerStrip(40))
+	got := stripANSI(m.renderHeaderReviewers(40))
 	if !strings.Contains(got, "+") {
 		t.Errorf("expected overflow indicator, got %q", got)
 	}

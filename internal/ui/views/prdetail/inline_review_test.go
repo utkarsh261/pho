@@ -781,7 +781,7 @@ func TestThreadReplyIndentedTwoSpaces(t *testing.T) {
 	cw := m.contentW()
 	lines := m.commentLines(cw, -1)
 	plain := descStripANSI(strings.Join(lines, "\n"))
-	if !strings.Contains(plain, "  @bob") {
+	if !strings.Contains(plain, "  ● bob") {
 		t.Error("expected reply header to be indented by 2 spaces")
 	}
 }
@@ -883,7 +883,7 @@ func TestReplyComposeHintForThread(t *testing.T) {
 		t.Fatal("expected compose active")
 	}
 	view := m.compose.View(80)
-	if !strings.Contains(descStripANSI(view), "Reply to thread on a.go:5") {
+	if !strings.Contains(descStripANSI(view), "Reply on a.go:5") {
 		t.Errorf("expected thread reply hint in compose view, got:\n%s", descStripANSI(view))
 	}
 }
@@ -904,7 +904,7 @@ func TestReplyComposeHintForPRComment(t *testing.T) {
 		t.Fatal("expected compose active")
 	}
 	view := m.compose.View(80)
-	if !strings.Contains(descStripANSI(view), "Reply to @bob") {
+	if !strings.Contains(descStripANSI(view), "Reply to bob") {
 		t.Errorf("expected PR comment reply hint in compose view, got:\n%s", descStripANSI(view))
 	}
 }
@@ -1597,7 +1597,7 @@ func TestE2E_ReviewThreadBoxRenderingFromSnapshot(t *testing.T) {
 	if strings.Contains(plain, "│ @") || strings.Contains(plain, "││") {
 		t.Error("expected no │ prefix on reply lines inside shared box")
 	}
-	if !strings.Contains(plain, "  @utkarsh261") {
+	if !strings.Contains(plain, "  ● utkarsh261") {
 		t.Error("expected reply header indented by 2 spaces")
 	}
 	reviewIdx := strings.Index(plain, "test latest")

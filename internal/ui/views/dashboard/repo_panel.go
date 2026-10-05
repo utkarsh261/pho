@@ -1,9 +1,11 @@
 package dashboard
 
 import (
+	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/utkarsh261/pho/internal/domain"
 	"github.com/utkarsh261/pho/internal/ui/theme"
 )
@@ -127,17 +129,11 @@ func (m *RepoPanelModel) View() string {
 	if m.Width <= 0 || m.Height <= 0 {
 		return ""
 	}
-	header := "▸ REPOSITORIES"
+	header := " Repositories"
 	if m.theme != nil {
-		header = m.theme.Header.Width(m.Width).Render(header)
-	} else {
-		header = fitLine(header, m.Width)
+		header = m.theme.Header.Render(header) + m.theme.MutedTxt.Render(fmt.Sprintf("  %d", len(m.Repos)))
 	}
-	underline := strings.Repeat("─", m.Width)
-	if m.theme != nil {
-		underline = m.theme.MutedTxt.Render(underline)
-	}
-	lines := []string{header, fitLine("", m.Width), fitLine(underline, m.Width), fitLine("", m.Width)}
+	lines := []string{fitLine(header, m.Width), fitLine("", m.Width)}
 	visible := m.visibleRepos()
 	if len(visible) == 0 {
 		empty := "No repos discovered"
@@ -221,10 +217,10 @@ func (m *RepoPanelModel) ensureVisible() {
 }
 
 func (m *RepoPanelModel) visibleCount() int {
-	if m.Height <= 4 {
+	if m.Height <= 2 {
 		return 0
 	}
-	return m.Height - 4
+	return m.Height - 2
 }
 
 func (m *RepoPanelModel) visibleRepos() []domain.Repository {
@@ -276,23 +272,29 @@ func (m *RepoPanelModel) renderRepoRow(repo domain.Repository) string {
 		return row
 	}
 
-	if idx == m.Cursor && idx == m.ActiveIndex {
-		return m.theme.SelectedRow.Render(
-			m.theme.PrimaryTxt.Render(bar) + " " +
-				m.theme.PrimaryTxt.Render(active) + " " +
-				m.theme.Bold.Render(m.theme.PrimaryTxt.Render(label)),
-		)
+	isCursor, isActive := idx == m.Cursor, idx == m.ActiveIndex
+	dot := m.theme.FaintTxt.Render("○")
+	if isActive {
+		dot = m.theme.PrimaryTxt.Render("●")
 	}
-	if idx == m.Cursor {
-		return m.theme.SelectedRow.Render(
-			m.theme.PrimaryTxt.Render(bar) + " " + active + " " +
-				m.theme.Bold.Render(label),
-		)
+	owner, name, ok := strings.Cut(label, "/")
+	var text string
+	if ok {
+		nameStyle := m.theme.DimTxt
+		if isActive || isCursor {
+			nameStyle = lipgloss.NewStyle().Foreground(m.theme.Text).Bold(true)
+		}
+		text = m.theme.MutedTxt.Render(owner+"/") + nameStyle.Render(name)
+	} else {
+		text = label
 	}
-	if idx == m.ActiveIndex {
-		return m.theme.PrimaryTxt.Render(bar) + " " +
-			m.theme.PrimaryTxt.Render(active) + " " +
-			m.theme.PrimaryTxt.Render(label)
+	edge := " "
+	if isCursor {
+		edge = m.theme.PrimaryTxt.Render("▎")
 	}
-	return m.theme.MutedTxt.Render(row)
+	line := edge + dot + " " + text
+	if isCursor {
+		return theme.FillBg(m.theme.Highlight, m.Width, line)
+	}
+	return line
 }

@@ -10,6 +10,23 @@ import (
 	"github.com/utkarsh261/pho/internal/domain"
 )
 
+// StatusMode names the diff input mode for the status-bar badge: "VISUAL"
+// while selecting lines, "SEARCH" while a diff search is active, otherwise "".
+// It is shown only on the Diff tab; elsewhere the compose box and prompts
+// already label themselves.
+func (m *PRDetailModel) StatusMode() string {
+	if m.activeTab != TabDiff || m.compose.active {
+		return ""
+	}
+	switch {
+	case m.visual.Active:
+		return "VISUAL"
+	case m.searchActive:
+		return "SEARCH"
+	}
+	return ""
+}
+
 // StatusHint returns the status bar hint text for the current state.
 func (m *PRDetailModel) StatusHint() string {
 	if m.visual.Active {
