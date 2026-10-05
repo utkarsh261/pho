@@ -62,30 +62,21 @@ func init() {
 	}
 }
 
-func clearCaches() error {
-	cacheDir := xdgDir("XDG_CACHE_HOME", ".cache")
-	sqliteDB := filepath.Join(cacheDir, "pho", "cache.db")
-	if err := os.Remove(sqliteDB); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("remove sqlite cache %s: %w", sqliteDB, err)
+// clearCaches deletes the SQLite cache in cacheDir (with its WAL and
+// shared-memory files) and the discovery cache in discDir.
+func clearCaches(cacheDir, discDir string) error {
+	sqliteDB := filepath.Join(cacheDir, "cache.db")
+	for _, p := range []string{sqliteDB, sqliteDB + "-wal", sqliteDB + "-shm"} {
+		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove sqlite cache %s: %w", p, err)
+		}
 	}
 
-	discDir := filepath.Join(os.TempDir(), "pho-discovery")
 	if err := os.RemoveAll(discDir); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("remove discovery cache %s: %w", discDir, err)
 	}
 
 	return nil
-}
-
-func xdgDir(env, fallback string) string {
-	if v := os.Getenv(env); v != "" {
-		return v
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return fallback
-	}
-	return filepath.Join(home, fallback)
 }
 
 type invocation struct {
@@ -239,7 +230,7 @@ func main() {
 	logger := pholog.New(cfg.Logging.File, level)
 
 	if reset {
-		if err := clearCaches(); err != nil {
+		if err := clearCaches(cfg.Cache.Dir, filepath.Join(os.TempDir(), "pho-discovery")); err != nil {
 			fmt.Fprintf(os.Stderr, "pho: failed to clear caches: %v\n", err)
 			os.Exit(1)
 		}
@@ -278,6 +269,15 @@ func main() {
 	} else {
 		l2Store = l2
 		viewedHistoryStore = l2
+		// Diffs cached in the old format are never read again; free them.
+		go func() {
+			n, err := l2.DeleteKeyPrefixes(context.Background(), apppr.LegacyDiffKeyPrefixes...)
+			if err != nil {
+				logger.Warn("old diff cache cleanup failed", "err", err)
+			} else if n > 0 {
+				logger.Info("removed old-format cached diffs", "count", n)
+			}
+		}()
 	}
 
 	coordinator := cache.NewCoordinator(l1, l2Store, logger)

@@ -13,4 +13,7 @@ type Store interface {
 	Delete(ctx context.Context, key string) error
 	// DeleteByRepo removes all entries belonging to a specific host+repo.
 	DeleteByRepo(ctx context.Context, host, repo string) error
+	// DeleteOtherDiffs removes a PR's cached diffs (kind "diff") except
+	// keepKey, so only the latest head's diff is kept.
+	DeleteOtherDiffs(ctx context.Context, host, repo string, prNumber int, keepKey string) error
 }

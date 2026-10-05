@@ -123,6 +123,18 @@ func (c *Coordinator) DeleteByRepo(ctx context.Context, host, repo string) error
 	return errors.Join(errs...)
 }
 
+// DeleteOtherDiffs removes a PR's cached diffs except keepKey from both tiers.
+func (c *Coordinator) DeleteOtherDiffs(ctx context.Context, host, repo string, prNumber int, keepKey string) error {
+	var errs []error
+	if err := c.L1.DeleteOtherDiffs(ctx, host, repo, prNumber, keepKey); err != nil {
+		errs = append(errs, fmt.Errorf("l1 delete other diffs: %w", err))
+	}
+	if err := c.L2.DeleteOtherDiffs(ctx, host, repo, prNumber, keepKey); err != nil {
+		errs = append(errs, fmt.Errorf("l2 delete other diffs: %w", err))
+	}
+	return errors.Join(errs...)
+}
+
 func (c *Coordinator) freshness(meta domain.CacheMeta) domain.Freshness {
 	now := c.Now()
 	if meta.ExpiresAt.IsZero() || now.After(meta.ExpiresAt) {

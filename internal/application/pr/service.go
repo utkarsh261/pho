@@ -8,9 +8,7 @@ import (
 	"time"
 
 	"github.com/utkarsh261/pho/internal/cache"
-	"github.com/utkarsh261/pho/internal/diff/anchor"
 	"github.com/utkarsh261/pho/internal/diff/model"
-	"github.com/utkarsh261/pho/internal/diff/parse"
 	"github.com/utkarsh261/pho/internal/domain"
 	githubclient "github.com/utkarsh261/pho/internal/github"
 	"github.com/utkarsh261/pho/internal/github/rest"
@@ -430,25 +428,26 @@ func (s *PRService) loadDiffInner(ctx context.Context, repo domain.Repository, n
 	defer s.logTimer("pr load diff inner", pholog.FieldRepo, repo.FullName, pholog.FieldPRNumber, number)()
 	key := diffCacheKey(repo.Host, repoFullName(repo), number, headSHA)
 
+	// A cached diff is the raw diff text; it goes through the same parse and
+	// anchor steps as a fresh fetch. A forced refresh still reads it so it
+	// can be served if GitHub fails.
 	var cached model.DiffModel
 	found := false
-	if !force && headSHA != "" {
-		_, _, found, _ = s.Cache.StaleWhileRevalidate(ctx, key, &cached, nil)
-		if found {
+	if headSHA != "" {
+		cached, found = s.readCachedDiff(ctx, key, func(raw string, partial bool) (*model.DiffModel, error) {
+			return buildDiffModel(raw, partial, repo, number, headSHA)
+		})
+		if found && !force {
 			s.logDebug("diff cache hit", "key", key, "number", number)
-			anchor.Generate(&cached, headSHA)
 			return cached, true, nil
 		}
-	} else if force && headSHA != "" {
-		_, _, found, _ = s.Cache.StaleWhileRevalidate(ctx, key, &cached, nil)
 	}
 
 	s.logDebug("fetching raw diff", "key", key, "number", number, "host", repo.Host)
 
 	restClient, err := s.restFor(repo.Host)
 	if err != nil {
-		if found && headSHA != "" {
-			anchor.Generate(&cached, headSHA)
+		if found {
 			return cached, true, fmt.Errorf("refresh diff %s: %w", repo.FullName, err)
 		}
 		return model.DiffModel{}, false, fmt.Errorf("fetch raw diff: %w", err)
@@ -462,54 +461,27 @@ func (s *PRService) loadDiffInner(ctx context.Context, repo domain.Repository, n
 		})
 	}
 	if err != nil {
-		if found && headSHA != "" {
+		if found {
 			s.logWarn("diff fetch failed, returning stale", "key", key, "number", number, "err", err)
-			anchor.Generate(&cached, headSHA)
 			return cached, true, fmt.Errorf("refresh diff %s: %w", repo.FullName, err)
 		}
 		return model.DiffModel{}, false, fmt.Errorf("fetch raw diff: %w", err)
 	}
 
-	dm, err := parse.Parse(rawDiff)
+	dm, err := buildDiffModel(rawDiff, partial, repo, number, headSHA)
 	if err != nil {
 		if found {
 			s.logWarn("diff parse failed, returning stale", "key", key, "err", err)
-			anchor.Generate(&cached, headSHA)
 			return cached, true, fmt.Errorf("parse diff: %w", err)
 		}
 		return model.DiffModel{}, false, fmt.Errorf("parse diff: %w", err)
 	}
 
-	dm.PartialFiles = partial
-	// Populate HeadSHA from the GraphQL result (not from the raw diff index line).
-	dm.HeadSHA = headSHA
-	dm.Repo = repoFullName(repo)
-	dm.PRNumber = number
-
-	// SHA validation.
-	if headSHA != "" && dm.HeadSHA != "" && dm.HeadSHA != headSHA {
-		s.logWarn("diff head SHA mismatch, refetching",
-			"cached_sha", dm.HeadSHA, "expected_sha", headSHA, "number", number)
-		// Discard the model — caller should refetch with force=true.
-		return model.DiffModel{}, false, nil
-	}
-
-	// Generate anchors.
-	anchor.Generate(dm, headSHA)
-
-	// Precompute StartRow for file-level virtualization.
-	cumulative := 0
-	for i := range dm.Files {
-		dm.Files[i].StartRow = cumulative
-		cumulative += dm.Files[i].DisplayRows
-	}
-
-	// Cache the DiffModel.
 	if headSHA != "" {
 		meta := diffMeta(key, repo, number, s.Now().UTC())
-		if err := s.Cache.Write(ctx, key, dm, meta); err != nil {
-			s.logWarn("diff cache write error", "key", key, "err", err)
-		}
+		s.writeCachedDiff(key, rawDiff, partial, meta, func(ctx context.Context) error {
+			return s.Cache.DeleteOtherDiffs(ctx, repo.Host, repoFullName(repo), number, key)
+		})
 	}
 
 	return *dm, false, nil
@@ -565,10 +537,10 @@ func (s *PRService) LoadCommitDiff(ctx context.Context, repo domain.Repository, 
 	defer s.logTimer("pr load commit diff", pholog.FieldRepo, repo.FullName, "sha", sha)()
 	key := commitDiffCacheKey(repo.Host, repoFullName(repo), sha)
 
-	var cached model.DiffModel
-	found := false
 	if !force {
-		_, _, found, _ = s.Cache.StaleWhileRevalidate(ctx, key, &cached, nil)
+		cached, found := s.readCachedDiff(ctx, key, func(raw string, partial bool) (*model.DiffModel, error) {
+			return buildDiffModel(raw, partial, repo, 0, sha)
+		})
 		if found {
 			s.logDebug("commit diff cache hit", "key", key, "sha", sha)
 			return cached, nil
@@ -579,9 +551,6 @@ func (s *PRService) LoadCommitDiff(ctx context.Context, repo domain.Repository, 
 
 	restClient, err := s.restFor(repo.Host)
 	if err != nil {
-		if found {
-			return cached, fmt.Errorf("fetch commit diff %s: %w", repo.FullName, err)
-		}
 		return model.DiffModel{}, fmt.Errorf("fetch commit diff: %w", err)
 	}
 	rawDiff, err := restClient.FetchCommitDiff(ctx, s.ownerName(repo), s.RepoName(repo), sha)
@@ -593,39 +562,16 @@ func (s *PRService) LoadCommitDiff(ctx context.Context, repo domain.Repository, 
 		})
 	}
 	if err != nil {
-		if found {
-			s.logWarn("commit diff fetch failed, returning stale", "key", key, "sha", sha, "err", err)
-			return cached, fmt.Errorf("fetch commit diff %s: %w", repo.FullName, err)
-		}
 		return model.DiffModel{}, fmt.Errorf("fetch commit diff: %w", err)
 	}
 
-	dm, err := parse.Parse(rawDiff)
+	dm, err := buildDiffModel(rawDiff, partial, repo, 0, sha)
 	if err != nil {
-		if found {
-			s.logWarn("commit diff parse failed, returning stale", "key", key, "sha", sha, "err", err)
-			return cached, fmt.Errorf("parse commit diff: %w", err)
-		}
 		return model.DiffModel{}, fmt.Errorf("parse commit diff: %w", err)
 	}
 
-	dm.PartialFiles = partial
-	dm.HeadSHA = sha
-	dm.Repo = repoFullName(repo)
-
-	anchor.Generate(dm, sha)
-
-	// Precompute StartRow for file-level virtualization.
-	cumulative := 0
-	for i := range dm.Files {
-		dm.Files[i].StartRow = cumulative
-		cumulative += dm.Files[i].DisplayRows
-	}
-
 	meta := commitDiffMeta(key, repo, sha, s.Now().UTC())
-	if err := s.Cache.Write(ctx, key, *dm, meta); err != nil {
-		s.logWarn("commit diff cache write error", "key", key, "err", err)
-	}
+	s.writeCachedDiff(key, rawDiff, partial, meta, nil)
 
 	return *dm, nil
 }
@@ -694,7 +640,7 @@ func previewCacheKey(host, repo string, number int) string {
 }
 
 func diffCacheKey(host, repo string, number int, sha string) string {
-	return fmt.Sprintf("diff:v1:host=%s:repo=%s:pr=%d:sha=%s", host, repo, number, sha)
+	return fmt.Sprintf("diff:v2:host=%s:repo=%s:pr=%d:sha=%s", host, repo, number, sha)
 }
 
 func previewMeta(key string, repo domain.Repository, number int, fetchedAt time.Time) domain.CacheMeta {
@@ -732,7 +678,7 @@ func commitsCacheKey(host, repo string, number int) string {
 }
 
 func commitDiffCacheKey(host, repo, sha string) string {
-	return fmt.Sprintf("commitdiff:v1:host=%s:repo=%s:sha=%s", host, repo, sha)
+	return fmt.Sprintf("commitdiff:v2:host=%s:repo=%s:sha=%s", host, repo, sha)
 }
 
 func commitsMeta(key string, repo domain.Repository, number int, fetchedAt time.Time) domain.CacheMeta {

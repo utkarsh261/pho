@@ -3,6 +3,8 @@ package main
 import (
 	"errors"
 	"flag"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -124,5 +126,36 @@ func TestParseInvocationHelpReturnsErrHelp(t *testing.T) {
 	_, err := parseInvocation([]string{"-h"})
 	if !errors.Is(err, flag.ErrHelp) {
 		t.Fatalf("expected flag.ErrHelp for -h, got %v", err)
+	}
+}
+
+func TestClearCachesRemovesOnlyCacheFiles(t *testing.T) {
+	t.Parallel()
+	cacheDir, discDir := t.TempDir(), filepath.Join(t.TempDir(), "pho-discovery")
+	for _, p := range []string{
+		filepath.Join(cacheDir, "cache.db"), filepath.Join(cacheDir, "cache.db-wal"),
+		filepath.Join(cacheDir, "cache.db-shm"), filepath.Join(cacheDir, "keep.txt"),
+		filepath.Join(discDir, "repos.json"),
+	} {
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := clearCaches(cacheDir, discDir); err != nil {
+		t.Fatal(err)
+	}
+	entries, _ := os.ReadDir(cacheDir)
+	if len(entries) != 1 || entries[0].Name() != "keep.txt" {
+		t.Fatalf("cache dir after reset: %v", entries)
+	}
+	if _, err := os.Stat(discDir); !os.IsNotExist(err) {
+		t.Fatalf("discovery cache still present: %v", err)
+	}
+	// A second reset with nothing left is not an error.
+	if err := clearCaches(cacheDir, discDir); err != nil {
+		t.Fatal(err)
 	}
 }
