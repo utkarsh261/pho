@@ -43,6 +43,7 @@ const (
 	TabMyPRs       DashboardTab = "my_prs"
 	TabNeedsReview DashboardTab = "needs_review"
 	TabInvolving   DashboardTab = "involving"
+	TabAll         DashboardTab = "all"
 	TabRecent      DashboardTab = "recent"
 )
 

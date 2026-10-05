@@ -67,6 +67,17 @@ type stubDashboardService struct {
 	loadInvolvingCalls  []loadInvolvingCall
 	loadPreviewCalls    []loadPreviewCall
 	invalidateRepoCalls []domain.Repository
+
+	// openPages maps a cursor to the open-PR page returned for it.
+	openPages          map[string]stubOpenPage
+	loadOpenPagesCalls []string
+}
+
+type stubOpenPage struct {
+	prs        []domain.PullRequestSummary
+	hasMore    bool
+	nextCursor string
+	err        error
 }
 
 type stubViewedHistoryStore struct {
@@ -108,6 +119,12 @@ func (s *stubDashboardService) LoadPreview(ctx context.Context, repo string, num
 		return snap, nil
 	}
 	return domain.PRPreviewSnapshot{Repo: repo, Number: number, Title: "Preview"}, nil
+}
+
+func (s *stubDashboardService) LoadOpenPRsPage(_ context.Context, _ domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error) {
+	s.loadOpenPagesCalls = append(s.loadOpenPagesCalls, cursor)
+	page := s.openPages[cursor]
+	return page.prs, page.hasMore, page.nextCursor, page.err
 }
 
 func (s *stubDashboardService) LoadAllPRsPage(_ context.Context, _ domain.Repository, _ string) ([]domain.PullRequestSummary, bool, string, error) {

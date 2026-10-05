@@ -137,10 +137,10 @@ func buildViewerQuery() string {
 }
 
 func buildDashboardQuery(profile githubpkg.GitHubHostProfile) string {
-	return fmt.Sprintf(`query DashboardPRsQuery($owner: String!, $name: String!) {
+	return fmt.Sprintf(`query DashboardPRsQuery($owner: String!, $name: String!, $after: String) {
   repository(owner: $owner, name: $name) {
     nameWithOwner
-    pullRequests(first: 100, states: OPEN, orderBy: {field: UPDATED_AT, direction: DESC}) {
+    pullRequests(first: 100, after: $after, states: OPEN, orderBy: {field: UPDATED_AT, direction: DESC}) {
       totalCount
       pageInfo {
         hasNextPage

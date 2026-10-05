@@ -472,6 +472,10 @@ func (s *dashboardService) LoadPreview(ctx context.Context, repo string, number 
 	return s.loadPreviewFn(ctx, repo, number, force)
 }
 
+func (s *dashboardService) LoadOpenPRsPage(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error) {
+	return nil, false, "", nil
+}
+
 func (s *dashboardService) LoadAllPRsPage(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error) {
 	if s.loadAllPRsPage != nil {
 		return s.loadAllPRsPage(ctx, repo, cursor)

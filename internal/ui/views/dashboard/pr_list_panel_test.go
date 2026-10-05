@@ -7,7 +7,10 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/utkarsh261/pho/internal/domain"
+	"github.com/utkarsh261/pho/internal/ui/theme"
 )
 
 func TestPRListPanelRenderTabsAndRows(t *testing.T) {
@@ -69,13 +72,74 @@ func TestPRListPanelTruncationFooter(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		prs = append(prs, makePR(i+1, fmt.Sprintf("PR %d", i+1), "branch"))
 	}
-	m.SetTabSnapshot(domain.TabMyPRs, prs, 234, true)
+	m.SetTabSnapshot(domain.TabMyPRs, prs[:3], 234, true)
+	m.SetTabScanned(domain.TabMyPRs, 100)
+	m.SetTabSnapshot(domain.TabAll, prs, 234, true)
 	m.SetActiveTab(domain.TabMyPRs)
 	m.SetRect(60, 12)
 
-	view := m.View()
-	if !strings.Contains(view, "Showing 100 of 234 open PRs") {
-		t.Fatalf("expected truncation footer, got %q", view)
+	// A filtered tab must not claim to show N of the repo's open PRs.
+	if view := m.View(); !strings.Contains(view, "3 from newest 100 of 234 open") {
+		t.Fatalf("expected filtered-tab footer, got %q", view)
+	}
+
+	m.SetActiveTab(domain.TabAll)
+	cases := []struct {
+		paging PageStatus
+		want   string
+	}{
+		{PageStatus{}, "100 of 234 open · ↓ for more"},
+		{PageStatus{Loading: true}, "100 of 234 open · loading…"},
+		{PageStatus{Failed: true}, "couldn't load more · R to retry"},
+		{PageStatus{Capped: true}, "limit reached"},
+	}
+	for _, tc := range cases {
+		m.Paging = tc.paging
+		if view := m.View(); !strings.Contains(view, tc.want) {
+			t.Fatalf("paging %+v: expected %q in footer, got %q", tc.paging, tc.want, view)
+		}
+	}
+}
+
+func TestPRListPanelTabBarFitsWidth(t *testing.T) {
+	t.Parallel()
+
+	m := NewPRListPanelModel()
+	m.SetTheme(theme.Default())
+	m.SetTabSnapshot(domain.TabMyPRs, make([]domain.PullRequestSummary, 3), 3, false)
+	m.SetTabSnapshot(domain.TabNeedsReview, make([]domain.PullRequestSummary, 12), 12, false)
+	m.SetTabSnapshot(domain.TabInvolving, make([]domain.PullRequestSummary, 5), 5, false)
+	m.SetTabSnapshot(domain.TabAll, make([]domain.PullRequestSummary, 100), 342, true)
+	m.SetTabSnapshot(domain.TabRecent, make([]domain.PullRequestSummary, 8), 8, false)
+	m.SetActiveTab(domain.TabAll)
+
+	cases := []struct {
+		width int
+		want  []string
+		not   []string
+	}{
+		{80, []string{"My PRs", "Needs Review", "All 342", "Recent"}, nil},
+		{56, []string{"Mine", "Review", "Involved", "All 342", "Recent 8"}, []string{"Needs Review"}},
+		{46, []string{"Mine", "All 342", "Recent"}, []string{"Recent 8"}},
+		{30, []string{"All 342", "4/5"}, []string{"Mine"}},
+	}
+	for _, tc := range cases {
+		m.SetRect(tc.width, 12)
+		bar := m.renderTabBarThemed()
+		if w := lipgloss.Width(bar); w > tc.width {
+			t.Fatalf("width %d: tab bar is %d wide: %q", tc.width, w, bar)
+		}
+		plain := ansi.Strip(bar)
+		for _, s := range tc.want {
+			if !strings.Contains(plain, s) {
+				t.Fatalf("width %d: expected %q in %q", tc.width, s, plain)
+			}
+		}
+		for _, s := range tc.not {
+			if strings.Contains(plain, s) {
+				t.Fatalf("width %d: did not expect %q in %q", tc.width, s, plain)
+			}
+		}
 	}
 }
 

@@ -11,7 +11,7 @@
 
 ## Features
 
-- **Dashboard** - Auto-discovers repos, lists PRs across *My PRs*, *Needs Review*, *Involving*, and *Recent* tabs with a live preview pane.
+- **Dashboard** - Auto-discovers repos, lists PRs across *My PRs*, *Needs Review*, *Involving*, *All* (open PRs, loaded as you scroll), and *Recent* tabs with a live preview pane.
 - **Jump to repo/PR** - `Ctrl+P` to fuzzy-find and jump to any PR.
 - **Open a PR directly** - `pho pr 123` to launch straight into a PR's detail view.
 - **PR detail** - Browse description, diff, comments, and commits. Sidebar for files and CI checks.

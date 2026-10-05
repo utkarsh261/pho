@@ -11,6 +11,9 @@ import (
 type GitHubClient interface {
 	FetchViewer(ctx context.Context, host string) (string, error)
 	FetchDashboardPRs(ctx context.Context, repo domain.Repository) ([]domain.PullRequestSummary, int, bool, string, error)
+	// FetchOpenPRsPage fetches the open-PR page after cursor, in dashboard order.
+	// Returns summaries, hasNextPage, endCursor, error.
+	FetchOpenPRsPage(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
 	FetchInvolvingPRs(ctx context.Context, repo domain.Repository, viewer string) ([]domain.PullRequestSummary, int, bool, error)
 	FetchPreview(ctx context.Context, repo domain.Repository, number int) (domain.PRPreviewSnapshot, error)
 	FetchCommits(ctx context.Context, repo domain.Repository, number int) ([]domain.Commit, error)

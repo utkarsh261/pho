@@ -25,6 +25,7 @@ type MockGitHubClient struct {
 	PostThreadReplyFn          func(ctx context.Context, host, threadID, body string) error
 	ApprovePullRequestFn       func(ctx context.Context, host, pullRequestID, body string) error
 	SubmitReviewWithCommentsFn func(ctx context.Context, host, pullRequestID, body, event string, comments []domain.DraftInlineComment) error
+	FetchOpenPRsPageFn         func(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
 	FetchAllPRsFn              func(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
 	MergePullRequestFn         func(ctx context.Context, host, pullRequestID, expectedHeadOid, mergeMethod string) error
 	CheckMergeableFn           func(ctx context.Context, repo domain.Repository, number int) (domain.MergeableState, error)
@@ -130,6 +131,13 @@ func (m *MockGitHubClient) SubmitReviewWithComments(ctx context.Context, host, p
 	}
 	m.SubmitReviewWithCommentsCalls++
 	return m.SubmitReviewWithCommentsFn(ctx, host, pullRequestID, body, event, comments)
+}
+
+func (m *MockGitHubClient) FetchOpenPRsPage(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error) {
+	if m.FetchOpenPRsPageFn == nil {
+		return nil, false, "", nil
+	}
+	return m.FetchOpenPRsPageFn(ctx, repo, cursor)
 }
 
 func (m *MockGitHubClient) FetchAllPRs(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error) {
