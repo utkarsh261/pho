@@ -320,11 +320,79 @@ func (m *PRDetailModel) computeLayout() {
 // them (cursor index, search rows). Call after the diff or any collapse
 // state changes.
 func (m *PRDetailModel) rebuildDiffLayout() {
+	anchor, keep := m.diffViewAnchor()
 	m.computeLayout()
 	cursor := m.diffCursor
 	m.buildNavigableIndex()
 	m.setDiffCursor(cursor)
 	m.normalizeDiffRows()
+	if keep {
+		m.restoreDiffViewAnchor(anchor)
+	}
+}
+
+// diffViewAnchor is what the user is looking at, so a layout change (a file
+// collapsing or expanding elsewhere) doesn't move it on screen: the cursor's
+// distance from the top of the viewport, and the file at the top.
+type diffViewAnchor struct {
+	cursor       diffCursorLine
+	cursorOffset int
+	hasCursor    bool
+	topFile      int
+	topOffset    int
+}
+
+// diffScrollPos returns the Diff tab's scroll, which lives in ContentScroll
+// only while the Diff tab is shown.
+func (m *PRDetailModel) diffScrollPos() int {
+	if m.activeTab == TabDiff {
+		return m.ContentScroll
+	}
+	return m.diffScroll
+}
+
+func (m *PRDetailModel) setDiffScrollPos(row int) {
+	if m.activeTab == TabDiff {
+		m.ContentScroll = row
+		m.clampContentScroll()
+		return
+	}
+	m.diffScroll = max(row, 0)
+}
+
+// diffViewAnchor captures the anchor from the current (pre-change) layout.
+// ok is false when there is no layout for this diff yet.
+func (m *PRDetailModel) diffViewAnchor() (a diffViewAnchor, ok bool) {
+	if m.Diff == nil || m.layoutFor != m.Diff || len(m.layout.fileStart) == 0 {
+		return a, false
+	}
+	scroll := m.diffScrollPos()
+	if m.validDiffCursor() {
+		a.cursor, a.hasCursor = m.diffCursor, true
+		a.cursorOffset = m.navigableRows[m.navIdx] - scroll
+	}
+	for i, start := range m.layout.fileStart {
+		if start > scroll {
+			break
+		}
+		a.topFile, a.topOffset = i, scroll-start
+	}
+	return a, true
+}
+
+// restoreDiffViewAnchor scrolls so the cursor (or, if its line is gone, the
+// top file) sits where it was on screen.
+func (m *PRDetailModel) restoreDiffViewAnchor(a diffViewAnchor) {
+	if a.hasCursor {
+		if idx, ok := m.navIdxMap[a.cursor]; ok {
+			m.setDiffScrollPos(m.navigableRows[idx] - a.cursorOffset)
+			return
+		}
+	}
+	if a.topFile < len(m.layout.fileStart) {
+		off := min(a.topOffset, max(m.layout.fileRows[a.topFile]-1, 0))
+		m.setDiffScrollPos(m.layout.fileStart[a.topFile] + off)
+	}
 }
 
 // setFileCollapsed collapses or expands file i, keeping the cursor on the

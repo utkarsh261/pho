@@ -459,3 +459,81 @@ func TestLateThreadsNeverHideTheCurrentFile(t *testing.T) {
 		t.Fatal("the file under the cursor was collapsed by a late reload")
 	}
 }
+
+// loadCursorBelowCollapsed loads the 114-file TypeScript diff with files over
+// 200 changed lines collapsed, and puts the cursor mid-screen in an expanded
+// file that has a collapsed file somewhere above it and plenty of diff below.
+// It returns the collapsed file's path.
+func loadCursorBelowCollapsed(t *testing.T) (*PRDetailModel, string) {
+	t.Helper()
+	m := loadPlacementModelWith(t, difftest.RawDiffs()[1].Raw,
+		DiffLimits{CollapseLines: 200, CollapseLineWidth: 1 << 30, MaxLines: 1 << 30, MaxLineWidth: 1 << 30, RowBudget: 1 << 30})
+	collapsed := ""
+	for i := range m.Diff.Files {
+		f := &m.Diff.Files[i]
+		if collapsed == "" && m.fileCollapsed(i) && !m.fileTooLarge(i) && !isGeneratedPath(f.NewPath) {
+			collapsed = f.NewPath
+			continue
+		}
+		if collapsed != "" && !m.fileCollapsed(i) && !f.IsBinary && len(f.Hunks) > 0 && i < len(m.Diff.Files)-20 {
+			m.setDiffCursor(diffCursorLine{FileIdx: i})
+			m.ContentScroll = m.navigableRows[m.navIdx] - 10
+			m.clampContentScroll()
+			if m.navigableRows[m.navIdx]-m.ContentScroll != 10 {
+				t.Fatalf("fixture: could not place the cursor mid-screen")
+			}
+			return m, collapsed
+		}
+	}
+	t.Fatal("fixture: no collapsed file above an expanded one")
+	return nil, ""
+}
+
+func TestLateThreadsKeepCursorOnScreen(t *testing.T) {
+	t.Parallel()
+	m, collapsed := loadCursorBelowCollapsed(t)
+	cursor := m.diffCursor
+	before := m.navigableRows[m.navIdx] - m.ContentScroll
+	beforeRow := m.navigableRows[m.navIdx]
+	detail := domain.PRPreviewSnapshot{ReviewThreads: []domain.PreviewReviewThread{{Path: collapsed, Line: 1}}}
+	m, _ = m.Update(cmds.PRDetailLoaded{Repo: "owner/repo", Number: 1, Detail: detail})
+	if m.diffCursor != cursor || !m.validDiffCursor() {
+		t.Fatalf("cursor moved to %+v", m.diffCursor)
+	}
+	if m.navigableRows[m.navIdx] == beforeRow {
+		t.Fatalf("fixture: expanding %s did not move the cursor's row", collapsed)
+	}
+	if after := m.navigableRows[m.navIdx] - m.ContentScroll; after != before {
+		t.Fatalf("cursor moved on screen: row offset %d → %d (scroll %d)", before, after, m.ContentScroll)
+	}
+}
+
+func TestLayoutChangeKeepsTopFileWithoutCursor(t *testing.T) {
+	t.Parallel()
+	m := loadCollapseModel(t, nil)
+	m.Width, m.Height = 120, 40
+	m.setFileCollapsed(2, false)
+	m.invalidateDiffCursor()
+	m.ContentScroll = m.rows().fileStart[2] + 100 // 100 rows into big.go
+	m.setFileCollapsed(1, false)                  // expand package-lock.json above it
+	if got, want := m.ContentScroll, m.rows().fileStart[2]+100; got != want {
+		t.Fatalf("scroll = %d, want %d (big.go stays where it was)", got, want)
+	}
+}
+
+func TestLayoutChangeOnOtherTabKeepsDiffScroll(t *testing.T) {
+	t.Parallel()
+	m, collapsed := loadCursorBelowCollapsed(t)
+	before := m.navigableRows[m.navIdx] - m.ContentScroll
+	m.switchTab(TabDescription)
+	descScroll := m.ContentScroll
+	detail := domain.PRPreviewSnapshot{ReviewThreads: []domain.PreviewReviewThread{{Path: collapsed, Line: 1}}}
+	m, _ = m.Update(cmds.PRDetailLoaded{Repo: "owner/repo", Number: 1, Detail: detail})
+	if m.ContentScroll != descScroll {
+		t.Fatalf("description scroll changed %d → %d", descScroll, m.ContentScroll)
+	}
+	m.switchTab(TabDiff)
+	if after := m.navigableRows[m.navIdx] - m.ContentScroll; after != before {
+		t.Fatalf("diff cursor moved on screen: %d → %d", before, after)
+	}
+}
