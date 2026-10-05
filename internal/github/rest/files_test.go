@@ -67,7 +67,7 @@ func TestFetchPRFilesPagesInOrder(t *testing.T) {
 	for _, prefix := range apiPrefixes {
 		for _, withLast := range []bool{true, false} {
 			srv, _ := serveFiles(t, prefix, "/repos/o/r/pulls/7/files", 326, withLast, asList)
-			c := &Client{BaseURL: srv.URL + prefix, Token: "tok"}
+			c := &Client{BaseURL: srv.URL + prefix, Token: "tok", HTTPClient: srv.Client()}
 			files, err := c.FetchPRFiles(context.Background(), "o", "r", 7)
 			if err != nil {
 				t.Fatalf("prefix %q last=%v: %v", prefix, withLast, err)
@@ -87,7 +87,7 @@ func TestFetchPRFilesPagesInOrder(t *testing.T) {
 func TestFetchPRFilesStopsAtGitHubLimit(t *testing.T) {
 	t.Parallel()
 	srv, calls := serveFiles(t, "", "/repos/o/r/pulls/7/files", 4000, true, asList)
-	c := &Client{BaseURL: srv.URL, Token: "tok"}
+	c := &Client{BaseURL: srv.URL, Token: "tok", HTTPClient: srv.Client()}
 	files, err := c.FetchPRFiles(context.Background(), "o", "r", 7)
 	if err != nil {
 		t.Fatal(err)
@@ -103,7 +103,7 @@ func TestFetchCommitFiles(t *testing.T) {
 		srv, _ := serveFiles(t, prefix, "/repos/o/r/commits/abc", 150, true, func(f []ChangedFile) any {
 			return map[string]any{"sha": "abc", "files": f}
 		})
-		c := &Client{BaseURL: srv.URL + prefix, Token: "tok"}
+		c := &Client{BaseURL: srv.URL + prefix, Token: "tok", HTTPClient: srv.Client()}
 		files, err := c.FetchCommitFiles(context.Background(), "o", "r", "abc")
 		if err != nil {
 			t.Fatal(err)
@@ -125,7 +125,7 @@ func TestFetchFilesPageError(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(filesPage(0, 100))
 	}))
 	defer srv.Close()
-	c := &Client{BaseURL: srv.URL, Token: "tok"}
+	c := &Client{BaseURL: srv.URL, Token: "tok", HTTPClient: srv.Client()}
 	if _, err := c.FetchPRFiles(context.Background(), "o", "r", 7); err == nil {
 		t.Fatal("expected an error when a page fails")
 	}
@@ -151,7 +151,7 @@ func TestDiffTooLargeDetection(t *testing.T) {
 				w.WriteHeader(tc.status)
 				_, _ = w.Write([]byte(tc.body))
 			}))
-			c := &Client{BaseURL: srv.URL + prefix, Token: "tok"}
+			c := &Client{BaseURL: srv.URL + prefix, Token: "tok", HTTPClient: srv.Client()}
 			_, prErr := c.FetchRawDiff(context.Background(), "o", "r", 1)
 			_, commitErr := c.FetchCommitDiff(context.Background(), "o", "r", "abc")
 			srv.Close()

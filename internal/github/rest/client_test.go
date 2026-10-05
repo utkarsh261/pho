@@ -41,8 +41,9 @@ func TestFetchRawDiffSuccess(t *testing.T) {
 	defer server.Close()
 
 	client := &Client{
-		BaseURL: server.URL,
-		Token:   "test-token",
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+		Token:      "test-token",
 	}
 
 	diff, err := client.FetchRawDiff(context.Background(), "owner", "repo", 42)
@@ -63,8 +64,9 @@ func TestFetchRawDiffServerError(t *testing.T) {
 	defer server.Close()
 
 	client := &Client{
-		BaseURL: server.URL,
-		Token:   "test-token",
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+		Token:      "test-token",
 	}
 
 	_, err := client.FetchRawDiff(context.Background(), "owner", "repo", 42)
@@ -129,8 +131,9 @@ func TestFetchCommitDiffSuccess(t *testing.T) {
 	defer server.Close()
 
 	client := &Client{
-		BaseURL: server.URL,
-		Token:   "test-token",
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+		Token:      "test-token",
 	}
 
 	diff, err := client.FetchCommitDiff(context.Background(), "owner", "repo", "abc1234")
@@ -151,8 +154,9 @@ func TestFetchCommitDiffNotFound(t *testing.T) {
 	defer server.Close()
 
 	client := &Client{
-		BaseURL: server.URL,
-		Token:   "test-token",
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+		Token:      "test-token",
 	}
 
 	_, err := client.FetchCommitDiff(context.Background(), "owner", "repo", "badsha")
@@ -172,8 +176,9 @@ func TestFetchRawDiffUserAgent(t *testing.T) {
 	defer server.Close()
 
 	client := &Client{
-		BaseURL: server.URL,
-		Token:   "test-token",
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+		Token:      "test-token",
 	}
 	_, err := client.FetchRawDiff(context.Background(), "owner", "repo", 1)
 	if err != nil {
@@ -181,8 +186,9 @@ func TestFetchRawDiffUserAgent(t *testing.T) {
 	}
 }
 
+// Not parallel: it uses http.DefaultClient, whose idle connections any
+// parallel test's httptest.Server.Close() would drop mid-request.
 func TestFetchRawDiffNilHTTPClient(t *testing.T) {
-	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -212,8 +218,9 @@ func TestFetchRawDiffContextCancelled(t *testing.T) {
 	cancel() // Cancel immediately.
 
 	client := &Client{
-		BaseURL: server.URL,
-		Token:   "test-token",
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+		Token:      "test-token",
 	}
 	_, err := client.FetchRawDiff(ctx, "owner", "repo", 1)
 	if err == nil {
@@ -240,8 +247,9 @@ func TestFetchRepoInfoSuccess(t *testing.T) {
 	defer server.Close()
 
 	client := &Client{
-		BaseURL: server.URL,
-		Token:   "test-token",
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+		Token:      "test-token",
 	}
 
 	info, err := client.FetchRepoInfo(context.Background(), "owner", "repo")
@@ -272,8 +280,9 @@ func TestFetchRepoInfoForkWithParent(t *testing.T) {
 	defer server.Close()
 
 	client := &Client{
-		BaseURL: server.URL,
-		Token:   "test-token",
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+		Token:      "test-token",
 	}
 
 	info, err := client.FetchRepoInfo(context.Background(), "fork-owner", "fork-repo")
@@ -300,8 +309,9 @@ func TestFetchRepoInfoServerError(t *testing.T) {
 	defer server.Close()
 
 	client := &Client{
-		BaseURL: server.URL,
-		Token:   "test-token",
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+		Token:      "test-token",
 	}
 
 	_, err := client.FetchRepoInfo(context.Background(), "owner", "nonexistent")
@@ -344,8 +354,9 @@ func TestCreatePullRequestSuccess(t *testing.T) {
 	defer server.Close()
 
 	client := &Client{
-		BaseURL: server.URL,
-		Token:   "test-token",
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+		Token:      "test-token",
 	}
 
 	params := domain.CreatePRParams{
@@ -401,8 +412,9 @@ func TestCreatePullRequestDraft(t *testing.T) {
 	defer server.Close()
 
 	client := &Client{
-		BaseURL: server.URL,
-		Token:   "test-token",
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+		Token:      "test-token",
 	}
 
 	params := domain.CreatePRParams{
@@ -442,8 +454,9 @@ func TestCreatePullRequestEmptyBody(t *testing.T) {
 	defer server.Close()
 
 	client := &Client{
-		BaseURL: server.URL,
-		Token:   "test-token",
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+		Token:      "test-token",
 	}
 
 	params := domain.CreatePRParams{
@@ -470,8 +483,9 @@ func TestCreatePullRequestValidationError(t *testing.T) {
 	defer server.Close()
 
 	client := &Client{
-		BaseURL: server.URL,
-		Token:   "test-token",
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+		Token:      "test-token",
 	}
 
 	params := domain.CreatePRParams{
@@ -495,8 +509,9 @@ func TestCreatePullRequestServerError(t *testing.T) {
 	defer server.Close()
 
 	client := &Client{
-		BaseURL: server.URL,
-		Token:   "test-token",
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+		Token:      "test-token",
 	}
 
 	params := domain.CreatePRParams{
@@ -591,7 +606,7 @@ func TestUpdateBranchSuccess202(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := &Client{BaseURL: server.URL, Token: "test-token"}
+	client := &Client{BaseURL: server.URL, Token: "test-token", HTTPClient: server.Client()}
 	err := client.UpdateBranch(context.Background(), "owner", "repo", 42, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -628,7 +643,7 @@ func TestUpdateBranchWithExpectedHeadSHA(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := &Client{BaseURL: server.URL, Token: "test-token"}
+	client := &Client{BaseURL: server.URL, Token: "test-token", HTTPClient: server.Client()}
 	err := client.UpdateBranch(context.Background(), "owner", "repo", 42, "6dcb09b5b57875f334f61aebed695e2e4193db5e")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -659,7 +674,7 @@ func TestUpdateBranchEmptyBodyWhenNoExpectedSHA(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := &Client{BaseURL: server.URL, Token: "test-token"}
+	client := &Client{BaseURL: server.URL, Token: "test-token", HTTPClient: server.Client()}
 	if err := client.UpdateBranch(context.Background(), "owner", "repo", 42, ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -683,7 +698,7 @@ func TestUpdateBranchNon202ReturnsError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := &Client{BaseURL: server.URL, Token: "test-token"}
+	client := &Client{BaseURL: server.URL, Token: "test-token", HTTPClient: server.Client()}
 	err := client.UpdateBranch(context.Background(), "owner", "repo", 42, "")
 	if err == nil {
 		t.Fatal("expected error for 422 response")
@@ -704,7 +719,7 @@ func TestUpdateBranchNetworkError(t *testing.T) {
 	// Close before sending the request.
 	server.Close()
 
-	client := &Client{BaseURL: server.URL, Token: "test-token"}
+	client := &Client{BaseURL: server.URL, Token: "test-token", HTTPClient: server.Client()}
 	err := client.UpdateBranch(context.Background(), "owner", "repo", 42, "")
 	if err == nil {
 		t.Fatal("expected error for closed server")
@@ -724,7 +739,7 @@ func TestUpdateBranchCtxCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	client := &Client{BaseURL: server.URL, Token: "test-token"}
+	client := &Client{BaseURL: server.URL, Token: "test-token", HTTPClient: server.Client()}
 	err := client.UpdateBranch(ctx, "owner", "repo", 42, "")
 	if err == nil {
 		t.Fatal("expected error for cancelled context")
