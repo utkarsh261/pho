@@ -29,3 +29,5 @@ coverage.html
 # Temporary files
 *.tmp
 *.log
+demo/.work/
+demo/out/
