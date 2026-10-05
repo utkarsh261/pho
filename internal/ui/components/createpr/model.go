@@ -32,6 +32,8 @@ type Model struct {
 	status   overlayStatus
 	errMsg   string
 	theme    *theme.Theme
+	compact  bool        // fields separated by one newline instead of a blank line
+	fields   []huh.Field // the form's fields, measured to fit the panel
 	width    int
 	height   int
 
@@ -61,6 +63,8 @@ func (m *Model) Open(repo domain.Repository) {
 	m.status = overlayStatusLoading
 	m.errMsg = ""
 	m.form = nil
+	m.fields = nil
+	m.compact = false
 	m.formData = cmds.CreatePRFormData{}
 	m.baseBranches = nil
 	m.headBranches = nil
@@ -134,7 +138,7 @@ func (m *Model) buildForm() *huh.Form {
 		editorCmd = ed
 	}
 
-	group := huh.NewGroup(
+	m.fields = []huh.Field{
 		huh.NewSelect[string]().
 			Key("base").
 			Title("Base branch").
@@ -151,7 +155,7 @@ func (m *Model) buildForm() *huh.Form {
 
 		huh.NewConfirm().
 			Key("draft").
-			Title("Draft PR?").
+			Title("Draft  ").
 			Affirmative("Yes").
 			Negative("No").
 			Inline(true).
@@ -160,21 +164,23 @@ func (m *Model) buildForm() *huh.Form {
 		huh.NewInput().
 			Key("title").
 			Title("Title").
+			Prompt("› ").
 			Validate(huh.ValidateNotEmpty()).
 			Value(&title),
 
 		huh.NewText().
 			Key("body").
 			Title("Body").
-			Description("Alt+Enter: newline  Ctrl+E: $EDITOR").
+			Description("Enter: newline · Ctrl+E: open $EDITOR").
+			Placeholder("Describe the change (optional)").
 			Lines(4).
 			Value(&body).
 			Editor(editorCmd),
 
-		&submitButton{},
-	)
+		&submitButton{draft: &draft},
+	}
 
-	form := huh.NewForm(group).WithKeyMap(km)
+	form := huh.NewForm(huh.NewGroup(m.fields...)).WithKeyMap(km)
 	// When the submit button (last field) emits NextField the form will
 	// reach the last group and call SubmitCmd. We convert that into our
 	// SubmitMsg so the app model can handle validation and API submission.
@@ -304,6 +310,44 @@ func (m *Model) PanelView(contentW, contentH int) string {
 	return m.renderContent(contentW, contentH, false)
 }
 
+// fitFormToPanel sizes the form to the rows left under the panel header.
+// The fields are spaced out when they fit, packed without blank lines when
+// they don't, and the form scrolls to the focused field if even that is too
+// tall. huh fixes a form's height when it is built, so it is reset here on
+// every render to follow the panel size and wrapped field content.
+func (m *Model) fitFormToPanel(avail int) {
+	avail = max(avail, 1)
+	m.setCompact(m.formHeight(false) > avail)
+	m.form.WithHeight(min(m.formHeight(m.compact), avail))
+	// huh rebuilds the visible form only on Update, so nudge it to pick up
+	// the new layout in this frame rather than after the next key press.
+	m.form.Update(relayoutMsg{})
+}
+
+// relayoutMsg is a no-op message that makes the form rebuild its view.
+type relayoutMsg struct{}
+
+// formHeight is the height of the form's fields laid out spaced or compact.
+func (m *Model) formHeight(compact bool) int {
+	h := 0
+	for i, f := range m.fields {
+		if i > 0 && !compact {
+			h++ // the blank line between fields
+		}
+		h += lipgloss.Height(f.View())
+	}
+	return h
+}
+
+// setCompact switches the form between spaced and compact field layout.
+func (m *Model) setCompact(compact bool) {
+	if m.form == nil || m.theme == nil || m.compact == compact {
+		return
+	}
+	m.compact = compact
+	m.form.WithTheme(m.toHuhTheme())
+}
+
 func (m *Model) renderContent(maxW, maxH int, withBorder bool) string {
 	th := m.theme
 	if th == nil {
@@ -342,17 +386,33 @@ func (m *Model) renderContent(maxW, maxH int, withBorder bool) string {
 		m.form.WithShowHelp(withBorder)
 	}
 
+	errLine := ""
+	if m.status == overlayStatusError {
+		errW := maxW - 2
+		if withBorder {
+			errW = boxW - 10 // inside the box's border and padding
+		}
+		errLine = lipgloss.NewStyle().Foreground(th.Error).Width(max(errW, 10)).Render("✗ " + m.errMsg)
+	}
+	if m.form != nil && !withBorder && m.status != overlayStatusLoading && m.status != overlayStatusSubmitting {
+		avail := maxH - len(m.panelHeader(maxW, th)) - 1
+		if errLine != "" {
+			avail -= lipgloss.Height(errLine) + 1
+		}
+		m.fitFormToPanel(avail)
+	}
+
 	var content string
 	switch m.status {
 	case overlayStatusLoading:
-		content = th.MutedTxt.Render("Loading repository info…")
+		content = lipgloss.NewStyle().Foreground(th.TextDim).Render("Loading repository info…")
 	case overlayStatusSubmitting:
-		content = th.MutedTxt.Render("Creating pull request…")
+		content = lipgloss.NewStyle().Foreground(th.TextDim).Render("Creating pull request…")
 	case overlayStatusError:
 		if m.form != nil {
-			content = m.form.View() + "\n" + th.ReviewChanges.Render("✗ "+m.errMsg)
+			content = m.form.View() + "\n\n" + errLine
 		} else {
-			content = th.ReviewChanges.Render("✗ " + m.errMsg)
+			content = errLine
 		}
 	default:
 		if m.form != nil {
@@ -381,43 +441,33 @@ func (m *Model) renderPanelContent(content string, width int, th *theme.Theme) s
 		return content
 	}
 
-	headerText := "▸ Create PR"
-	header := fitWidth(headerText, width)
-	if th != nil {
-		header = th.Header.Width(width).Render(headerText)
+	lines := append(m.panelHeader(width, th), "")
+	for _, l := range strings.Split(content, "\n") {
+		lines = append(lines, fitWidth(l, width))
 	}
-
-	lines := []string{header}
-	if meta := m.panelContextLine(); meta != "" {
-		if th != nil {
-			meta = th.MutedTxt.Render(meta)
-		}
-		lines = append(lines, fitWidth(meta, width))
-	}
-
-	lines = append(lines, "")
-	lines = append(lines, strings.Split(content, "\n")...)
-	lines = append(lines, "")
-
-	footer := m.footerHint()
-	if th != nil {
-		footer = th.MutedTxt.Render(footer)
-	}
-	lines = append(lines, fitWidth(footer, width))
 	return strings.Join(lines, "\n")
 }
 
-func (m *Model) panelContextLine() string {
-	repo := strings.TrimSpace(m.repo.FullName)
-	if repo == "" {
-		repo = strings.TrimSpace(m.formData.Repo.FullName)
+// panelHeader is the title, the route line and, when needed, the unpushed
+// branch warning.
+func (m *Model) panelHeader(width int, th *theme.Theme) []string {
+	lines := []string{fitWidth(th.Header.Render("Create pull request"), width)}
+	if route := m.routeLine(th); route != "" {
+		lines = append(lines, fitWidth(route, width))
 	}
-	if m.formData.IsFork && m.formData.ParentFullName != "" && repo != "" {
-		repo += " → " + m.formData.ParentFullName
+	if warn := m.unpushedWarning(); warn != "" {
+		for _, l := range strings.Split(lipgloss.NewStyle().Width(width).Render(warn), "\n") {
+			lines = append(lines, fitWidth(lipgloss.NewStyle().Foreground(th.Warning).Render(l), width))
+		}
 	}
+	return lines
+}
 
-	head := strings.TrimSpace(m.formData.CurrentBranch)
-	base := strings.TrimSpace(m.formData.DefaultBase)
+// selectedBranches returns the head and base branches, as currently chosen
+// in the form, falling back to the preflight defaults.
+func (m *Model) selectedBranches() (head, base string) {
+	head = strings.TrimSpace(m.formData.CurrentBranch)
+	base = strings.TrimSpace(m.formData.DefaultBase)
 	if m.form != nil {
 		if v := strings.TrimSpace(m.form.GetString("head")); v != "" {
 			head = v
@@ -426,33 +476,59 @@ func (m *Model) panelContextLine() string {
 			base = v
 		}
 	}
-
-	route := ""
-	if head != "" && base != "" {
-		route = head + " → " + base
-	} else if head != "" {
-		route = head
-	} else if base != "" {
-		route = "base " + base
-	}
-
-	switch {
-	case repo != "" && route != "":
-		return repo + "  •  " + route
-	case repo != "":
-		return repo
-	default:
-		return route
-	}
+	return head, base
 }
 
-func (m *Model) footerHint() string {
-	switch m.status {
-	case overlayStatusLoading, overlayStatusSubmitting:
-		return "Esc: Cancel"
-	default:
-		return "Tab: Next field   ←/→: Change option   Ctrl+S: Create PR   Esc: Cancel"
+// routeLine shows where the PR goes: "head → base · owner/repo", with the
+// branches emphasised.
+func (m *Model) routeLine(th *theme.Theme) string {
+	head, base := m.selectedBranches()
+	dim := lipgloss.NewStyle().Foreground(th.TextDim)
+	faint := lipgloss.NewStyle().Foreground(th.Faint)
+
+	var parts []string
+	switch {
+	case head != "" && base != "":
+		parts = append(parts, lipgloss.NewStyle().Foreground(th.AccentText).Bold(true).Render(head)+
+			faint.Render(" → ")+lipgloss.NewStyle().Foreground(th.Text).Bold(true).Render(base))
+	case head != "":
+		parts = append(parts, lipgloss.NewStyle().Foreground(th.AccentText).Bold(true).Render(head))
 	}
+	if repo := m.targetRepo(); repo != "" {
+		parts = append(parts, dim.Render(repo))
+	}
+	return strings.Join(parts, faint.Render("  ·  "))
+}
+
+// targetRepo is the repo the PR is opened against (the upstream for a fork).
+func (m *Model) targetRepo() string {
+	repo := strings.TrimSpace(m.repo.FullName)
+	if repo == "" {
+		repo = strings.TrimSpace(m.formData.Repo.FullName)
+	}
+	if m.formData.IsFork && m.formData.ParentFullName != "" && repo != "" {
+		repo += " → " + m.formData.ParentFullName
+	}
+	return repo
+}
+
+// unpushedWarning warns, before the user fills in the form, when the
+// selected head branch is not on origin, which Submit would reject. It sits
+// under the route line, which names the branch.
+func (m *Model) unpushedWarning() string {
+	if m.repo.LocalPath == "" || m.status == overlayStatusLoading || m.form == nil {
+		return ""
+	}
+	head, _ := m.selectedBranches()
+	if head == "" {
+		return ""
+	}
+	for _, b := range m.formData.RemoteBranches {
+		if b == "origin/"+head {
+			return ""
+		}
+	}
+	return "▲ Not on origin yet — run git push -u origin " + head
 }
 
 // ViewOver composites the overlay onto the background.
@@ -502,39 +578,57 @@ func (m *Model) toHuhTheme() *huh.Theme {
 	if th == nil {
 		th = theme.Default()
 	}
-	// Start from huh's base theme and override colors.
+	fg := func(c lipgloss.Color) lipgloss.Style { return lipgloss.NewStyle().Foreground(c) }
+
+	// Start from huh's base theme: the focused field carries a thick left
+	// bar, blurred fields a hidden one so nothing shifts as focus moves.
 	ht := huh.ThemeBase()
-	ht.Focused.Base = ht.Focused.Base.BorderForeground(th.Border)
-
-	// Add breathing room between fields.
+	ht.Focused.Base = ht.Focused.Base.BorderForeground(th.Primary)
+	ht.Blurred.Base = ht.Focused.Base.BorderStyle(lipgloss.HiddenBorder())
 	ht.FieldSeparator = lipgloss.NewStyle().SetString("\n\n")
+	if m.compact {
+		ht.FieldSeparator = lipgloss.NewStyle().SetString("\n")
+	}
 
-	// Make field titles bold and more prominent.
-	ht.Focused.Title = lipgloss.NewStyle().Foreground(th.Primary).Bold(true)
-	ht.Blurred.Title = lipgloss.NewStyle().Foreground(th.Secondary).Bold(true)
-	ht.Group.Title = lipgloss.NewStyle().Foreground(th.Primary).Bold(true)
-	ht.Group.Description = lipgloss.NewStyle().Foreground(th.Muted)
+	ht.Focused.Title = fg(th.AccentText).Bold(true)
+	ht.Blurred.Title = fg(th.TextDim)
+	ht.Group.Title = fg(th.Text).Bold(true)
+	ht.Group.Description = fg(th.TextDim)
+	ht.Focused.Description = fg(th.Faint)
+	ht.Blurred.Description = fg(th.Faint)
 
-	ht.Focused.Description = lipgloss.NewStyle().Foreground(th.MutedTxt.GetForeground())
-	ht.Blurred.Description = lipgloss.NewStyle().Foreground(th.MutedTxt.GetForeground())
-	ht.Focused.TextInput.Prompt = lipgloss.NewStyle().Foreground(th.PrimaryTxt.GetForeground())
-	ht.Focused.TextInput.Text = lipgloss.NewStyle().Foreground(th.PrimaryTxt.GetForeground())
-	ht.Blurred.TextInput.Prompt = lipgloss.NewStyle().Foreground(th.MutedTxt.GetForeground())
-	ht.Blurred.TextInput.Text = lipgloss.NewStyle().Foreground(th.PrimaryTxt.GetForeground())
-	ht.Focused.SelectSelector = lipgloss.NewStyle().Foreground(th.CISuccess.GetForeground())
-	ht.Focused.SelectedOption = lipgloss.NewStyle().Foreground(th.PrimaryTxt.GetForeground())
-	ht.Focused.UnselectedOption = lipgloss.NewStyle().Foreground(th.MutedTxt.GetForeground())
-	ht.Blurred.SelectSelector = lipgloss.NewStyle().Foreground(th.MutedTxt.GetForeground())
-	ht.Blurred.SelectedOption = lipgloss.NewStyle().Foreground(th.PrimaryTxt.GetForeground())
-	ht.Blurred.UnselectedOption = lipgloss.NewStyle().Foreground(th.MutedTxt.GetForeground())
-	ht.Focused.FocusedButton = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Background(th.Primary).Bold(true).Padding(0, 1)
-	ht.Focused.BlurredButton = lipgloss.NewStyle().Foreground(th.MutedTxt.GetForeground()).Padding(0, 1)
-	ht.Blurred.FocusedButton = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Background(th.Primary).Bold(true).Padding(0, 1)
-	ht.Blurred.BlurredButton = lipgloss.NewStyle().Foreground(th.MutedTxt.GetForeground()).Padding(0, 1)
-	ht.Focused.ErrorIndicator = lipgloss.NewStyle().Foreground(th.ReviewChanges.GetForeground())
-	ht.Focused.ErrorMessage = lipgloss.NewStyle().Foreground(th.ReviewChanges.GetForeground())
-	ht.Blurred.ErrorIndicator = lipgloss.NewStyle().Foreground(th.ReviewChanges.GetForeground())
-	ht.Blurred.ErrorMessage = lipgloss.NewStyle().Foreground(th.ReviewChanges.GetForeground())
+	ht.Focused.TextInput.Prompt = fg(th.AccentText)
+	ht.Blurred.TextInput.Prompt = fg(th.Faint)
+	ht.Focused.TextInput.Text = fg(th.TextBright)
+	ht.Blurred.TextInput.Text = fg(th.Text)
+	ht.Focused.TextInput.Placeholder = fg(th.Faint)
+	ht.Blurred.TextInput.Placeholder = fg(th.Faint)
+	ht.Focused.TextInput.Cursor = fg(th.AccentText)
+
+	// Inline selects: "‹ main ›", arrows only while focused.
+	ht.Focused.PrevIndicator = fg(th.Faint).MarginRight(1).SetString("‹")
+	ht.Focused.NextIndicator = fg(th.Faint).MarginLeft(1).SetString("›")
+	ht.Blurred.PrevIndicator = lipgloss.NewStyle()
+	ht.Blurred.NextIndicator = lipgloss.NewStyle()
+	ht.Focused.SelectSelector = fg(th.AccentText)
+	ht.Focused.SelectedOption = fg(th.TextBright).Bold(true)
+	ht.Focused.UnselectedOption = fg(th.TextDim)
+	ht.Blurred.SelectSelector = fg(th.Faint)
+	ht.Blurred.SelectedOption = fg(th.Text)
+	ht.Blurred.UnselectedOption = fg(th.TextDim)
+
+	// Confirm (Draft) renders as a segmented Yes/No toggle; the chosen side
+	// is filled. The submit button reuses FocusedButton/BlurredButton.
+	seg := lipgloss.NewStyle().Padding(0, 1)
+	ht.Focused.FocusedButton = seg.Foreground(th.TextBright).Background(th.Primary).Bold(true)
+	ht.Focused.BlurredButton = seg.Foreground(th.TextDim).Background(th.Highlight)
+	ht.Blurred.FocusedButton = seg.Foreground(th.Text).Background(th.Selection)
+	ht.Blurred.BlurredButton = seg.Foreground(th.Faint).Background(th.Highlight)
+
+	ht.Focused.ErrorIndicator = fg(th.Error).SetString(" *")
+	ht.Focused.ErrorMessage = fg(th.Error)
+	ht.Blurred.ErrorIndicator = fg(th.Error).SetString(" *")
+	ht.Blurred.ErrorMessage = fg(th.Error)
 	return ht
 }
 

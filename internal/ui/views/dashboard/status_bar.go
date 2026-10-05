@@ -168,7 +168,7 @@ func (m *StatusBarModel) hintText() string {
 	case domain.FocusPreviewPanel:
 		return "j/k: Scroll | Enter: Open | Tab: Next panel | ?: Keymap"
 	case domain.FocusCmdPalette:
-		return "Esc: Close | Enter: Run"
+		return "↑/↓: Select | Enter: Open | Esc: Close"
 	default:
 		return "Tab: Next panel | ?: Keymap"
 	}

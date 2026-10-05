@@ -104,22 +104,15 @@ type Theme struct {
 	StatusSep     lipgloss.Style // border colour
 
 	// ── overlay / command palette ──────────────────────────────────
-	BoxBorder   lipgloss.Style // centred box with primary border + dark bg
-	BoxTitle    lipgloss.Style // bold overlay title
-	BoxQuery    lipgloss.Style // near-white query text
-	BoxCursor   lipgloss.Style // primary cursor marker
-	BoxSelected lipgloss.Style // tinted full-row highlight for the selected result
-	BoxNormal   lipgloss.Style // readable light text for unselected rows
-	BoxFooter   lipgloss.Style // muted, faint
-	BoxDiv      lipgloss.Style // border colour divider
+	BoxBorder lipgloss.Style // centred box with primary border + dark bg
+	BoxTitle  lipgloss.Style // bold overlay title
+	BoxNormal lipgloss.Style // readable light text for unselected rows
+	BoxFooter lipgloss.Style // muted, faint
+	BoxDiv    lipgloss.Style // border colour divider
 
-	// PR result part styles (per-column on unselected rows)
-	BoxGlyphOpen   lipgloss.Style // violet  — open PR
-	BoxGlyphMerged lipgloss.Style // emerald — merged PR
-	BoxGlyphClosed lipgloss.Style // muted   — closed PR
-	BoxGlyphDraft  lipgloss.Style // border  — draft PR
-	BoxPRNum       lipgloss.Style // cyan + bold for #1234
-	BoxPRAuthor    lipgloss.Style // muted for @author
+	// PR number and author styles (commits tab)
+	BoxPRNum    lipgloss.Style // cyan + bold for #1234
+	BoxPRAuthor lipgloss.Style // muted for @author
 
 	// Keymap overlay styles
 	Keycap       lipgloss.Style // subtle bg + secondary fg key badge
@@ -278,17 +271,6 @@ func Default() *Theme {
 		Bold(true).
 		Padding(0, 1)
 
-	t.BoxQuery = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#F8FAFC"))
-
-	t.BoxCursor = lipgloss.NewStyle().
-		Foreground(t.Primary)
-
-	t.BoxSelected = lipgloss.NewStyle().
-		Background(t.Highlight).
-		Foreground(lipgloss.Color("#FFFFFF")).
-		Bold(true)
-
 	t.BoxNormal = lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#CBD5E1"))
 
@@ -299,10 +281,6 @@ func Default() *Theme {
 	t.BoxDiv = lipgloss.NewStyle().
 		Foreground(t.Border)
 
-	t.BoxGlyphOpen = lipgloss.NewStyle().Foreground(t.Primary)
-	t.BoxGlyphMerged = lipgloss.NewStyle().Foreground(t.Success)
-	t.BoxGlyphClosed = lipgloss.NewStyle().Foreground(t.Muted)
-	t.BoxGlyphDraft = lipgloss.NewStyle().Foreground(t.Border)
 	t.BoxPRNum = lipgloss.NewStyle().Foreground(t.Secondary).Bold(true)
 	t.BoxPRAuthor = lipgloss.NewStyle().Foreground(t.Muted)
 

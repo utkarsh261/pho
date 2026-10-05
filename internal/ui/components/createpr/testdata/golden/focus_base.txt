@@ -6,19 +6,19 @@
               │    Head branch                                   │              
               │    feature                                       │              
               │                                                  │              
-              │    Draft PR? Yes  No                             │              
+              │    Draft   Yes  No                               │              
               │                                                  │              
               │    Title                                         │              
-              │    > Add feature                                 │              
+              │    › Add feature                                 │              
               │                                                  │              
               │    Body                                          │              
-              │    Alt+Enter: newline  Ctrl+E: $EDITOR           │              
+              │    Enter: newline · Ctrl+E: open $EDITOR         │              
+              │    Describe the change (optional)                │              
               │                                                  │              
               │                                                  │              
               │                                                  │              
               │                                                  │              
-              │                                                  │              
-              │   Create PR                                      │              
+              │      Create pull request    Ctrl+S               │              
               │                                                  │              
               │  shift+tab back • enter submit                   │              
               │                                                  │              

@@ -12,6 +12,7 @@ import (
 // submitButton is a custom huh field that renders a "Create PR" button and
 // advances the form when Enter or Tab is pressed.
 type submitButton struct {
+	draft   *bool // the form's Draft value; changes the label
 	focused bool
 	width   int
 	height  int
@@ -55,17 +56,23 @@ func (s *submitButton) View() string {
 	if th == nil {
 		th = huh.ThemeBase()
 	}
-	label := "Create PR"
-	var button string
+	label := "Create pull request"
+	if s.draft != nil && *s.draft {
+		label = "Create draft pull request"
+	}
+	// Unfocused, the button keeps a filled look so it doesn't read as
+	// disabled.
+	style := th.Blurred.FocusedButton
 	if s.focused {
-		button = th.Focused.FocusedButton.Render(label)
-	} else {
-		button = th.Blurred.BlurredButton.Render(label)
+		style = th.Focused.FocusedButton
 	}
-	if s.width > 0 {
-		return lipgloss.PlaceHorizontal(s.width, lipgloss.Center, button)
+	// Indent to line up with the other fields' content (bar + padding).
+	button := "  " + style.Padding(0, 2).Render(label)
+	hint := th.Focused.Description.Render("  Ctrl+S")
+	if s.width > 0 && lipgloss.Width(button+hint) > s.width {
+		return button
 	}
-	return button
+	return button + hint
 }
 
 func (s *submitButton) KeyBinds() []key.Binding {

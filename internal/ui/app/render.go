@@ -9,13 +9,7 @@ import (
 )
 
 func (m *Model) renderDashboard() string {
-	if m.layout.Current.Width <= 0 || m.layout.Current.Height <= 0 {
-		return ""
-	}
-
-	bodyH := m.bodyHeight()
-	body := m.composeBody(bodyH)
-	status := m.status.View()
+	body, status := m.renderDashboardParts()
 	if strings.TrimSpace(body) == "" {
 		return status
 	}
@@ -23,6 +17,14 @@ func (m *Model) renderDashboard() string {
 		return body
 	}
 	return body + "\n" + status
+}
+
+// renderDashboardParts renders the dashboard body and status bar separately.
+func (m *Model) renderDashboardParts() (body, status string) {
+	if m.layout.Current.Width <= 0 || m.layout.Current.Height <= 0 {
+		return "", ""
+	}
+	return m.composeBody(m.bodyHeight()), m.status.View()
 }
 
 func (m *Model) composeBody(height int) string {
