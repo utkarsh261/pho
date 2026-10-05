@@ -1,0 +1,40 @@
+file	0	new/name.go	old=old/name.go	status=renamed	binary=false	+0	-0
+file	1	pkg/renamed_edit2.go	old=pkg/renamed_edit.go	status=renamed	binary=false	+1	-1
+1	0	0	pkg/renamed_edit2.go	context	1	1	RIGHT	1
+1	0	1	pkg/renamed_edit2.go	context	2	2	RIGHT	2
+1	0	2	pkg/renamed_edit2.go	deletion	3	-	LEFT	3
+1	0	3	pkg/renamed_edit2.go	addition	-	3	RIGHT	3
+1	0	4	pkg/renamed_edit2.go	context	4	4	RIGHT	4
+file	2	added.txt	old=added.txt	status=added	binary=false	+3	-0
+2	0	0	added.txt	addition	-	1	RIGHT	1
+2	0	1	added.txt	addition	-	2	RIGHT	2
+2	0	2	added.txt	addition	-	3	RIGHT	3
+file	3	removed.txt	old=removed.txt	status=removed	binary=false	+0	-2
+3	0	0	removed.txt	deletion	1	-	LEFT	1
+3	0	1	removed.txt	deletion	2	-	LEFT	2
+file	4	nonewline.txt	old=nonewline.txt	status=modified	binary=false	+1	-1
+4	0	0	nonewline.txt	context	1	1	RIGHT	1
+4	0	1	nonewline.txt	deletion	2	-	LEFT	2
+4	0	2	nonewline.txt	addition	-	2	RIGHT	2
+file	5	img.png	old=img.png	status=modified	binary=true	+0	-0
+file	6	script.sh	old=script.sh	status=modified	binary=false	+0	-0
+file	7	multi.go	old=multi.go	status=modified	binary=false	+3	-2
+7	0	0	multi.go	context	10	10	RIGHT	10
+7	0	1	multi.go	context	11	11	RIGHT	11
+7	0	2	multi.go	context	12	12	RIGHT	12
+7	0	3	multi.go	deletion	13	-	LEFT	13
+7	0	4	multi.go	addition	-	13	RIGHT	13
+7	0	5	multi.go	addition	-	14	RIGHT	14
+7	0	6	multi.go	context	14	15	RIGHT	15
+7	0	7	multi.go	context	15	16	RIGHT	16
+7	0	8	multi.go	context	16	17	RIGHT	17
+7	1	0	multi.go	context	50	51	RIGHT	51
+7	1	1	multi.go	deletion	51	-	LEFT	51
+7	1	2	multi.go	addition	-	52	RIGHT	52
+7	1	3	multi.go	context	52	53	RIGHT	53
+file	8	win.txt	old=win.txt	status=modified	binary=false	+1	-1
+8	0	0	win.txt	context	1	1	RIGHT	1
+8	0	1	win.txt	deletion	2	-	LEFT	2
+8	0	2	win.txt	addition	-	2	RIGHT	2
+8	0	3	win.txt	context	3	3	RIGHT	3
+8	0	4	win.txt	context	4	4	RIGHT	4
