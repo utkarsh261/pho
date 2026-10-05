@@ -209,8 +209,8 @@ type PRDetailModel struct {
 	wordDiffsFor *model.DiffModel
 
 	// Diff indices (rebuilt when Diff changes)
-	diffLineIndex   map[string]map[int]string            // path → line → raw text
-	diffAnchorIndex map[string]map[int]map[string][3]int // path → line → side → {fileIdx, hunkIdx, lineIdx}
+	diffAnchors    map[lineKey]lineAnchors // path:line → positions per side; built lazily
+	diffAnchorsFor *model.DiffModel        // the diff diffAnchors was built from
 
 	// Comment entries cache (invalidated when Detail or drafts change)
 	cachedCommentEntries []commentEntry
@@ -338,8 +338,7 @@ func (m *PRDetailModel) reloadHeadDependentState(headSHA string) tea.Cmd {
 	m.invalidateDiffCursor()
 	m.fileViews, m.viewsFor, m.collapseTouched = nil, nil, false
 	m.visual.Active = false
-	m.diffLineIndex = nil
-	m.diffAnchorIndex = nil
+	m.diffAnchors, m.diffAnchorsFor = nil, nil
 	m.searchIndex = nil
 	m.refreshSearchMatches()
 	m.commits = nil
