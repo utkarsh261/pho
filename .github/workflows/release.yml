@@ -25,8 +25,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # The formula builds from source, so the binary never gets macOS's
-  # quarantine flag and needs no signing or post-install hooks.
+  # Same approach as most third-party taps (e.g. litestream): a formula
+  # that installs the prebuilt binary. Homebrew only quarantines cask
+  # downloads, so this needs no signing or post-install hooks.
   homebrew:
     needs: release
     if: ${{ !contains(github.ref_name, '-') }}
@@ -40,22 +41,44 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
         run: |
-          url="https://github.com/utkarsh261/pho/archive/refs/tags/${TAG}.tar.gz"
-          sha=$(curl -fsSL "$url" | sha256sum | cut -d' ' -f1)
+          version="${TAG#v}"
+          base="https://github.com/utkarsh261/pho/releases/download/${TAG}"
+          sums=$(curl -fsSL "${base}/checksums.txt")
+          sha() { echo "$sums" | grep " pho_${version}_$1.tar.gz$" | cut -d' ' -f1; }
           mkdir -p Formula
           cat > Formula/pho.rb <<RUBY
           class Pho < Formula
             desc "TUI for GitHub pull requests"
             homepage "https://github.com/utkarsh261/pho"
-            url "${url}"
-            sha256 "${sha}"
+            version "${version}"
             license "GPL-3.0-or-later"
 
-            depends_on "go" => :build
             depends_on "gh"
 
+            on_macos do
+              on_arm do
+                url "${base}/pho_${version}_macOS_arm64.tar.gz"
+                sha256 "$(sha macOS_arm64)"
+              end
+              on_intel do
+                url "${base}/pho_${version}_macOS_amd64.tar.gz"
+                sha256 "$(sha macOS_amd64)"
+              end
+            end
+
+            on_linux do
+              on_arm do
+                url "${base}/pho_${version}_linux_arm64.tar.gz"
+                sha256 "$(sha linux_arm64)"
+              end
+              on_intel do
+                url "${base}/pho_${version}_linux_amd64.tar.gz"
+                sha256 "$(sha linux_amd64)"
+              end
+            end
+
             def install
-              system "go", "build", *std_go_args(ldflags: "-s -w -X main.version=#{version}"), "./cmd/pho"
+              bin.install "pho"
             end
 
             test do
@@ -63,6 +86,10 @@ jobs:
             end
           end
           RUBY
+          if grep -q 'sha256 ""' Formula/pho.rb; then
+            echo "missing checksum in checksums.txt" >&2
+            exit 1
+          fi
           git rm -q --ignore-unmatch Casks/pho.rb
           git add Formula/pho.rb
           git -c user.name=github-actions -c user.email=github-actions@users.noreply.github.com \
