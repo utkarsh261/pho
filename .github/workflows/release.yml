@@ -24,4 +24,47 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+  # The formula builds from source, so the binary never gets macOS's
+  # quarantine flag and needs no signing or post-install hooks.
+  homebrew:
+    needs: release
+    if: ${{ !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: utkarsh261/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      - name: Update Formula/pho.rb
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          url="https://github.com/utkarsh261/pho/archive/refs/tags/${TAG}.tar.gz"
+          sha=$(curl -fsSL "$url" | sha256sum | cut -d' ' -f1)
+          mkdir -p Formula
+          cat > Formula/pho.rb <<RUBY
+          class Pho < Formula
+            desc "TUI for GitHub pull requests"
+            homepage "https://github.com/utkarsh261/pho"
+            url "${url}"
+            sha256 "${sha}"
+            license "GPL-3.0-or-later"
+
+            depends_on "go" => :build
+            depends_on "gh"
+
+            def install
+              system "go", "build", *std_go_args(ldflags: "-s -w -X main.version=#{version}"), "./cmd/pho"
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/pho --version")
+            end
+          end
+          RUBY
+          git rm -q --ignore-unmatch Casks/pho.rb
+          git add Formula/pho.rb
+          git -c user.name=github-actions -c user.email=github-actions@users.noreply.github.com \
+            commit -m "pho ${TAG}" || exit 0
+          git push
