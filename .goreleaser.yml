@@ -20,10 +20,7 @@ builds:
       - -trimpath
 
 archives:
-  - name_template: >-
-      {{ .ProjectName }}_{{ .Version }}_
-      {{- if eq .Os "darwin" }}macOS{{ else }}{{ .Os }}{{ end }}_
-      {{ .Arch }}
+  - name_template: '{{ .ProjectName }}_{{ .Version }}_{{ if eq .Os "darwin" }}macOS{{ else }}{{ .Os }}{{ end }}_{{ .Arch }}'
     format_overrides:
       - goos: windows
         formats: [zip]
@@ -45,3 +42,29 @@ release:
     owner: utkarsh261
     name: pho
   prerelease: auto
+
+homebrew_casks:
+  - name: pho
+    repository:
+      owner: utkarsh261
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Casks
+    homepage: https://github.com/utkarsh261/pho
+    description: A TUI for GitHub pull requests
+    license: GPL-3.0-or-later
+    skip_upload: auto
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    commit_msg_template: "pho {{ .Tag }}"
+    dependencies:
+      - formula: gh
+    hooks:
+      post:
+        # The binaries aren't notarized; drop the quarantine flag so
+        # Gatekeeper doesn't block the first run.
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/pho"]
+          end
