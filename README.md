@@ -27,6 +27,14 @@
 
 ## Install
 
+With Homebrew (macOS and Linux):
+
+```
+brew install utkarsh261/tap/pho
+```
+
+Or with Go:
+
 ```
 go install github.com/utkarsh261/pho/cmd/pho@latest
 ```
