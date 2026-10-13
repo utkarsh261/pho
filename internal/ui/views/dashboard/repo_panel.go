@@ -294,7 +294,7 @@ func (m *RepoPanelModel) renderRepoRow(repo domain.Repository) string {
 	}
 	line := edge + dot + " " + text
 	if isCursor {
-		return theme.FillBg(m.theme.Highlight, m.Width, line)
+		return m.theme.FillRow(m.theme.Highlight, m.Width, line)
 	}
 	return line
 }

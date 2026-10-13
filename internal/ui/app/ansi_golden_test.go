@@ -125,6 +125,53 @@ func TestANSIGoldenProfiles(t *testing.T) {
 	}
 }
 
+// ansiThemeName is the theme screens are built with; tests that render a
+// preset set it for their duration.
+var ansiThemeName = theme.DefaultName
+
+// ansiTheme builds the current theme. Build reads the colour profile, so
+// call it after withColorProfile.
+func ansiTheme(t testing.TB) *theme.Theme {
+	t.Helper()
+	th, ok := theme.Get(ansiThemeName)
+	if !ok {
+		t.Fatalf("theme %q not registered", ansiThemeName)
+	}
+	return th
+}
+
+// TestANSIGoldenPresets renders the profile screens with every preset under
+// every colour profile.
+func TestANSIGoldenPresets(t *testing.T) {
+	for _, name := range theme.Names() {
+		if name == theme.DefaultName {
+			continue
+		}
+		for _, sc := range ansiScreens() {
+			if !sc.profiles {
+				continue
+			}
+			for _, p := range ansiProfiles {
+				t.Run(name+"/"+sc.name+"/"+p.name, func(t *testing.T) {
+					prev := ansiThemeName
+					ansiThemeName = name
+					t.Cleanup(func() { ansiThemeName = prev })
+					withColorProfile(t, p.profile)
+
+					got := sc.build(t).View()
+					switch {
+					case p.profile == termenv.Ascii && strings.Contains(got, "\x1b["):
+						t.Errorf("Ascii render contains escape codes")
+					case p.profile == termenv.ANSI && sc.name == "dashboard" && !strings.Contains(got, "\x1b[7m"):
+						t.Errorf("16-colour render has no reverse-video cursor row")
+					}
+					checkANSIGolden(t, got, filepath.Join(name, p.name, sc.name+".ansi"))
+				})
+			}
+		}
+	}
+}
+
 func withColorProfile(t *testing.T, p termenv.Profile) {
 	t.Helper()
 	prev := lipgloss.ColorProfile()
@@ -206,7 +253,7 @@ func ansiDashboard(t *testing.T, w, h int) *Model {
 	repo := testutil.Repo("acme/alpha")
 	prs := ansiDashboardPRs(repo.FullName)
 	m := setupModelWithPRs(t, []domain.Repository{repo}, prs)
-	m.SetTheme(theme.Default())
+	m.SetTheme(ansiTheme(t))
 	dash := m.deps.Dashboard.(*stubDashboardService)
 	for _, p := range prs {
 		dash.previewByPR[previewKey(repo.FullName, p.Number)] = ansiPreview(repo.FullName, p.Number)
@@ -221,7 +268,7 @@ func ansiDashboardLoading(t *testing.T) *Model {
 	t.Helper()
 	repo := testutil.Repo("acme/alpha")
 	m := newTestModel([]domain.Repository{repo}, nil)
-	m.SetTheme(theme.Default())
+	m.SetTheme(ansiTheme(t))
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	_, _ = m.Update(cmdsReposDiscovered([]domain.Repository{repo}))
 	return m
@@ -232,7 +279,7 @@ func ansiDashboardLoaded(t *testing.T, fromCache bool, err error) *Model {
 	repo := testutil.Repo("acme/alpha")
 	snap := dashboardSnapshot(repo, ansiDashboardPRs(repo.FullName)...)
 	m := newTestModel([]domain.Repository{repo}, map[string]domain.DashboardSnapshot{repo.FullName: snap})
-	m.SetTheme(theme.Default())
+	m.SetTheme(ansiTheme(t))
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	_, _ = m.Update(cmdsReposDiscovered([]domain.Repository{repo}))
 	_, _ = m.Update(cmdsDashboardLoaded(repo.FullName, snap, fromCache, err))
@@ -274,7 +321,7 @@ func ansiPRDetailFixture() (domain.PRPreviewSnapshot, diffmodel.DiffModel) {
 	return p, d
 }
 
-func ansiPRDetail(t *testing.T, tab string) *Model {
+func ansiPRDetail(t testing.TB, tab string) *Model {
 	t.Helper()
 	detail, diff := ansiPRDetailFixture()
 	repo := testutil.Repo("acme/alpha")
@@ -283,7 +330,7 @@ func ansiPRDetail(t *testing.T, tab string) *Model {
 		{SHA: "f6e5d4c3b2", MessageHeadline: "Add Safari regression test", AuthorLogin: "octocat", CommittedAt: fixedNow().Add(-2 * time.Hour)},
 	}}
 	m := newDeepLinkTestModel(t, 123, []domain.Repository{repo}, prSvc)
-	m.SetTheme(theme.Default())
+	m.SetTheme(ansiTheme(t))
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	drainCmds(m, m.Init())
 	if m.currentView() != domain.PrimaryViewPRDetail {
@@ -291,4 +338,27 @@ func ansiPRDetail(t *testing.T, tab string) *Model {
 	}
 	ansiKeys(m, tab)
 	return m
+}
+
+// BenchmarkViewPaint compares a diff frame with and without the painted
+// background (Terminal Workshop paints none; catppuccin-mocha does).
+func BenchmarkViewPaint(b *testing.B) {
+	for _, name := range []string{theme.DefaultName, "catppuccin-mocha", "catppuccin-mocha/unpainted"} {
+		b.Run(name, func(b *testing.B) {
+			name, unpainted := strings.CutSuffix(name, "/unpainted")
+			prevTheme, prevProfile := ansiThemeName, lipgloss.ColorProfile()
+			ansiThemeName = name
+			lipgloss.SetColorProfile(termenv.TrueColor)
+			b.Cleanup(func() {
+				ansiThemeName = prevTheme
+				lipgloss.SetColorProfile(prevProfile)
+			})
+			m := ansiPRDetail(b, "2")
+			m.deps.TerminalBackground = unpainted
+			b.ResetTimer()
+			for range b.N {
+				_ = m.View()
+			}
+		})
+	}
 }

@@ -257,7 +257,7 @@ func (m *LeftPanelModel) renderFileRow(f diffmodel.DiffFile, idx int) string {
 
 	switch {
 	case isSelected:
-		return theme.FillBg(th.Highlight, lpInner, content)
+		return th.FillRow(th.Highlight, lpInner, content)
 	case isOpened:
 		return theme.FillBg(th.Subtle, lpInner, content)
 	}
@@ -368,7 +368,7 @@ func (m *LeftPanelModel) renderCIRow(check domain.PreviewCheckRow, idx int) stri
 		if m.theme != nil {
 			// Bold the text separately: the icon's own reset would end a bold
 			// span that wrapped the whole row.
-			return theme.FillBg(m.theme.Highlight, lpInner, icon+" "+m.theme.Bold.Render(name+" "+status))
+			return m.theme.FillRow(m.theme.Highlight, lpInner, icon+" "+m.theme.Bold.Render(name+" "+status))
 		}
 		return lipgloss.NewStyle().Reverse(true).Width(lpInner).Render(row)
 	}

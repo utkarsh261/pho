@@ -89,6 +89,12 @@ func dumpFields(v reflect.Value, out map[string]string) {
 			out[name] = describeStyle(f)
 		case bool, string:
 			out[name] = fmt.Sprint(f)
+		case *Colors256:
+			if f == nil {
+				out[name] = "none"
+			} else {
+				out[name] = fmt.Sprintf("%+v", *f)
+			}
 		case ansi.StyleConfig:
 			// JSON follows the style's pointers, so the dump is stable.
 			b, err := json.Marshal(f)

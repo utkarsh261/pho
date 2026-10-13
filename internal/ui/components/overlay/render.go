@@ -323,7 +323,7 @@ func (m Model) resultLine(st styles, r domain.SearchResult, selected bool, width
 	gap := max(width-lipgloss.Width(left)-metaW-1, 1)
 	line := fit(left+strings.Repeat(" ", gap)+meta, width)
 	if selected && st.th != nil {
-		return theme.FillBg(st.selBg, width, line)
+		return st.th.FillRow(st.selBg, width, line)
 	}
 	return line
 }

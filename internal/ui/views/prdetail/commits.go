@@ -130,12 +130,12 @@ func (m *PRDetailModel) renderCommitRows(scroll, contentH, availW int) []string 
 		if isSelected {
 			headline := lipgloss.NewStyle().Bold(true).Foreground(th.TextBright).
 				Render(truncateText(c.MessageHeadline, max(cw-shaW-gapW, 1)))
-			line1 := theme.FillBg(th.Highlight, cw, shaStyled+gap+headline)
+			line1 := th.FillRow(th.Highlight, cw, shaStyled+gap+headline)
 
 			authorStyled := th.DimTxt.Render(author)
 			relStyled := th.MutedTxt.Render(relTime)
 			padding := max(cw-lipgloss.Width(authorStyled)-lipgloss.Width(relStyled), 0)
-			line2 := theme.FillBg(th.Highlight, cw, authorStyled+strings.Repeat(" ", padding)+relStyled)
+			line2 := th.FillRow(th.Highlight, cw, authorStyled+strings.Repeat(" ", padding)+relStyled)
 
 			parts := []string{line1, line2}
 			for pi, p := range parts {

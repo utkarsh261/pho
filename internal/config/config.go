@@ -66,7 +66,8 @@ type rawConfig struct {
 		RowBudget         int `toml:"row_budget"`
 	} `toml:"diff"`
 	UI struct {
-		Theme string `toml:"theme"`
+		Theme      string `toml:"theme"`
+		Background string `toml:"background"`
 	} `toml:"ui"`
 }
 
@@ -108,6 +109,9 @@ type Config struct {
 	}
 	UI struct {
 		Theme string // theme name, e.g. "terminal-workshop"; empty means the default
+		// Background is "theme" to paint the theme's background or
+		// "terminal" to keep the terminal's own (for transparency).
+		Background string
 	}
 }
 
@@ -168,6 +172,7 @@ func defaults() Config {
 	cfg.Cache.SearchIndexTTL = 2 * time.Minute
 	cfg.Logging.Level = "info"
 	cfg.Palette.MaxPRs = 300
+	cfg.UI.Background = "theme"
 	return cfg
 }
 
@@ -205,6 +210,9 @@ func applyDefaults(cfg *Config, def Config) {
 	}
 	if cfg.Palette.MaxPRs == 0 {
 		cfg.Palette.MaxPRs = def.Palette.MaxPRs
+	}
+	if cfg.UI.Background == "" {
+		cfg.UI.Background = def.UI.Background
 	}
 }
 
@@ -265,6 +273,7 @@ func Load(path string) (Config, error) {
 	cfg.Diff.MaxLineWidth = raw.Diff.MaxLineWidth
 	cfg.Diff.RowBudget = raw.Diff.RowBudget
 	cfg.UI.Theme = raw.UI.Theme
+	cfg.UI.Background = raw.UI.Background
 
 	// Fill zero-value fields with defaults.
 	applyDefaults(&cfg, def)

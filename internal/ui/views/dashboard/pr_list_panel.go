@@ -361,8 +361,8 @@ func (m *PRListPanelModel) renderRow(pr domain.PullRequestSummary, index int) pr
 	line2 := edge + "   " + th.MutedTxt.Render(strings.Join(sub, " · "))
 
 	if selected {
-		line1 = theme.FillBg(th.Highlight, m.Width, line1)
-		line2 = theme.FillBg(th.Highlight, m.Width, line2)
+		line1 = th.FillRow(th.Highlight, m.Width, line1)
+		line2 = th.FillRow(th.Highlight, m.Width, line2)
 	}
 	return prRow{line1: line1, line2: line2}
 }
