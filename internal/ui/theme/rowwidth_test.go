@@ -15,7 +15,7 @@ func TestRowWidthMatchesStringWidth(t *testing.T) {
 	rows := []string{
 		"", "plain ascii", "\x1b[38;2;1;2;3mcoloured\x1b[0m text",
 		"│ box ─┬─ ╭╮ ▎ ● ✓ ✗ ⋯ … → ■",
-		"日本語のタイトル", "emoji 🚀 title", "check ✅ done", "é combining",
+		"日本語のタイトル", "emoji 🚀 title", "check ✅ done", "é combining", "नमस्ते", "مَرْحَبًا", "שָׁלוֹם", "Ελληνικά", "Привет",
 		"◽ wide shape", "tab\there", "\x1b]8;;https://x\x07link\x1b]8;;\x07",
 	}
 	// Every rendered row in the app's colour goldens.

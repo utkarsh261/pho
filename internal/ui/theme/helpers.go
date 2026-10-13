@@ -165,15 +165,16 @@ func rowWidth(s string) int {
 	return w
 }
 
-// narrowRune reports runes known to take one cell: Latin and friends below
-// U+1100 (minus combining marks), and the punctuation, arrows, maths, box
-// drawing, shapes and check marks the UI draws with. Emoji-width shapes and
-// anything else go to the full measure.
+// narrowRune reports runes known to take one cell: Latin-1 and Latin
+// Extended (below the combining marks at U+0300), and the punctuation,
+// arrows, maths, box drawing, shapes and check marks the UI draws with.
+// Scripts with combining marks, emoji-width shapes and anything else go to
+// the full measure.
 func narrowRune(r rune) bool {
 	switch {
-	case r >= 0x300 && r <= 0x36f, r == utf8.RuneError:
+	case r == utf8.RuneError:
 		return false
-	case r < 0x1100:
+	case r < 0x300:
 		return true
 	case r >= 0x2010 && r <= 0x2027, r >= 0x2190 && r <= 0x21ff, r >= 0x2200 && r <= 0x22ff:
 		return true
