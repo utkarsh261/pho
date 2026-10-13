@@ -198,3 +198,23 @@ func TestColourGoldenRendering(t *testing.T) {
 		}
 	}
 }
+
+// TestRenderFollowsProfileChange guards the cache: a render cached under one
+// colour profile must not be served after the profile changes.
+func TestRenderFollowsProfileChange(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+
+	r := New()
+	src := "# Title\n\nSome **bold** text."
+
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	if got := strings.Join(r.Render(src, 80), "\n"); !strings.Contains(got, "\x1b[38;2;") {
+		t.Fatalf("expected truecolor escapes, got %q", got)
+	}
+
+	lipgloss.SetColorProfile(termenv.Ascii)
+	if got := strings.Join(r.Render(src, 80), "\n"); strings.Contains(got, "\x1b[") {
+		t.Errorf("expected no escapes after switching to Ascii, got %q", got)
+	}
+}
