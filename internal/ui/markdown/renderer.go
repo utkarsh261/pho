@@ -8,6 +8,9 @@ import (
 	"github.com/charmbracelet/glamour"
 	glamouransi "github.com/charmbracelet/glamour/ansi"
 	"github.com/charmbracelet/glamour/styles"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 )
 
 // zeroUint is a shared pointer to 0 used when zeroing style margins.
@@ -41,18 +44,20 @@ var tokyoNightNoMargin = func() glamouransi.StyleConfig {
 }()
 
 type renderCacheKey struct {
-	src   string
-	width int
+	src     string
+	width   int
+	profile termenv.Profile
 }
 
 // Renderer wraps a glamour TermRenderer, lazily re-creating it only when the
-// requested width changes. Safe for use from a single goroutine (bubbletea's
+// requested width or the lipgloss colour profile changes. Safe for use from a single goroutine (bubbletea's
 // update/view cycle); the mutex guards the lazy re-init only.
 type Renderer struct {
-	mu    sync.Mutex
-	width int
-	inner *glamour.TermRenderer
-	cache map[renderCacheKey][]string
+	mu      sync.Mutex
+	width   int
+	profile termenv.Profile
+	inner   *glamour.TermRenderer
+	cache   map[renderCacheKey][]string
 }
 
 // New returns a Renderer ready for use. The inner glamour renderer is
@@ -63,7 +68,8 @@ func New() *Renderer {
 
 // Render converts markdown src into a slice of plain terminal lines ready for
 // a line-based viewport. Width is the usable column count; the glamour
-// renderer is re-created lazily when width differs from the previous call.
+// renderer is re-created lazily when the width or colour profile differs from
+// the previous call.
 //
 // Returns []string{""} for empty/whitespace-only input.
 // Falls back to []string{src} if glamour fails to initialize or render.
@@ -72,8 +78,11 @@ func (r *Renderer) Render(src string, width int) []string {
 		return []string{""}
 	}
 	w := max(width, 20)
+	// Glamour defaults to truecolor; follow the profile the rest of the UI
+	// renders with so 256-colour, 16-colour and NO_COLOR terminals match.
+	profile := lipgloss.ColorProfile()
 
-	key := renderCacheKey{src, w}
+	key := renderCacheKey{src, w, profile}
 
 	r.mu.Lock()
 	if r.cache != nil {
@@ -83,14 +92,16 @@ func (r *Renderer) Render(src string, width int) []string {
 		}
 	}
 
-	if r.inner == nil || r.width != w {
+	if r.inner == nil || r.width != w || r.profile != profile {
 		tr, err := glamour.NewTermRenderer(
 			glamour.WithStyles(tokyoNightNoMargin),
 			glamour.WithWordWrap(w),
+			glamour.WithColorProfile(profile),
 		)
 		if err == nil {
 			r.inner = tr
 			r.width = w
+			r.profile = profile
 		}
 	}
 	inner := r.inner
@@ -103,6 +114,11 @@ func (r *Renderer) Render(src string, width int) []string {
 	out, err := inner.Render(src)
 	if err != nil {
 		return []string{src}
+	}
+	if profile == termenv.Ascii {
+		// Glamour still emits bold and underline without colour; lipgloss
+		// emits nothing, so strip them to match the rest of the UI.
+		out = ansi.Strip(out)
 	}
 	result := trimOutput(strings.Split(out, "\n"))
 

@@ -38,15 +38,6 @@ var ansiProfiles = []struct {
 	{"Ascii", termenv.Ascii},
 }
 
-// markdownProfileDefect lists screens whose markdown is rendered by glamour,
-// which ignores the colour profile and always emits truecolor escapes. They
-// are left out of the Ascii no-escapes check until the renderer follows the
-// profile.
-var markdownProfileDefect = map[string]bool{
-	"dashboard":         true,
-	"prdetail_comments": true,
-}
-
 type ansiScreen struct {
 	name string
 	// profiles marks screens that are also rendered below truecolor.
@@ -125,7 +116,7 @@ func TestANSIGoldenProfiles(t *testing.T) {
 			t.Run(sc.name+"/"+p.name, func(t *testing.T) {
 				withColorProfile(t, p.profile)
 				got := sc.build(t).View()
-				if p.profile == termenv.Ascii && !markdownProfileDefect[sc.name] && strings.Contains(got, "\x1b[") {
+				if p.profile == termenv.Ascii && strings.Contains(got, "\x1b[") {
 					t.Errorf("Ascii render of %s contains escape codes", sc.name)
 				}
 				checkANSIGolden(t, got, filepath.Join("terminal-workshop", p.name, sc.name+".ansi"))
