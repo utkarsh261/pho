@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -70,16 +71,19 @@ func (m *Model) openThemePicker() tea.Cmd {
 func (m *Model) handleThemePickKey(msg tea.KeyMsg) tea.Cmd {
 	switch msg.Type {
 	case tea.KeyEsc:
-		m.applyTheme(m.themePickFrom)
-		m.closeThemePicker()
+		m.cancelThemePicker()
 		return nil
 	case tea.KeyEnter:
 		name := m.palette.PreviewTheme()
 		if name == "" {
 			return nil // nothing matches the filter; stay open
 		}
+		unchanged := name == m.themePickFrom
 		m.applyTheme(name)
 		m.closeThemePicker()
+		if unchanged {
+			return nil // don't write a config for a choice that changes nothing
+		}
 		return m.saveThemeCmd(name)
 	}
 	m.palette, _ = m.palette.Update(msg)
@@ -91,17 +95,30 @@ func (m *Model) handleThemePickKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func (m *Model) closeThemePicker() {
-	m.themePickFrom = ""
-	m.closePalette()
+// cancelThemePicker restores the theme the picker opened with and closes it.
+func (m *Model) cancelThemePicker() {
+	m.applyTheme(m.themePickFrom)
+	m.closeThemePicker()
 }
 
-// applyTheme switches every view to the named theme, if it differs.
+// closeThemePicker closes the picker. It leaves a pending `pho pr <n>` deep
+// link alone: the picker has nothing to do with it.
+func (m *Model) closeThemePicker() {
+	m.themePickFrom = ""
+	m.closeOverlay()
+}
+
+// applyTheme switches every view to the named theme, if it differs. While
+// the picker is open it reuses the themes the picker built.
 func (m *Model) applyTheme(name string) {
 	if m.theme != nil && m.theme.Name == name {
 		return
 	}
-	if th, ok := theme.Get(name); ok {
+	th := m.palette.PickTheme(name)
+	if th == nil {
+		th, _ = theme.Get(name)
+	}
+	if th != nil {
 		m.SetTheme(th)
 	}
 }
@@ -125,13 +142,30 @@ func (m *Model) handleThemeSaved(msg ThemeSaved) tea.Cmd {
 	}
 	if msg.Err == nil {
 		m.logDebug("theme saved", "theme", msg.Name)
+		m.clearConfigErrors()
 		return nil
 	}
 	m.log.Warn("theme save failed", "theme", msg.Name, "err", msg.Err)
-	text := fmt.Sprintf("theme set for this session · couldn't save: %v", msg.Err)
+	// The status bar already labels the error "config".
+	reason := strings.TrimPrefix(msg.Err.Error(), "config: ")
+	text := fmt.Sprintf("theme set for this session · couldn't save: %s", reason)
 	if errors.Is(msg.Err, config.ErrManualEdit) {
 		text = fmt.Sprintf("theme set for this session · add theme = %q under [ui] in your config", msg.Name)
 	}
 	m.recordError(domain.ErrorKindConfig, errors.New(text), "")
 	return nil
+}
+
+// clearConfigErrors drops a config error left by an earlier failed save.
+func (m *Model) clearConfigErrors() {
+	errs := m.state.Errors.Errors[:0:0]
+	for _, e := range m.state.Errors.Errors {
+		if e.Kind != domain.ErrorKindConfig {
+			errs = append(errs, e)
+		}
+	}
+	if len(errs) != len(m.state.Errors.Errors) {
+		m.state.Errors.Errors = errs
+		m.syncStatus()
+	}
 }

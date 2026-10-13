@@ -248,3 +248,62 @@ func TestThemePickerFromDashboard(t *testing.T) {
 		t.Errorf("theme = %q, want %q", m.theme.Name, want)
 	}
 }
+
+func TestThemePickerEnterOnCurrentDoesNotSave(t *testing.T) {
+	m, s := themePickerModel(t)
+	openPicker(m)
+	drainCmds(m, key(m, keyEnter))
+	if len(s.saved()) != 0 {
+		t.Errorf("saved %v for an unchanged theme", s.saved())
+	}
+}
+
+func TestThemePickerSuccessClearsSaveError(t *testing.T) {
+	m, s := themePickerModel(t)
+	s.err = errors.New("permission denied")
+	openPicker(m)
+	key(m, keyDown)
+	drainCmds(m, key(m, keyEnter))
+	if len(m.state.Errors.Errors) != 1 {
+		t.Fatalf("errors = %+v, want the save failure", m.state.Errors.Errors)
+	}
+	if strings.Contains(m.state.Errors.Errors[0].Message, "config:") {
+		t.Errorf("message repeats the config label: %q", m.state.Errors.Errors[0].Message)
+	}
+
+	s.err = nil
+	openPicker(m)
+	key(m, keyDown)
+	drainCmds(m, key(m, keyEnter))
+	if len(m.state.Errors.Errors) != 0 {
+		t.Errorf("errors after a successful save = %+v", m.state.Errors.Errors)
+	}
+}
+
+// TestThemePickerKeepsDeepLink checks opening and closing the picker while
+// `pho pr <n>` is still waiting for discovery doesn't cancel the deep link,
+// and that discovery finishing cancels the picker like Esc.
+func TestThemePickerKeepsDeepLink(t *testing.T) {
+	for _, closeKey := range []tea.KeyMsg{keyEsc, keyEnter} {
+		m := ansiDashboard(t, 120, 40)
+		m.pendingPRNumber = 7
+		openPicker(m)
+		key(m, keyDown)
+		key(m, closeKey)
+		if m.pendingPRNumber != 7 {
+			t.Errorf("closing the picker with %v dropped the deep link", closeKey)
+		}
+	}
+
+	m := ansiDashboard(t, 120, 40)
+	m.pendingPRNumber = 7
+	openPicker(m)
+	key(m, keyDown)
+	m.consumeInitialPR(nil)
+	if m.themePicking() {
+		t.Error("picker still open after discovery finished")
+	}
+	if m.theme.Name != theme.DefaultName {
+		t.Errorf("theme = %q, want the one the picker opened with", m.theme.Name)
+	}
+}

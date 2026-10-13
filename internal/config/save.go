@@ -105,6 +105,7 @@ func newFileIn(path string) (string, error) {
 
 var (
 	headerRe      = regexp.MustCompile(`^\s*\[\s*([^\[\]]+?)\s*\]\s*(#.*)?$`)
+	arrayHeaderRe = regexp.MustCompile(`^\s*\[\[.*\]\]\s*(#.*)?$`)
 	tableThemeRe  = regexp.MustCompile(`^(\s*theme\s*=\s*)("[^"\\]*"|'[^']*')(.*)$`)
 	dottedRe      = regexp.MustCompile(`^\s*ui\s*\.`)
 	dottedThemeRe = regexp.MustCompile(`^(\s*ui\s*\.\s*theme\s*=\s*)("[^"\\]*"|'[^']*')(.*)$`)
@@ -148,7 +149,11 @@ func setTheme(content, name string) (string, error) {
 	uiHeader, lastRootUI := -1, -1
 	for i := range lines {
 		line := text(i)
-		if m := headerRe.FindStringSubmatch(line); m != nil && !strings.HasPrefix(strings.TrimSpace(line), "[[") {
+		if arrayHeaderRe.MatchString(line) {
+			section = "[[array]]" // never [ui] or the root
+			continue
+		}
+		if m := headerRe.FindStringSubmatch(line); m != nil {
 			section = strings.ReplaceAll(m[1], " ", "")
 			if section == "ui" {
 				uiHeader = i

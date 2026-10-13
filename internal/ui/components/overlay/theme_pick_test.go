@@ -145,3 +145,18 @@ func TestThemePickKeepsBackdropLit(t *testing.T) {
 		t.Error("search palette no longer dims the backdrop")
 	}
 }
+
+// TestThemePickIgnoresRefresh checks a background search refresh (more PRs
+// loaded) leaves the theme chooser's selection where the user put it.
+func TestThemePickIgnoresRefresh(t *testing.T) {
+	t.Parallel()
+
+	m := NewModel(nil)
+	m.OpenThemePick(theme.Names(), theme.DefaultName)
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	want := m.PreviewTheme()
+	m.RefreshResults()
+	if got := m.PreviewTheme(); got != want {
+		t.Errorf("after RefreshResults PreviewTheme() = %q, want %q", got, want)
+	}
+}

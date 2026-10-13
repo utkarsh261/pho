@@ -47,6 +47,9 @@ func TestSetThemeSyntax(t *testing.T) {
 		{"crlf insert",
 			"[ui]\r\nbackground = \"theme\"\r\n",
 			"[ui]\r\ntheme = \"nord\"\r\nbackground = \"theme\"\r\n", nil},
+		{"array table after ui",
+			"[ui]\nbackground = \"theme\"\n[[hooks]]\ntheme = \"x\"\n",
+			"[ui]\ntheme = \"nord\"\nbackground = \"theme\"\n[[hooks]]\ntheme = \"x\"\n", nil},
 		{"inline table", "ui = { background = \"terminal\" }\n", "", ErrManualEdit},
 	}
 	for _, tc := range tests {

@@ -1197,6 +1197,13 @@ func (m *Model) closePalette() tea.Cmd {
 		m.pendingPRNumber = 0
 		m.logDebug("deeplink cancelled", "pr", number)
 	}
+	m.closeOverlay()
+	return nil
+}
+
+// closeOverlay hides the palette and gives focus back, without the deep-link
+// cancellation closePalette does for the repo picker.
+func (m *Model) closeOverlay() {
 	m.state.Search.OverlayOpen = false
 	if m.previousFocus == "" {
 		m.focus = domain.FocusRepoPanel
@@ -1204,7 +1211,6 @@ func (m *Model) closePalette() tea.Cmd {
 		m.focus = m.previousFocus
 	}
 	m.syncStatus()
-	return nil
 }
 
 func (m *Model) cycleFocus(direction keymap.CycleDirection) tea.Cmd {
@@ -1870,7 +1876,10 @@ func (m *Model) consumeInitialPR(repos []domain.Repository) tea.Cmd {
 
 	// A palette opened before discovery finished would either float over the
 	// pushed detail or be replaced mid-query by the picker; close it first.
-	if m.state.Search.OverlayOpen {
+	// A theme picker is cancelled as if by Esc.
+	if m.themePicking() {
+		m.cancelThemePicker()
+	} else if m.state.Search.OverlayOpen {
 		m.pendingPRNumber = 0
 		m.closePalette()
 		m.pendingPRNumber = number

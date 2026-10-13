@@ -107,8 +107,13 @@ func (m *Model) SetHydrating(hydrating bool) {
 	m.hydrating = hydrating
 }
 
-// RefreshResults re-queries the search service and updates displayed results.
+// RefreshResults re-queries the search service and updates displayed
+// results. The repo and theme pickers list a fixed pool, so it leaves them
+// (and their selection) alone.
 func (m *Model) RefreshResults() {
+	if m.pickKind != pickNone {
+		return
+	}
 	m.refreshResults()
 }
 
@@ -158,6 +163,12 @@ func (m *Model) OpenThemePick(names []string, current string) {
 			break
 		}
 	}
+}
+
+// PickTheme returns the named theme as built when the chooser opened, or
+// nil if it is not listed.
+func (m Model) PickTheme(name string) *theme.Theme {
+	return m.themeSwatch[name]
 }
 
 // IsThemePick reports whether the palette is the theme chooser.
