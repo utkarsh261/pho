@@ -45,6 +45,24 @@ type Theme struct {
 	// Stronger backgrounds for the words that changed within a line.
 	DiffAddEmphBg lipgloss.Color
 	DiffDelEmphBg lipgloss.Color
+	// Diff line text and the @@ hunk header.
+	DiffAddFg  lipgloss.Color
+	DiffDelFg  lipgloss.Color
+	DiffHunkFg lipgloss.Color
+
+	// Diff search: the current and other matched words, the text on them,
+	// and the background of the line holding the current match.
+	SearchCurrentBg lipgloss.Color
+	SearchOtherBg   lipgloss.Color
+	SearchMatchFg   lipgloss.Color
+	SearchLineBg    lipgloss.Color
+	// Status bar text while a search is being typed.
+	SearchActiveFg lipgloss.Color
+
+	OnPrimary lipgloss.Color // text on a Primary background
+	HelpText  lipgloss.Color // non-key status bar text
+	BoxText   lipgloss.Color // unselected overlay rows
+	HintKeyFg lipgloss.Color // the key in a key hint
 
 	// ── panel borders ──────────────────────────────────────────────
 	Panel        lipgloss.Style // normal panel left border (gray)
@@ -159,6 +177,21 @@ func Default() *Theme {
 
 		DiffAddEmphBg: lipgloss.Color("#1F5A3A"),
 		DiffDelEmphBg: lipgloss.Color("#6E2630"),
+
+		DiffAddFg:  lipgloss.Color("#7EE2A8"),
+		DiffDelFg:  lipgloss.Color("#F7A8A8"),
+		DiffHunkFg: lipgloss.Color("#6B8EAE"),
+
+		SearchCurrentBg: lipgloss.Color("#F59E0B"),
+		SearchOtherBg:   lipgloss.Color("#22D3EE"),
+		SearchMatchFg:   lipgloss.Color("#0F172A"),
+		SearchLineBg:    lipgloss.Color("#1D4ED8"),
+		SearchActiveFg:  lipgloss.Color("#FDE047"),
+
+		OnPrimary: lipgloss.Color("#FFFFFF"),
+		HelpText:  lipgloss.Color("#9CA3AF"),
+		BoxText:   lipgloss.Color("#CBD5E1"),
+		HintKeyFg: lipgloss.Color("#C9D1D9"),
 	}
 
 	// Panel borders.
@@ -220,9 +253,9 @@ func Default() *Theme {
 	t.Deletions = lipgloss.NewStyle().Foreground(t.Error)
 
 	// Diff line colors.
-	t.DiffAddition = lipgloss.NewStyle().Foreground(lipgloss.Color("#7EE2A8")).Background(t.DiffAddBg)
-	t.DiffDeletion = lipgloss.NewStyle().Foreground(lipgloss.Color("#F7A8A8")).Background(t.DiffDelBg)
-	t.DiffHunkHeader = lipgloss.NewStyle().Foreground(lipgloss.Color("#6B8EAE"))
+	t.DiffAddition = lipgloss.NewStyle().Foreground(t.DiffAddFg).Background(t.DiffAddBg)
+	t.DiffDeletion = lipgloss.NewStyle().Foreground(t.DiffDelFg).Background(t.DiffDelBg)
+	t.DiffHunkHeader = lipgloss.NewStyle().Foreground(t.DiffHunkFg)
 
 	// Tab bar.
 	t.TabActive = lipgloss.NewStyle().
@@ -233,7 +266,7 @@ func Default() *Theme {
 
 	t.SectionTabActive = lipgloss.NewStyle().
 		Background(t.Primary).
-		Foreground(lipgloss.Color("#FFFFFF")).
+		Foreground(t.OnPrimary).
 		Bold(true).
 		Padding(0, 1)
 
@@ -243,7 +276,7 @@ func Default() *Theme {
 
 	// Status bar.
 	t.StatusHelp = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#9CA3AF"))
+		Foreground(t.HelpText)
 
 	t.StatusLoading = lipgloss.NewStyle().
 		Foreground(t.Warning)
@@ -272,7 +305,7 @@ func Default() *Theme {
 		Padding(0, 1)
 
 	t.BoxNormal = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#CBD5E1"))
+		Foreground(t.BoxText)
 
 	t.BoxFooter = lipgloss.NewStyle().
 		Foreground(t.Muted).
@@ -293,7 +326,7 @@ func Default() *Theme {
 		Bold(true).
 		Foreground(t.Primary)
 
-	t.HintKey = lipgloss.NewStyle().Foreground(lipgloss.Color("#C9D1D9")).Bold(true)
+	t.HintKey = lipgloss.NewStyle().Foreground(t.HintKeyFg).Bold(true)
 	t.HintDesc = lipgloss.NewStyle().Foreground(t.Muted)
 
 	return t

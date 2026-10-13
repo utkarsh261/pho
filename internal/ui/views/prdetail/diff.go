@@ -104,9 +104,7 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 	// Build themed styles once.
 	var truncStyle lipgloss.Style
 
-	hunkHeaderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#22D3EE")).Bold(true)
-	additionStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#4ADE80"))
-	deletionStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444"))
+	var hunkHeaderStyle, additionStyle, deletionStyle lipgloss.Style
 	currentWordStyle, otherWordStyle, currentLineBg := m.searchHighlightStyles()
 	searchCtx := m.buildSearchRenderContext()
 
@@ -116,6 +114,10 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 		deletionStyle = m.theme.DiffDeletion
 		truncStyle = m.theme.MutedTxt
 	} else {
+		def := theme.Default()
+		hunkHeaderStyle = def.DiffHunkHeader
+		additionStyle = def.DiffAddition
+		deletionStyle = def.DiffDeletion
 		truncStyle = lipgloss.NewStyle()
 	}
 
