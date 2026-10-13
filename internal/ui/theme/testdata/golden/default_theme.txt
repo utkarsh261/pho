@@ -1,6 +1,8 @@
+ANSIFallback: false
 AccentText: #A78BFA
 Additions: fg=#10B981 bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
 AvatarPalette: #F472B6 #60A5FA #34D399 #FBBF24 #A78BFA #F87171 #22D3EE #FB923C
+Base: #0D1117
 Bold: fg={} bg={} bold=true underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
 Border: #30363D
 BoxBorder: fg={} bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="─","│","─","│" sides=false,false,false,false borderfg=#7C3AED,#7C3AED,#7C3AED,#7C3AED
@@ -44,6 +46,7 @@ MutedTxt: fg=#6B7280 bg={} bold=false underline=false faint=false reverse=false 
 NormalRow: fg={} bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
 Number: fg=#06B6D4 bg={} bold=true underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
 OnPrimary: #FFFFFF
+PaintBackground: false
 Panel: fg={} bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","│" sides=true,false,false,false borderfg=#30363D,#30363D,#30363D,#30363D
 PanelFocused: fg={} bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","┃" sides=true,false,false,false borderfg=#7C3AED,#7C3AED,#7C3AED,#7C3AED
 Primary: #7C3AED

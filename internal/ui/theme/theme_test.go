@@ -82,3 +82,24 @@ func TestChangingColourPropagates(t *testing.T) {
 		t.Errorf("expected Primary to be #FF0000, got %v", th2.Primary)
 	}
 }
+
+func TestBuildCopiesAvatarPalette(t *testing.T) {
+	t.Parallel()
+
+	p := terminalWorkshop
+	p.AvatarPalette = []lipgloss.Color{"#111111", "#222222"}
+	th := Build(p)
+	p.AvatarPalette[0] = "#999999"
+
+	if th.AvatarPalette[0] != "#111111" {
+		t.Errorf("Build shares the caller's AvatarPalette slice: got %s", th.AvatarPalette[0])
+	}
+}
+
+func TestDefaultMatchesBuild(t *testing.T) {
+	t.Parallel()
+
+	if !reflect.DeepEqual(Default(), Build(terminalWorkshop)) {
+		t.Error("Default() differs from Build(terminalWorkshop)")
+	}
+}
