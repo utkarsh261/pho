@@ -9,6 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
+
 	. "github.com/utkarsh261/pho/internal/ui/markdown"
 )
 
@@ -146,4 +149,52 @@ func readGolden(t *testing.T, path string) []byte {
 		t.Fatalf("read golden %s: %v (run with -update to generate)", path, err)
 	}
 	return data
+}
+
+// ── Colour golden tests ───────────────────────────────────────────────────────
+
+// colourFixtures leaves out fixtures with fenced code: chroma picks between
+// equally close 256-colour entries in random order, so highlighted code is
+// not stable across runs.
+var colourFixtures = []string{"headings", "bold_italic", "lists", "blockquotes", "links"}
+
+var colourProfiles = []struct {
+	name    string
+	profile termenv.Profile
+}{
+	{"TrueColor", termenv.TrueColor},
+	{"ANSI256", termenv.ANSI256},
+	{"ANSI", termenv.ANSI},
+	{"Ascii", termenv.Ascii},
+}
+
+// TestColourGoldenRendering keeps the escape codes, pinning the colours the
+// renderer emits under each lipgloss colour profile. It changes the global
+// profile, so it must not run in parallel.
+func TestColourGoldenRendering(t *testing.T) {
+	for _, p := range colourProfiles {
+		for _, fix := range colourFixtures {
+			t.Run(p.name+"/"+fix, func(t *testing.T) {
+				prev := lipgloss.ColorProfile()
+				lipgloss.SetColorProfile(p.profile)
+				t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+
+				got := strings.Join(New().Render(readFixture(t, fix+".md"), 80), "\n")
+
+				goldenPath := filepath.Join("testdata", "golden", "ansi", p.name, fix+"_w80.ansi")
+				if *update {
+					if err := os.MkdirAll(filepath.Dir(goldenPath), 0o755); err != nil {
+						t.Fatalf("mkdir golden dir: %v", err)
+					}
+					if err := os.WriteFile(goldenPath, []byte(got), 0o644); err != nil {
+						t.Fatalf("write golden %s: %v", goldenPath, err)
+					}
+					return
+				}
+				if want := string(readGolden(t, goldenPath)); got != want {
+					t.Errorf("colour golden mismatch for %s under %s\ngot:\n%q\nwant:\n%q", fix, p.name, got, want)
+				}
+			})
+		}
+	}
 }
