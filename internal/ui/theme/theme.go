@@ -6,6 +6,8 @@ package theme
 import (
 	"reflect"
 
+	"github.com/charmbracelet/glamour/ansi"
+	"github.com/charmbracelet/glamour/styles"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -19,6 +21,9 @@ const AvatarCount = 8
 // colours, so changing one afterwards leaves the styles on the old value.
 // Use Theme.With to get a theme with different colours.
 type Palette struct {
+	// Name identifies the palette, e.g. "terminal-workshop".
+	Name string
+
 	Primary   lipgloss.Color
 	Secondary lipgloss.Color
 	Success   lipgloss.Color
@@ -74,6 +79,9 @@ type Palette struct {
 	HelpText  lipgloss.Color // non-key status bar text
 	BoxText   lipgloss.Color // unselected overlay rows
 	HintKeyFg lipgloss.Color // the key in a key hint
+
+	// Markdown is the glamour style for PR descriptions and comments.
+	Markdown ansi.StyleConfig
 
 	// Base is the background the palette is designed against. Blends and
 	// contrast checks use it; it is painted only when PaintBackground is set.
@@ -171,6 +179,8 @@ type Theme struct {
 
 // terminalWorkshop is pho's original palette.
 var terminalWorkshop = Palette{
+	Name: "terminal-workshop",
+
 	Primary:   lipgloss.Color("#7C3AED"),
 	Secondary: lipgloss.Color("#06B6D4"),
 	Success:   lipgloss.Color("#10B981"),
@@ -219,6 +229,8 @@ var terminalWorkshop = Palette{
 	HelpText:  lipgloss.Color("#9CA3AF"),
 	BoxText:   lipgloss.Color("#CBD5E1"),
 	HintKeyFg: lipgloss.Color("#C9D1D9"),
+
+	Markdown: styles.TokyoNightStyleConfig,
 
 	Base: lipgloss.Color("#0D1117"),
 }

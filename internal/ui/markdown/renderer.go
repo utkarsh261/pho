@@ -34,14 +34,13 @@ func preprocessImages(src string) string {
 	return src
 }
 
-// tokyoNightNoMargin is the tokyo-night StyleConfig with Document and CodeBlock
-// margins zeroed so output sits flush with the surrounding UI elements.
-var tokyoNightNoMargin = func() glamouransi.StyleConfig {
-	s := styles.TokyoNightStyleConfig
-	s.Document.Margin = zeroUint
-	s.CodeBlock.Margin = zeroUint
-	return s
-}()
+// noMargin returns style with Document and CodeBlock margins zeroed so output
+// sits flush with the surrounding UI elements.
+func noMargin(style glamouransi.StyleConfig) glamouransi.StyleConfig {
+	style.Document.Margin = zeroUint
+	style.CodeBlock.Margin = zeroUint
+	return style
+}
 
 type renderCacheKey struct {
 	src     string
@@ -50,20 +49,38 @@ type renderCacheKey struct {
 }
 
 // Renderer wraps a glamour TermRenderer, lazily re-creating it only when the
-// requested width or the lipgloss colour profile changes. Safe for use from a single goroutine (bubbletea's
-// update/view cycle); the mutex guards the lazy re-init only.
+// requested width, the lipgloss colour profile or the style changes. Safe for
+// use from a single goroutine (bubbletea's update/view cycle); the mutex
+// guards the lazy re-init only.
 type Renderer struct {
 	mu      sync.Mutex
 	width   int
 	profile termenv.Profile
+	styleID string
+	style   glamouransi.StyleConfig
 	inner   *glamour.TermRenderer
 	cache   map[renderCacheKey][]string
 }
 
-// New returns a Renderer ready for use. The inner glamour renderer is
-// initialized on the first Render call.
+// New returns a Renderer using the tokyo-night style. The inner glamour
+// renderer is initialized on the first Render call.
 func New() *Renderer {
-	return &Renderer{}
+	return &Renderer{style: noMargin(styles.TokyoNightStyleConfig)}
+}
+
+// SetStyle switches the glamour style. id names the style (a theme name);
+// setting the id already in use is a no-op, and a new id drops cached
+// renders so nothing drawn in the old style is served again.
+func (r *Renderer) SetStyle(id string, style glamouransi.StyleConfig) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.styleID == id {
+		return
+	}
+	r.styleID = id
+	r.style = noMargin(style)
+	r.inner = nil
+	r.cache = nil
 }
 
 // Render converts markdown src into a slice of plain terminal lines ready for
@@ -94,7 +111,7 @@ func (r *Renderer) Render(src string, width int) []string {
 
 	if r.inner == nil || r.width != w || r.profile != profile {
 		tr, err := glamour.NewTermRenderer(
-			glamour.WithStyles(tokyoNightNoMargin),
+			glamour.WithStyles(r.style),
 			glamour.WithWordWrap(w),
 			glamour.WithColorProfile(profile),
 		)

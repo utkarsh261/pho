@@ -54,6 +54,9 @@ func (m *PreviewPanelModel) SetTheme(th *theme.Theme) {
 	m.theme = th
 	if m.theme != nil {
 		m.spinner.Style = lipgloss.NewStyle().Foreground(m.theme.Warning)
+		if m.mdRenderer != nil {
+			m.mdRenderer.SetStyle(th.Name, th.Markdown)
+		}
 	}
 }
 

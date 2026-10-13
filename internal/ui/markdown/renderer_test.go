@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/glamour/styles"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
@@ -216,5 +217,28 @@ func TestRenderFollowsProfileChange(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.Ascii)
 	if got := strings.Join(r.Render(src, 80), "\n"); strings.Contains(got, "\x1b[") {
 		t.Errorf("expected no escapes after switching to Ascii, got %q", got)
+	}
+}
+
+// TestSetStyleSwitchesOutput checks that a new style id re-renders cached
+// markdown in the new style, and that switching back restores the original.
+func TestSetStyleSwitchesOutput(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+
+	src := "# Title\n\nSome **bold** text."
+	r := New()
+	tokyo := strings.Join(r.Render(src, 80), "\n")
+
+	r.SetStyle("dracula", styles.DraculaStyleConfig)
+	dracula := strings.Join(r.Render(src, 80), "\n")
+	if dracula == tokyo {
+		t.Fatal("expected a different render after switching style")
+	}
+
+	r.SetStyle("tokyo-night", styles.TokyoNightStyleConfig)
+	if got := strings.Join(r.Render(src, 80), "\n"); got != tokyo {
+		t.Errorf("switching back did not restore the original render\ngot:  %q\nwant: %q", got, tokyo)
 	}
 }

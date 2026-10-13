@@ -1,6 +1,7 @@
 package theme
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/glamour/ansi"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -85,8 +87,16 @@ func dumpFields(v reflect.Value, out map[string]string) {
 			out[name] = strings.Join(parts, " ")
 		case lipgloss.Style:
 			out[name] = describeStyle(f)
-		case bool:
+		case bool, string:
 			out[name] = fmt.Sprint(f)
+		case ansi.StyleConfig:
+			// JSON follows the style's pointers, so the dump is stable.
+			b, err := json.Marshal(f)
+			if err != nil {
+				out[name] = "error: " + err.Error()
+				continue
+			}
+			out[name] = string(b)
 		default:
 			out[name] = fmt.Sprintf("unhandled %T", f)
 		}
