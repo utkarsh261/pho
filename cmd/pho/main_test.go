@@ -27,6 +27,16 @@ func TestParseInvocation(t *testing.T) {
 			want: invocation{Debug: true, RootDir: "~/code"},
 		},
 		{
+			name: "theme flag",
+			args: []string{"-theme", "nord"},
+			want: invocation{RootDir: ".", Theme: "nord"},
+		},
+		{
+			name: "theme flag after subcommand",
+			args: []string{"-theme", "nord", "pr", "7", "-theme", "dracula"},
+			want: invocation{RootDir: ".", Theme: "dracula", PRNumber: 7},
+		},
+		{
 			name: "pr subcommand",
 			args: []string{"pr", "123"},
 			want: invocation{RootDir: ".", PRNumber: 123},
@@ -124,5 +134,36 @@ func TestParseInvocationHelpReturnsErrHelp(t *testing.T) {
 	_, err := parseInvocation([]string{"-h"})
 	if !errors.Is(err, flag.ErrHelp) {
 		t.Fatalf("expected flag.ErrHelp for -h, got %v", err)
+	}
+}
+
+func TestSelectTheme(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name, configured, flag string
+		wantName               string
+		wantErr                bool
+	}{
+		{"config default", "terminal-workshop", "", "terminal-workshop", false},
+		{"alias from config", "pho", "", "terminal-workshop", false},
+		{"flag overrides config", "nope", "default", "terminal-workshop", false},
+		{"unknown falls back", "solarized-nope", "", "terminal-workshop", true},
+		{"unknown flag falls back", "terminal-workshop", "nope", "terminal-workshop", true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			th, err := selectTheme(tc.configured, tc.flag)
+			if th == nil {
+				t.Fatal("selectTheme returned a nil theme")
+			}
+			if th.Name != tc.wantName {
+				t.Errorf("theme = %q, want %q", th.Name, tc.wantName)
+			}
+			if (err != nil) != tc.wantErr {
+				t.Errorf("err = %v, wantErr %v", err, tc.wantErr)
+			}
+		})
 	}
 }
