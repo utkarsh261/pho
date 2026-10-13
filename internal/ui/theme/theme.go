@@ -394,9 +394,12 @@ func Build(p Palette) *Theme {
 	return t
 }
 
-// fillMissing sets every empty colour in p, avatar colours included, from
-// def.
+// fillMissing sets every empty colour in p, avatar colours included, and an
+// unset markdown style, from def.
 func fillMissing(p *Palette, def Palette) {
+	if reflect.ValueOf(p.Markdown).IsZero() {
+		p.Markdown = def.Markdown
+	}
 	pv, dv := reflect.ValueOf(p).Elem(), reflect.ValueOf(def)
 	for i := range pv.NumField() {
 		switch f := pv.Field(i); f.Interface().(type) {

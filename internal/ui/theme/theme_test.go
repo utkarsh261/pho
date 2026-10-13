@@ -106,6 +106,9 @@ func TestBuildFillsMissingColours(t *testing.T) {
 	if th.Primary != "#FF0000" || th.AvatarPalette[0] != "#111111" {
 		t.Errorf("Build overwrote colours that were set: %v, %v", th.Primary, th.AvatarPalette[0])
 	}
+	if !reflect.DeepEqual(th.Markdown, def.Markdown) {
+		t.Error("Build left the markdown style unset")
+	}
 	if th.Highlight != def.Highlight || th.DiffAddBg != def.DiffAddBg || th.AvatarPalette[1] != def.AvatarPalette[1] {
 		t.Error("Build left missing colours empty instead of using the default palette")
 	}
