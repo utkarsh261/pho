@@ -6,6 +6,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	diffsearch "github.com/utkarsh261/pho/internal/diff/search"
+	"github.com/utkarsh261/pho/internal/ui/theme"
 )
 
 type searchWordMatch struct {
@@ -47,15 +48,19 @@ func (m *PRDetailModel) buildSearchRenderContext() searchRenderContext {
 }
 
 func (m *PRDetailModel) searchHighlightStyles() (currentWord, otherWord lipgloss.Style, currentLineBg lipgloss.Color) {
+	th := m.theme
+	if th == nil {
+		th = theme.Default()
+	}
 	currentWord = lipgloss.NewStyle().
-		Background(lipgloss.Color("#F59E0B")).
-		Foreground(lipgloss.Color("#0F172A")).
+		Background(th.SearchCurrentBg).
+		Foreground(th.SearchMatchFg).
 		Bold(true)
 	otherWord = lipgloss.NewStyle().
-		Background(lipgloss.Color("#22D3EE")).
-		Foreground(lipgloss.Color("#0F172A")).
+		Background(th.SearchOtherBg).
+		Foreground(th.SearchMatchFg).
 		Bold(true)
-	return currentWord, otherWord, lipgloss.Color("#1D4ED8")
+	return currentWord, otherWord, th.SearchLineBg
 }
 
 func (m *PRDetailModel) renderSearchMatchLine(

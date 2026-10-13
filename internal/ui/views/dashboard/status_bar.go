@@ -102,7 +102,7 @@ func (m *StatusBarModel) View() string {
 			helpText = m.theme.StatusError.Render(helpText)
 		} else if m.searchActive {
 			helpText = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#FDE047")).
+				Foreground(m.theme.SearchActiveFg).
 				Bold(true).
 				Render(helpText)
 		} else {
