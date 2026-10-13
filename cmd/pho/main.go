@@ -362,6 +362,9 @@ func main() {
 		InitialPRNumber:    inv.PRNumber,
 		Logger:             logger,
 		TerminalBackground: cfg.UI.Background == "terminal",
+		SaveTheme: func(name string) error {
+			return config.SaveTheme(configPath, name)
+		},
 	}
 	model := app.NewModel(deps)
 

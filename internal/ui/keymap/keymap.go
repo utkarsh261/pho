@@ -76,6 +76,8 @@ func dispatchGlobal(msg tea.KeyMsg) Result {
 			return Result{Action: ToggleKeymapOverlay{}}
 		case 'n':
 			return Result{Action: CreatePR{}}
+		case 'T':
+			return Result{Action: OpenThemePicker{}}
 		}
 	}
 	return Result{}
@@ -289,6 +291,11 @@ func (CloseCmdPalette) isAction() {}
 type OpenDashboardFilter struct{}
 
 func (OpenDashboardFilter) isAction() {}
+
+// OpenThemePicker opens the live theme chooser.
+type OpenThemePicker struct{}
+
+func (OpenThemePicker) isAction() {}
 
 type TriggerRefresh struct{}
 

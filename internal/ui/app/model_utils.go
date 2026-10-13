@@ -37,7 +37,7 @@ func batch(cmdsOut ...tea.Cmd) tea.Cmd {
 
 func isRootAction(action keymap.Action) bool {
 	switch action.(type) {
-	case keymap.ToggleCmdPalette, keymap.CloseCmdPalette, keymap.CycleFocus, keymap.TriggerRefresh, keymap.OpenBrowser, keymap.OpenPRDetail, keymap.SelectPR, keymap.Quit, keymap.OpenDashboardFilter, keymap.ToggleKeymapOverlay, keymap.CreatePR:
+	case keymap.ToggleCmdPalette, keymap.CloseCmdPalette, keymap.CycleFocus, keymap.TriggerRefresh, keymap.OpenBrowser, keymap.OpenPRDetail, keymap.SelectPR, keymap.Quit, keymap.OpenDashboardFilter, keymap.ToggleKeymapOverlay, keymap.CreatePR, keymap.OpenThemePicker:
 		return true
 	default:
 		return false

@@ -119,6 +119,8 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 	switch msg.String() {
 	case "?":
 		return m, func() tea.Msg { return ToggleKeymapOverlayMsg{} }
+	case "T":
+		return m, func() tea.Msg { return OpenThemePicker{} }
 	case "/":
 		m.activateSearch()
 		return m, nil

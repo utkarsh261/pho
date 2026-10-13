@@ -62,13 +62,29 @@ type Model struct {
 
 	limit int
 
-	// pickMode turns the palette into a plain repo chooser (used by the
-	// `pho pr <n>` deep link): results are pickPool filtered in-memory,
-	// independent of the search index.
-	pickMode bool
+	// pickKind turns the palette into a plain chooser: repos for the
+	// `pho pr <n>` deep link, or themes. Results are pickPool filtered
+	// in-memory, independent of the search index.
+	pickKind pickKind
 	pickPool []domain.SearchResult
 	pickHint string
+
+	// Theme picker: the theme active when it opened, and each theme built
+	// once for its colour swatch.
+	themeCurrent string
+	themeSwatch  map[string]*theme.Theme
 }
+
+type pickKind int
+
+const (
+	pickNone pickKind = iota
+	pickRepo
+	pickTheme
+)
+
+// themeResult marks a row of the theme picker.
+const themeResult domain.SearchResultKind = "theme"
 
 // NewModel constructs a command palette overlay model.
 func NewModel(search SearchService) Model {
@@ -106,7 +122,7 @@ func (m *Model) SetResults(results []domain.SearchResult) {
 // OpenRepoPick switches the palette into repo-pick mode listing the given
 // repos, with hint as the box title.
 func (m *Model) OpenRepoPick(repos []domain.Repository, hint string) {
-	m.pickMode = true
+	m.pickKind = pickRepo
 	m.pickHint = hint
 	m.pickPool = make([]domain.SearchResult, 0, len(repos))
 	for _, r := range repos {
@@ -117,6 +133,45 @@ func (m *Model) OpenRepoPick(repos []domain.Repository, hint string) {
 		})
 	}
 	m.refreshResults()
+}
+
+// OpenThemePick switches the palette into a theme chooser listing names,
+// with the selection starting on current. The caller previews the selected
+// theme (PreviewTheme) and handles Enter and Esc itself.
+func (m *Model) OpenThemePick(names []string, current string) {
+	m.pickKind = pickTheme
+	m.pickHint = "Theme"
+	m.themeCurrent = current
+	m.themeSwatch = make(map[string]*theme.Theme, len(names))
+	m.pickPool = make([]domain.SearchResult, 0, len(names))
+	for _, name := range names {
+		if th, ok := theme.Get(name); ok {
+			m.themeSwatch[name] = th
+		}
+		m.pickPool = append(m.pickPool, domain.SearchResult{Kind: themeResult, Title: name})
+	}
+	m.refreshResults()
+	for i, r := range m.results {
+		if r.Title == current {
+			m.selectedIndex = i
+			m.ensureSelectionVisible()
+			break
+		}
+	}
+}
+
+// IsThemePick reports whether the palette is the theme chooser.
+func (m Model) IsThemePick() bool {
+	return m.pickKind == pickTheme
+}
+
+// PreviewTheme is the theme under the selection in the theme chooser, or ""
+// when nothing matches the filter (or the palette is not the chooser).
+func (m Model) PreviewTheme() string {
+	if m.pickKind != pickTheme || m.selectedIndex < 0 || m.selectedIndex >= len(m.results) {
+		return ""
+	}
+	return m.results[m.selectedIndex].Title
 }
 
 // Update handles Bubble Tea messages.
@@ -222,8 +277,8 @@ func (m *Model) deleteAfterCursor() bool {
 }
 
 func (m *Model) refreshResults() {
-	if m.pickMode {
-		m.results = filterRepoPool(m.pickPool, m.query)
+	if m.pickKind != pickNone {
+		m.results = filterPickPool(m.pickPool, m.query)
 		m.selectedIndex = clampIndex(0, len(m.results))
 		m.scrollOffset = 0
 		m.ensureSelectionVisible()
@@ -267,14 +322,15 @@ func (m *Model) refreshResults() {
 	m.ensureSelectionVisible()
 }
 
-func filterRepoPool(pool []domain.SearchResult, query string) []domain.SearchResult {
+// filterPickPool keeps the pool entries whose title contains query.
+func filterPickPool(pool []domain.SearchResult, query string) []domain.SearchResult {
 	q := strings.ToLower(strings.TrimSpace(query))
 	if q == "" {
 		return append([]domain.SearchResult(nil), pool...)
 	}
 	out := make([]domain.SearchResult, 0, len(pool))
 	for _, r := range pool {
-		if strings.Contains(strings.ToLower(r.Repo), q) {
+		if strings.Contains(strings.ToLower(r.Title), q) {
 			out = append(out, r)
 		}
 	}
