@@ -1,0 +1,72 @@
+AccentText: #A78BFA
+Additions: fg=#10B981 bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+AvatarPalette: #F472B6 #60A5FA #34D399 #FBBF24 #A78BFA #F87171 #22D3EE #FB923C
+Bold: fg={} bg={} bold=true underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+Border: #30363D
+BoxBorder: fg={} bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="─","│","─","│" sides=false,false,false,false borderfg=#7C3AED,#7C3AED,#7C3AED,#7C3AED
+BoxDiv: fg=#30363D bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+BoxFooter: fg=#6B7280 bg={} bold=false underline=false faint=true reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+BoxNormal: fg=#CBD5E1 bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+BoxPRAuthor: fg=#6B7280 bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+BoxPRNum: fg=#06B6D4 bg={} bold=true underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+BoxTitle: fg=#E6EDF3 bg={} bold=true underline=false faint=false reverse=false pad=0,1,0,1 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+CIFailure: fg=#EF4444 bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+CIMuted: fg=#6B7280 bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+CIPending: fg=#F59E0B bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+CISuccess: fg=#10B981 bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+Deletions: fg=#EF4444 bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+DiffAddBg: #12261E
+DiffAddEmphBg: #1F5A3A
+DiffAddition: fg=#7EE2A8 bg=#12261E bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+DiffDelBg: #2D1619
+DiffDelEmphBg: #6E2630
+DiffDeletion: fg=#F7A8A8 bg=#2D1619 bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+DiffHunkHeader: fg=#6B8EAE bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+DimTxt: fg=#9CA3AF bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+Divider: fg=#30363D bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+Error: #EF4444
+Faint: #4B5563
+FaintTxt: fg=#4B5563 bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+Header: fg=#E6EDF3 bg={} bold=true underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+Highlight: #262338
+HintDesc: fg=#6B7280 bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+HintKey: fg=#C9D1D9 bg={} bold=true underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+Keycap: fg=#06B6D4 bg={} bold=true underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+KeymapHeader: fg=#7C3AED bg={} bold=true underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+Muted: #6B7280
+MutedTxt: fg=#6B7280 bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+NormalRow: fg={} bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+Number: fg=#06B6D4 bg={} bold=true underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+Panel: fg={} bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","│" sides=true,false,false,false borderfg=#30363D,#30363D,#30363D,#30363D
+PanelFocused: fg={} bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","┃" sides=true,false,false,false borderfg=#7C3AED,#7C3AED,#7C3AED,#7C3AED
+Primary: #7C3AED
+PrimaryTxt: fg=#7C3AED bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+ReviewApproved: fg=#10B981 bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+ReviewChanges: fg=#EF4444 bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+ReviewDraft: fg=#6B7280 bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+ReviewMuted: fg=#6B7280 bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+ReviewRequired: fg=#F59E0B bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+Secondary: #06B6D4
+SecondaryTxt: fg=#06B6D4 bg={} bold=true underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+SectionTabActive: fg=#FFFFFF bg=#7C3AED bold=true underline=false faint=false reverse=false pad=0,1,0,1 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+Selection: #3B2F66
+StateClosed: #DA3633
+StateDraft: #6E7681
+StateMerged: #8957E5
+StateOpen: #238636
+StatusError: fg=#EF4444 bg={} bold=true underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+StatusFresh: fg=#10B981 bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+StatusHelp: fg=#9CA3AF bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+StatusLoading: fg=#F59E0B bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+StatusSep: fg=#30363D bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+StatusStale: fg=#F59E0B bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+Subtle: #1F2937
+Success: #10B981
+TabActive: fg=#A78BFA bg={} bold=true underline=true faint=false reverse=false pad=0,1,0,1 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+TabInactive: fg=#6B7280 bg={} bold=false underline=false faint=false reverse=false pad=0,1,0,1 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+Text: #E6EDF3
+TextBright: #FFFFFF
+TextDim: #9CA3AF
+Title: fg={} bg={} bold=true underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+UnresolvedBorder: #7A5A12
+Warning: #F59E0B
