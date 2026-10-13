@@ -3,10 +3,21 @@
 // panel model — no globals, no side effects.
 package theme
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"reflect"
+
+	"github.com/charmbracelet/lipgloss"
+)
+
+// AvatarCount is the number of colours used to tell comment authors apart.
+const AvatarCount = 8
 
 // Palette holds the colours a theme is built from. Build derives every style
 // from it, so a new look only needs a new Palette.
+//
+// A built Theme's palette is read-only: its styles were derived from these
+// colours, so changing one afterwards leaves the styles on the old value.
+// Use Theme.With to get a theme with different colours.
 type Palette struct {
 	Primary   lipgloss.Color
 	Secondary lipgloss.Color
@@ -35,7 +46,9 @@ type Palette struct {
 	UnresolvedBorder lipgloss.Color
 
 	// Colours used to tell comment authors apart.
-	AvatarPalette []lipgloss.Color
+	// An array rather than a slice, so copying a Palette or Theme never
+	// shares it.
+	AvatarPalette [AvatarCount]lipgloss.Color
 
 	// Diff line backgrounds.
 	DiffAddBg lipgloss.Color
@@ -181,7 +194,7 @@ var terminalWorkshop = Palette{
 	StateDraft:  lipgloss.Color("#6E7681"),
 
 	UnresolvedBorder: lipgloss.Color("#7A5A12"),
-	AvatarPalette: []lipgloss.Color{
+	AvatarPalette: [AvatarCount]lipgloss.Color{
 		"#F472B6", "#60A5FA", "#34D399", "#FBBF24",
 		"#A78BFA", "#F87171", "#22D3EE", "#FB923C",
 	},
@@ -215,9 +228,20 @@ func Default() *Theme {
 	return Build(terminalWorkshop)
 }
 
-// Build constructs a Theme, deriving every style from p.
+// With returns a new theme built from t's palette after change edits it.
+// It is the way to adjust colours: setting a colour on a built theme leaves
+// its styles on the old value.
+func (t *Theme) With(change func(*Palette)) *Theme {
+	p := t.Palette
+	change(&p)
+	return Build(p)
+}
+
+// Build constructs a Theme, deriving every style from p. Colours p leaves
+// empty are taken from the default palette, so a partial palette still
+// draws tints, cursors and borders.
 func Build(p Palette) *Theme {
-	p.AvatarPalette = append([]lipgloss.Color(nil), p.AvatarPalette...)
+	fillMissing(&p, terminalWorkshop)
 	t := &Theme{Palette: p}
 
 	// Panel borders.
@@ -356,4 +380,24 @@ func Build(p Palette) *Theme {
 	t.HintDesc = lipgloss.NewStyle().Foreground(t.Muted)
 
 	return t
+}
+
+// fillMissing sets every empty colour in p, avatar colours included, from
+// def.
+func fillMissing(p *Palette, def Palette) {
+	pv, dv := reflect.ValueOf(p).Elem(), reflect.ValueOf(def)
+	for i := range pv.NumField() {
+		switch f := pv.Field(i); f.Interface().(type) {
+		case lipgloss.Color:
+			if f.String() == "" {
+				f.Set(dv.Field(i))
+			}
+		case [AvatarCount]lipgloss.Color:
+			for j := range AvatarCount {
+				if f.Index(j).String() == "" {
+					f.Index(j).Set(dv.Field(i).Index(j))
+				}
+			}
+		}
+	}
 }

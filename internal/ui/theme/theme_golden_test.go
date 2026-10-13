@@ -77,7 +77,7 @@ func dumpFields(v reflect.Value, out map[string]string) {
 		switch f := v.Field(i).Interface().(type) {
 		case lipgloss.Color:
 			out[name] = string(f)
-		case []lipgloss.Color:
+		case [AvatarCount]lipgloss.Color:
 			parts := make([]string, len(f))
 			for j, c := range f {
 				parts[j] = string(c)
