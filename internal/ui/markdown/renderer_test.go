@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/charmbracelet/glamour/styles"
@@ -220,8 +221,8 @@ func TestRenderFollowsProfileChange(t *testing.T) {
 	}
 }
 
-// TestSetStyleSwitchesOutput checks that a new style id re-renders cached
-// markdown in the new style, and that switching back restores the original.
+// TestSetStyleSwitchesOutput checks that a new style re-renders cached
+// markdown in that style, and that switching back restores the original.
 func TestSetStyleSwitchesOutput(t *testing.T) {
 	prev := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
@@ -231,14 +232,79 @@ func TestSetStyleSwitchesOutput(t *testing.T) {
 	r := New()
 	tokyo := strings.Join(r.Render(src, 80), "\n")
 
-	r.SetStyle("dracula", styles.DraculaStyleConfig)
+	r.SetStyle(styles.DraculaStyleConfig)
 	dracula := strings.Join(r.Render(src, 80), "\n")
 	if dracula == tokyo {
 		t.Fatal("expected a different render after switching style")
 	}
 
-	r.SetStyle("tokyo-night", styles.TokyoNightStyleConfig)
+	r.SetStyle(styles.TokyoNightStyleConfig)
 	if got := strings.Join(r.Render(src, 80), "\n"); got != tokyo {
 		t.Errorf("switching back did not restore the original render\ngot:  %q\nwant: %q", got, tokyo)
+	}
+}
+
+// TestSetStyleComparesByValue checks the renderer follows the style itself,
+// not a name: a style differing in one colour re-renders, and an equal style
+// built separately (new pointers, same values) changes nothing.
+func TestSetStyleComparesByValue(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+
+	src := "# Title\n\nSome **bold** text."
+	r := New()
+	before := strings.Join(r.Render(src, 80), "\n")
+
+	tweaked := styles.TokyoNightStyleConfig
+	red := "#FF0000"
+	tweaked.Document.Color = &red
+	r.SetStyle(tweaked)
+	after := strings.Join(r.Render(src, 80), "\n")
+	if after == before || !strings.Contains(after, "38;2;255;0;0") {
+		t.Fatalf("a one-colour style change was ignored:\n%q", after)
+	}
+
+	same := styles.TokyoNightStyleConfig
+	red2 := "#FF0000"
+	same.Document.Color = &red2
+	r.SetStyle(same)
+	if got := strings.Join(r.Render(src, 80), "\n"); got != after {
+		t.Errorf("an equal style changed the output:\n%q\nwant:\n%q", got, after)
+	}
+}
+
+// TestRenderConcurrentWithSetStyle runs renders alongside style changes; run
+// with -race. Afterwards the cache must hold output in the final style only.
+func TestRenderConcurrentWithSetStyle(t *testing.T) {
+	src := "# Title\n\nSome **bold** text."
+	r := New()
+	var wg sync.WaitGroup
+	for i := range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := range 50 {
+				if (i+j)%5 == 0 {
+					if j%2 == 0 {
+						r.SetStyle(styles.DraculaStyleConfig)
+					} else {
+						r.SetStyle(styles.TokyoNightStyleConfig)
+					}
+				}
+				r.Render(src, 60+j%3)
+			}
+		}()
+	}
+	wg.Wait()
+
+	r.SetStyle(styles.DraculaStyleConfig)
+	fresh := New()
+	fresh.SetStyle(styles.DraculaStyleConfig)
+	for _, w := range []int{60, 61, 62} {
+		got, want := strings.Join(r.Render(src, w), "\n"), strings.Join(fresh.Render(src, w), "\n")
+		if got != want {
+			t.Errorf("width %d: cached output is not in the final style", w)
+		}
 	}
 }

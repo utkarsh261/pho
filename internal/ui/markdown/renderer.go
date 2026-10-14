@@ -1,6 +1,7 @@
 package markdown
 
 import (
+	"reflect"
 	"regexp"
 	"strings"
 	"sync"
@@ -49,15 +50,15 @@ type renderCacheKey struct {
 }
 
 // Renderer wraps a glamour TermRenderer, lazily re-creating it only when the
-// requested width, the lipgloss colour profile or the style changes. Safe for
-// use from a single goroutine (bubbletea's update/view cycle); the mutex
-// guards the lazy re-init only.
+// requested width, the lipgloss colour profile or the style changes. It is
+// safe for concurrent use: the mutex is held for a whole Render, so a style
+// change can never land between rendering and caching the result.
 type Renderer struct {
 	mu      sync.Mutex
 	width   int
 	profile termenv.Profile
-	styleID string
-	style   glamouransi.StyleConfig
+	given   glamouransi.StyleConfig // the style as passed to SetStyle
+	style   glamouransi.StyleConfig // given, with margins zeroed
 	inner   *glamour.TermRenderer
 	cache   map[renderCacheKey][]string
 }
@@ -65,19 +66,23 @@ type Renderer struct {
 // New returns a Renderer using the tokyo-night style. The inner glamour
 // renderer is initialized on the first Render call.
 func New() *Renderer {
-	return &Renderer{style: noMargin(styles.TokyoNightStyleConfig)}
+	return &Renderer{
+		given: styles.TokyoNightStyleConfig,
+		style: noMargin(styles.TokyoNightStyleConfig),
+	}
 }
 
-// SetStyle switches the glamour style. id names the style (a theme name);
-// setting the id already in use is a no-op, and a new id drops cached
-// renders so nothing drawn in the old style is served again.
-func (r *Renderer) SetStyle(id string, style glamouransi.StyleConfig) {
+// SetStyle switches the glamour style. A style equal to the current one
+// (compared by value, through its pointers) is a no-op that keeps cached
+// renders; any other drops them, so nothing drawn in the old style is
+// served again.
+func (r *Renderer) SetStyle(style glamouransi.StyleConfig) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.styleID == id {
+	if reflect.DeepEqual(r.given, style) {
 		return
 	}
-	r.styleID = id
+	r.given = style
 	r.style = noMargin(style)
 	r.inner = nil
 	r.cache = nil
@@ -102,11 +107,9 @@ func (r *Renderer) Render(src string, width int) []string {
 	key := renderCacheKey{src, w, profile}
 
 	r.mu.Lock()
-	if r.cache != nil {
-		if lines, ok := r.cache[key]; ok {
-			r.mu.Unlock()
-			return lines
-		}
+	defer r.mu.Unlock()
+	if lines, ok := r.cache[key]; ok {
+		return lines
 	}
 
 	if r.inner == nil || r.width != w || r.profile != profile {
@@ -121,14 +124,11 @@ func (r *Renderer) Render(src string, width int) []string {
 			r.profile = profile
 		}
 	}
-	inner := r.inner
-	r.mu.Unlock()
-
-	if inner == nil {
+	if r.inner == nil {
 		return []string{src}
 	}
 	src = preprocessImages(src)
-	out, err := inner.Render(src)
+	out, err := r.inner.Render(src)
 	if err != nil {
 		return []string{src}
 	}
@@ -139,13 +139,10 @@ func (r *Renderer) Render(src string, width int) []string {
 	}
 	result := trimOutput(strings.Split(out, "\n"))
 
-	r.mu.Lock()
 	if r.cache == nil {
 		r.cache = make(map[renderCacheKey][]string)
 	}
 	r.cache[key] = result
-	r.mu.Unlock()
-
 	return result
 }
 

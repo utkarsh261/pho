@@ -433,7 +433,7 @@ func (m *PRDetailModel) SetTheme(th *theme.Theme) {
 	if th != nil {
 		m.spinner.Style = lipgloss.NewStyle().Foreground(th.Warning)
 		if m.mdRenderer != nil {
-			m.mdRenderer.SetStyle(th.Name, th.Markdown)
+			m.mdRenderer.SetStyle(th.Markdown)
 		}
 	}
 }
