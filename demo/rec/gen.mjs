@@ -37,7 +37,7 @@ const out = [
   `Set TypingSpeed ${TYPE_MS}ms`,
   `Set Theme ${JSON.stringify(theme)}`,
   'Hide',
-  `Type "export PATH=${W}/bin:$PATH PHO_SLOWMO=${SLOW} PHO_MOCK_API=http://${MOCK} XDG_CACHE_HOME=${W}/xdg/c XDG_STATE_HOME=${W}/xdg/s XDG_DATA_HOME=${W}/xdg/d; cd ${W}/world/repos"`,
+  `Type "export PATH=${W}/bin:$PATH PHO_SLOWMO=${SLOW} PHO_MOCK_API=http://${MOCK} XDG_CACHE_HOME=${W}/xdg/c XDG_CONFIG_HOME=${W}/xdg/cfg XDG_STATE_HOME=${W}/xdg/s XDG_DATA_HOME=${W}/xdg/d; cd ${W}/world/repos"`,
   'Enter',
   `Type "alias pho='script -q -r ${W}/rec/${name}.keys.rec pho'"`,
   'Enter',
