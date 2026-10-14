@@ -1,6 +1,7 @@
 package markdown
 
 import (
+	"reflect"
 	"regexp"
 	"strings"
 	"sync"
@@ -34,14 +35,13 @@ func preprocessImages(src string) string {
 	return src
 }
 
-// tokyoNightNoMargin is the tokyo-night StyleConfig with Document and CodeBlock
-// margins zeroed so output sits flush with the surrounding UI elements.
-var tokyoNightNoMargin = func() glamouransi.StyleConfig {
-	s := styles.TokyoNightStyleConfig
-	s.Document.Margin = zeroUint
-	s.CodeBlock.Margin = zeroUint
-	return s
-}()
+// noMargin returns style with Document and CodeBlock margins zeroed so output
+// sits flush with the surrounding UI elements.
+func noMargin(style glamouransi.StyleConfig) glamouransi.StyleConfig {
+	style.Document.Margin = zeroUint
+	style.CodeBlock.Margin = zeroUint
+	return style
+}
 
 type renderCacheKey struct {
 	src     string
@@ -50,20 +50,42 @@ type renderCacheKey struct {
 }
 
 // Renderer wraps a glamour TermRenderer, lazily re-creating it only when the
-// requested width or the lipgloss colour profile changes. Safe for use from a single goroutine (bubbletea's
-// update/view cycle); the mutex guards the lazy re-init only.
+// requested width, the lipgloss colour profile or the style changes. It is
+// safe for concurrent use: the mutex is held for a whole Render, so a style
+// change can never land between rendering and caching the result.
 type Renderer struct {
 	mu      sync.Mutex
 	width   int
 	profile termenv.Profile
+	given   glamouransi.StyleConfig // the style as passed to SetStyle
+	style   glamouransi.StyleConfig // given, with margins zeroed
 	inner   *glamour.TermRenderer
 	cache   map[renderCacheKey][]string
 }
 
-// New returns a Renderer ready for use. The inner glamour renderer is
-// initialized on the first Render call.
+// New returns a Renderer using the tokyo-night style. The inner glamour
+// renderer is initialized on the first Render call.
 func New() *Renderer {
-	return &Renderer{}
+	return &Renderer{
+		given: styles.TokyoNightStyleConfig,
+		style: noMargin(styles.TokyoNightStyleConfig),
+	}
+}
+
+// SetStyle switches the glamour style. A style equal to the current one
+// (compared by value, through its pointers) is a no-op that keeps cached
+// renders; any other drops them, so nothing drawn in the old style is
+// served again.
+func (r *Renderer) SetStyle(style glamouransi.StyleConfig) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if reflect.DeepEqual(r.given, style) {
+		return
+	}
+	r.given = style
+	r.style = noMargin(style)
+	r.inner = nil
+	r.cache = nil
 }
 
 // Render converts markdown src into a slice of plain terminal lines ready for
@@ -85,16 +107,14 @@ func (r *Renderer) Render(src string, width int) []string {
 	key := renderCacheKey{src, w, profile}
 
 	r.mu.Lock()
-	if r.cache != nil {
-		if lines, ok := r.cache[key]; ok {
-			r.mu.Unlock()
-			return lines
-		}
+	defer r.mu.Unlock()
+	if lines, ok := r.cache[key]; ok {
+		return lines
 	}
 
 	if r.inner == nil || r.width != w || r.profile != profile {
 		tr, err := glamour.NewTermRenderer(
-			glamour.WithStyles(tokyoNightNoMargin),
+			glamour.WithStyles(r.style),
 			glamour.WithWordWrap(w),
 			glamour.WithColorProfile(profile),
 		)
@@ -104,14 +124,11 @@ func (r *Renderer) Render(src string, width int) []string {
 			r.profile = profile
 		}
 	}
-	inner := r.inner
-	r.mu.Unlock()
-
-	if inner == nil {
+	if r.inner == nil {
 		return []string{src}
 	}
 	src = preprocessImages(src)
-	out, err := inner.Render(src)
+	out, err := r.inner.Render(src)
 	if err != nil {
 		return []string{src}
 	}
@@ -122,13 +139,10 @@ func (r *Renderer) Render(src string, width int) []string {
 	}
 	result := trimOutput(strings.Split(out, "\n"))
 
-	r.mu.Lock()
 	if r.cache == nil {
 		r.cache = make(map[renderCacheKey][]string)
 	}
 	r.cache[key] = result
-	r.mu.Unlock()
-
 	return result
 }
 
