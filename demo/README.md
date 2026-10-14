@@ -70,3 +70,29 @@ up state. To look at a stretch of footage without encoding, run
 `python3 demo/rec/sheet.py full 40 60 2 sheet.png` in `demo/.work/rec`.
 
 Re-run `demo/run.sh --fresh` after changing the bundles or the patch.
+
+## Themes demo (asciinema)
+
+```sh
+demo/run.sh --fresh sample   # once, or after changing pho: builds the fake world and pho
+demo/themes.sh               # -> demo/out/pho-themes.mp4 (4K, 60 fps) + pho-themes.gif
+```
+
+A second pipeline that needs no browser: `asciinema`, `agg`, `ffmpeg`,
+`swift` (ships with the Xcode command line tools) and `python3`.
+
+1. `rec/cast.py` runs pho under `asciinema rec` (asciicast v2) on a 200x53 pty
+   and sends each step of `rec/themes.json` at its time. It answers pho's
+   terminal queries (background colour, cursor position) itself, and logs
+   when each key went out.
+2. `rec/compose_cast.py` renders the cast with agg at a size where the grid
+   is exactly 3840x2120, pads it to 4K with the theme's own background, cuts
+   exactly `duration` seconds, and overlays key chips and labels drawn by
+   `rec/chips.swift` (CoreText) with synthesised key clicks. The GIF is made
+   from the MP4 at 1600px, 20 fps.
+
+Step times in `themes.json` are seconds into the final video; recording
+starts `preroll` seconds earlier so pho has loaded. Steps are `{at, key}`,
+`{at, type, speed}` (one chip for the word) or `{at, label}` (runs until the
+next label). The take records into `$DEMO_WORK/xdg/cfg`, so the theme the
+picker saves never touches your own config.

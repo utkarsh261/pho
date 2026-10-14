@@ -10,7 +10,7 @@ LAT=${2:-90ms}
 R=$W/world/repos
 
 lsof -ti tcp:${MOCK##*:} | xargs kill 2>/dev/null; sleep 0.3   # whatever holds the mock port
-rm -rf $W/xdg; mkdir -p $W/xdg/c $W/xdg/s $W/xdg/d $W/rec
+rm -rf $W/xdg; mkdir -p $W/xdg/c $W/xdg/s $W/xdg/d $W/xdg/cfg $W/rec
 git -C $R/tidepool checkout -q -f feat/s3-sink-multipart
 for b in $(git -C $R/tidepool branch --format='%(refname:short)'); do
   [[ $b == feat/s3-sink-multipart ]] || git -C $R/tidepool branch -q -D $b
