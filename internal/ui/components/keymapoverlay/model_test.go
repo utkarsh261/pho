@@ -605,3 +605,14 @@ func TestModel_ViewOmitsUpdateBranchWhenNotBehind(t *testing.T) {
 		t.Errorf("expected overlay to omit 'Update branch' when not BEHIND; got view containing it:\n%s", view)
 	}
 }
+
+func TestDirectKeys(t *testing.T) {
+	m := NewModel()
+	m.Groups = BuildBindings(Context{View: domain.PrimaryViewDashboard})
+	if k, ok := m.DirectKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'T'}}); !ok || k != "T" {
+		t.Errorf("DirectKey(T) = %q, %v", k, ok)
+	}
+	if _, ok := m.DirectKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}}); ok {
+		t.Error("q should not be a direct key")
+	}
+}

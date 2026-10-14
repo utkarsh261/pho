@@ -20,10 +20,13 @@ type ToggleKeymapOverlay struct{}
 // CloseKeymapOverlay dismisses the overlay.
 type CloseKeymapOverlay struct{}
 
-// Binding maps a key string to a human-readable description.
+// Binding maps a key string to a human-readable description. Direct keys
+// also work while the overlay is open: pressing one closes it and runs the
+// action, so a key found here can be used without closing first.
 type Binding struct {
 	Key         string
 	Description string
+	Direct      bool
 }
 
 // Group is a named collection of bindings.
@@ -65,6 +68,19 @@ func (m *Model) SetTheme(th *theme.Theme) {
 func (m *Model) SetSize(w, h int) {
 	m.width = w
 	m.height = h
+}
+
+// DirectKey reports whether msg is a Direct binding in the shown groups,
+// returning its key.
+func (m Model) DirectKey(msg tea.KeyMsg) (string, bool) {
+	for _, g := range m.Groups {
+		for _, b := range g.Bindings {
+			if b.Direct && b.Key == msg.String() {
+				return b.Key, true
+			}
+		}
+	}
+	return "", false
 }
 
 // Update handles messages.
@@ -338,9 +354,9 @@ func buildDashboardBindings(ctx Context) []Group {
 	groups = append(groups, Group{
 		Name: "Global",
 		Bindings: []Binding{
-			{Key: "ctrl+p", Description: "Jump to PR/Repo"},
+			{Key: "ctrl+p", Description: "Jump to PR/Repo", Direct: true},
 			{Key: "q", Description: "Quit"},
-			{Key: "T", Description: "Theme"},
+			{Key: "T", Description: "Theme", Direct: true},
 			{Key: "?", Description: "Keybindings"},
 		},
 	})
@@ -374,7 +390,7 @@ func buildCommitDetailBindings() []Group {
 		{
 			Name: "Global",
 			Bindings: []Binding{
-				{Key: "T", Description: "Theme"},
+				{Key: "T", Description: "Theme", Direct: true},
 				{Key: "?", Description: "Keybindings"},
 			},
 		},
@@ -467,7 +483,7 @@ func buildPRDetailBindings(ctx Context) []Group {
 	groups = append(groups, Group{
 		Name: "Global",
 		Bindings: []Binding{
-			{Key: "T", Description: "Theme"},
+			{Key: "T", Description: "Theme", Direct: true},
 			{Key: "?", Description: "Keybindings"},
 		},
 	})
