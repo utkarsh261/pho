@@ -427,10 +427,8 @@ func (m Model) themeLine(st styles, name string, selected bool, width int) strin
 		strings.Repeat(" ", max(nameW-lipgloss.Width(name), 1))
 
 	dots := make([]string, 0, 5)
-	if th := m.themeSwatch[name]; th != nil {
-		for _, c := range []lipgloss.Color{th.Primary, th.Secondary, th.Success, th.Warning, th.Error} {
-			dots = append(dots, lipgloss.NewStyle().Foreground(c).Render("●"))
-		}
+	for _, c := range m.themeSwatch[name] {
+		dots = append(dots, lipgloss.NewStyle().Foreground(c).Render("●"))
 	}
 	swatch := strings.Join(dots, " ")
 

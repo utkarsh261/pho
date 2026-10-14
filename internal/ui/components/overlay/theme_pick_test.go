@@ -160,3 +160,21 @@ func TestThemePickIgnoresRefresh(t *testing.T) {
 		t.Errorf("after RefreshResults PreviewTheme() = %q, want %q", got, want)
 	}
 }
+
+// TestThemePickFilterKeepsSelection checks typing and deleting a filter
+// letter leaves the selection (and so the preview) where it was, as long
+// as the selected theme still matches.
+func TestThemePickFilterKeepsSelection(t *testing.T) {
+	t.Parallel()
+
+	m := NewModel(nil)
+	m.OpenThemePick(theme.Names(), "nord")
+	m = typeRunes(m, "o")
+	if got := m.PreviewTheme(); got != "nord" {
+		t.Errorf("after typing o PreviewTheme() = %q, want nord", got)
+	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	if got := m.PreviewTheme(); got != "nord" {
+		t.Errorf("after deleting it PreviewTheme() = %q, want nord", got)
+	}
+}

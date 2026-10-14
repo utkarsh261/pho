@@ -12,6 +12,7 @@ import (
 	"github.com/utkarsh261/pho/internal/config"
 	"github.com/utkarsh261/pho/internal/domain"
 	"github.com/utkarsh261/pho/internal/ui/theme"
+	"github.com/utkarsh261/pho/internal/ui/views/prdetail"
 )
 
 // recordingSaver records saved theme names; when hold is set, each save
@@ -57,7 +58,7 @@ func themePickerModel(t *testing.T) (*Model, *recordingSaver) {
 	t.Helper()
 	m := ansiPRDetail(t, "2")
 	s := &recordingSaver{}
-	m.themeSaver = &themeSaver{save: s.save}
+	m.themeSaves = &themeSaves{save: s.save, saved: theme.DefaultName}
 	return m, s
 }
 
@@ -154,32 +155,76 @@ func TestThemePickerReopenBeforeSave(t *testing.T) {
 	}
 }
 
-// TestThemePickerSavesInOrder runs two saves out of order: the older one is
-// dropped, so the newer choice stays on disk, and only its result counts.
-func TestThemePickerSavesInOrder(t *testing.T) {
+// TestThemePickerQueuesSaves picks twice before the first save finishes:
+// the second waits until the first is done, so the config ends up with the
+// last pick, and only the last save's result is reported.
+func TestThemePickerQueuesSaves(t *testing.T) {
 	m, s := themePickerModel(t)
-	s.err = nil
+	s.err = errors.New("disk full") // the first save fails
 
 	openPicker(m)
 	key(m, keyDown)
 	saveA := key(m, keyEnter)
 	openPicker(m)
 	key(m, keyDown)
-	saveB := key(m, keyEnter)
-	b := theme.Names()[2]
+	if cmd := key(m, keyEnter); cmd != nil {
+		t.Fatal("a second save started while the first was running")
+	}
+	a, b := theme.Names()[1], theme.Names()[2]
 
-	msgB, msgA := saveB(), saveA()
-	if got := s.saved(); len(got) != 1 || got[0] != b {
-		t.Fatalf("saved %v, want only [%s]", got, b)
+	msgA := saveA()
+	s.err = nil
+	drainCmds(m, func() tea.Msg { return msgA })
+	if got := s.saved(); len(got) != 2 || got[0] != a || got[1] != b {
+		t.Fatalf("saved %v, want [%s %s]", got, a, b)
+	}
+	if len(m.state.Errors.Errors) != 0 {
+		t.Errorf("the superseded save's failure was shown: %v", m.state.Errors.Errors)
+	}
+}
+
+// TestThemePickerSavesWhenConfigDiffers covers picks equal to the theme on
+// screen but not to the config: an unknown configured theme (shown as the
+// default) and a --theme override.
+func TestThemePickerSavesWhenConfigDiffers(t *testing.T) {
+	t.Run("unknown configured theme", func(t *testing.T) {
+		m, s := themePickerModel(t)
+		m.themeSaves.saved = "" // the config names a theme pho doesn't know
+		openPicker(m)
+		drainCmds(m, key(m, keyEnter)) // keep the default on screen
+		if got := s.saved(); len(got) != 1 || got[0] != theme.DefaultName {
+			t.Errorf("saved %v, want [%s]", got, theme.DefaultName)
+		}
+	})
+	t.Run("--theme override", func(t *testing.T) {
+		m, s := themePickerModel(t)
+		m.themeSaves.saved = "nord"
+		dracula, _ := theme.Get("dracula")
+		m.SetTheme(dracula) // started with --theme dracula
+		openPicker(m)
+		drainCmds(m, key(m, keyEnter))
+		if got := s.saved(); len(got) != 1 || got[0] != "dracula" {
+			t.Errorf("saved %v, want [dracula]", got)
+		}
+	})
+}
+
+// TestThemePickerAndHelpDontStack checks the picker and the help overlay
+// never open together, in either order: from PR detail, T and ? each reach
+// the root model as a message, so a quick T then ? delivers both.
+func TestThemePickerAndHelpDontStack(t *testing.T) {
+	m, _ := themePickerModel(t)
+	m.Update(prdetail.ToggleKeymapOverlayMsg{})
+	m.Update(prdetail.OpenThemePicker{})
+	if m.themePicking() {
+		t.Error("the picker opened over the help overlay")
 	}
 
-	// A late failure report for the older save must not show.
-	stale := msgA.(ThemeSaved)
-	stale.Err = errors.New("disk full")
-	m.Update(stale)
-	m.Update(msgB)
-	if len(m.state.Errors.Errors) != 0 {
-		t.Errorf("stale save result shown: %v", m.state.Errors.Errors)
+	m, _ = themePickerModel(t)
+	m.Update(prdetail.OpenThemePicker{})
+	m.Update(prdetail.ToggleKeymapOverlayMsg{})
+	if m.keymapOverlay.Visible {
+		t.Error("the help overlay opened over the picker")
 	}
 }
 
@@ -249,6 +294,8 @@ func TestThemePickerFromDashboard(t *testing.T) {
 	}
 }
 
+// TestThemePickerEnterOnCurrentDoesNotSave keeps the theme the config
+// already holds, which needs no write.
 func TestThemePickerEnterOnCurrentDoesNotSave(t *testing.T) {
 	m, s := themePickerModel(t)
 	openPicker(m)

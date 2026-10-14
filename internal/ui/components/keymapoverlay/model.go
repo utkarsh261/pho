@@ -371,6 +371,13 @@ func buildCommitDetailBindings() []Group {
 				{Key: "esc / q", Description: "Back to PR detail"},
 			},
 		},
+		{
+			Name: "Global",
+			Bindings: []Binding{
+				{Key: "T", Description: "Theme"},
+				{Key: "?", Description: "Keybindings"},
+			},
+		},
 	}
 }
 

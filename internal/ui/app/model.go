@@ -73,8 +73,10 @@ type Dependencies struct {
 	TerminalBackground bool
 
 	// SaveTheme persists a theme chosen in the theme picker; nil keeps the
-	// choice for the session only.
-	SaveTheme func(name string) error
+	// choice for the session only. ConfiguredTheme is [ui] theme as the
+	// config has it, so the picker saves only choices that change it.
+	SaveTheme       func(name string) error
+	ConfiguredTheme string
 }
 
 type Model struct {
@@ -117,8 +119,8 @@ type Model struct {
 	// Theme picker: the theme to restore on Esc, and the ordered saver for
 	// the theme kept with Enter.
 	themePickFrom string
-	themeSaveSeq  int
-	themeSaver    *themeSaver
+	pickThemes    map[string]*theme.Theme // themes built while the picker is open
+	themeSaves    *themeSaves
 
 	classifier achdashboard.SummaryTabClassifier
 
@@ -202,7 +204,11 @@ func NewModel(deps Dependencies) *Model {
 	}
 
 	if deps.SaveTheme != nil {
-		m.themeSaver = &themeSaver{save: deps.SaveTheme}
+		saved := ""
+		if p, ok := theme.PaletteFor(deps.ConfiguredTheme); ok {
+			saved = p.Name
+		}
+		m.themeSaves = &themeSaves{save: deps.SaveTheme, saved: saved}
 	}
 
 	m.syncPanels()
@@ -697,6 +703,9 @@ func (m *Model) toggleKeymapOverlay() tea.Cmd {
 	if m.keymapOverlay.Visible {
 		m.keymapOverlay.Visible = false
 		return nil
+	}
+	if m.themePicking() {
+		return nil // ? from PR detail can arrive after T opened the picker
 	}
 	ctx := keymapoverlay.Context{
 		View:  m.currentView(),

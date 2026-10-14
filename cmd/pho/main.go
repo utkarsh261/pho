@@ -365,6 +365,7 @@ func main() {
 		SaveTheme: func(name string) error {
 			return config.SaveTheme(configPath, name)
 		},
+		ConfiguredTheme: cfg.UI.Theme,
 	}
 	model := app.NewModel(deps)
 

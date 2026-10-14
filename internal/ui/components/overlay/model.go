@@ -6,6 +6,7 @@ import (
 	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/utkarsh261/pho/internal/domain"
 	"github.com/utkarsh261/pho/internal/ui/theme"
@@ -69,10 +70,10 @@ type Model struct {
 	pickPool []domain.SearchResult
 	pickHint string
 
-	// Theme picker: the theme active when it opened, and each theme built
-	// once for its colour swatch.
+	// Theme picker: the theme active when it opened, and each theme's
+	// swatch colours (read from its palette; no theme is built).
 	themeCurrent string
-	themeSwatch  map[string]*theme.Theme
+	themeSwatch  map[string][]lipgloss.Color
 }
 
 type pickKind int
@@ -147,11 +148,11 @@ func (m *Model) OpenThemePick(names []string, current string) {
 	m.pickKind = pickTheme
 	m.pickHint = "Theme"
 	m.themeCurrent = current
-	m.themeSwatch = make(map[string]*theme.Theme, len(names))
+	m.themeSwatch = make(map[string][]lipgloss.Color, len(names))
 	m.pickPool = make([]domain.SearchResult, 0, len(names))
 	for _, name := range names {
-		if th, ok := theme.Get(name); ok {
-			m.themeSwatch[name] = th
+		if p, ok := theme.PaletteFor(name); ok {
+			m.themeSwatch[name] = []lipgloss.Color{p.Primary, p.Secondary, p.Success, p.Warning, p.Error}
 		}
 		m.pickPool = append(m.pickPool, domain.SearchResult{Kind: themeResult, Title: name})
 	}
@@ -163,12 +164,6 @@ func (m *Model) OpenThemePick(names []string, current string) {
 			break
 		}
 	}
-}
-
-// PickTheme returns the named theme as built when the chooser opened, or
-// nil if it is not listed.
-func (m Model) PickTheme(name string) *theme.Theme {
-	return m.themeSwatch[name]
 }
 
 // IsThemePick reports whether the palette is the theme chooser.
@@ -289,8 +284,20 @@ func (m *Model) deleteAfterCursor() bool {
 
 func (m *Model) refreshResults() {
 	if m.pickKind != pickNone {
+		// Keep the selected entry while it still matches, so editing the
+		// filter doesn't jump the selection (and the theme preview) away.
+		prev := ""
+		if m.selectedIndex >= 0 && m.selectedIndex < len(m.results) {
+			prev = m.results[m.selectedIndex].Title
+		}
 		m.results = filterPickPool(m.pickPool, m.query)
 		m.selectedIndex = clampIndex(0, len(m.results))
+		for i, r := range m.results {
+			if r.Title == prev {
+				m.selectedIndex = i
+				break
+			}
+		}
 		m.scrollOffset = 0
 		m.ensureSelectionVisible()
 		return

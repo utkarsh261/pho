@@ -58,6 +58,12 @@ func Exists(name string) bool {
 	return ok
 }
 
+// PaletteFor returns the named palette without building a theme from it,
+// resolving names like Get.
+func PaletteFor(name string) (Palette, bool) {
+	return lookup(name)
+}
+
 func lookup(name string) (Palette, bool) {
 	name = normalizeName(name)
 	if name == "" {

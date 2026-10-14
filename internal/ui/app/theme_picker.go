@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -16,31 +15,32 @@ import (
 
 const themePickHint = "↑/↓: Preview | Enter: Keep | Esc: Revert"
 
-// ThemeSaved reports a theme picker save. Only the latest save's result is
-// shown; Seq tells them apart.
+// ThemeSaved reports a theme picker save.
 type ThemeSaved struct {
-	Seq  int
 	Name string
 	Err  error
 }
 
-// themeSaver writes the chosen theme in order: saves run as commands, which
-// may finish out of order, so a save older than the last one written is
-// dropped.
-type themeSaver struct {
-	mu   sync.Mutex
-	last int
-	save func(name string) error
+// themeSaves keeps theme saves in order with one rule: at most one save runs
+// at a time, and a choice made meanwhile waits as pending, replacing any
+// earlier pending one. The config therefore always ends up with the last
+// choice, and only that save's result is reported.
+type themeSaves struct {
+	save     func(name string) error
+	saved    string // the theme the config holds; "" if unknown
+	inFlight string // the save running now, if any
+	pending  string // the choice to save once it finishes
 }
 
-func (s *themeSaver) run(seq int, name string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if seq < s.last {
-		return nil
+// target is the theme the config will hold once queued saves finish.
+func (s *themeSaves) target() string {
+	switch {
+	case s.pending != "":
+		return s.pending
+	case s.inFlight != "":
+		return s.inFlight
 	}
-	s.last = seq
-	return s.save(name)
+	return s.saved
 }
 
 // themePicking reports whether the theme picker is open.
@@ -50,10 +50,16 @@ func (m *Model) themePicking() bool {
 
 // openThemePicker opens the palette as a theme chooser over the current
 // view. Moving the selection applies each theme straight away.
+//
+// From PR detail, T reaches here as a message one step after the key, so
+// another overlay may have opened in between: the picker then stays shut
+// rather than open underneath it.
 func (m *Model) openThemePicker() tea.Cmd {
-	if m.state.Search.OverlayOpen || m.theme == nil {
+	if m.state.Search.OverlayOpen || m.keymapOverlay.Visible || m.theme == nil ||
+		(m.createPR != nil && m.createPR.Active()) {
 		return nil
 	}
+	m.pickThemes = map[string]*theme.Theme{m.theme.Name: m.theme}
 	m.themePickFrom = m.theme.Name
 	m.previousFocus = m.focus
 	m.state.Search.OverlayOpen = true
@@ -78,13 +84,9 @@ func (m *Model) handleThemePickKey(msg tea.KeyMsg) tea.Cmd {
 		if name == "" {
 			return nil // nothing matches the filter; stay open
 		}
-		unchanged := name == m.themePickFrom
 		m.applyTheme(name)
 		m.closeThemePicker()
-		if unchanged {
-			return nil // don't write a config for a choice that changes nothing
-		}
-		return m.saveThemeCmd(name)
+		return m.saveTheme(name)
 	}
 	m.palette, _ = m.palette.Update(msg)
 	name := m.palette.PreviewTheme()
@@ -105,40 +107,63 @@ func (m *Model) cancelThemePicker() {
 // link alone: the picker has nothing to do with it.
 func (m *Model) closeThemePicker() {
 	m.themePickFrom = ""
+	m.pickThemes = nil
 	m.closeOverlay()
 }
 
 // applyTheme switches every view to the named theme, if it differs. While
-// the picker is open it reuses the themes the picker built.
+// the picker is open each theme is built once, the first time it's shown.
 func (m *Model) applyTheme(name string) {
 	if m.theme != nil && m.theme.Name == name {
 		return
 	}
-	th := m.palette.PickTheme(name)
+	th := m.pickThemes[name]
 	if th == nil {
 		th, _ = theme.Get(name)
+		if th != nil && m.pickThemes != nil {
+			m.pickThemes[name] = th
+		}
 	}
 	if th != nil {
 		m.SetTheme(th)
 	}
 }
 
-func (m *Model) saveThemeCmd(name string) tea.Cmd {
-	if m.themeSaver == nil {
+// saveTheme writes name to the config unless the config already holds it
+// (or will, once queued saves finish). It compares with the config rather
+// than the theme on screen, which --theme or an unknown configured theme
+// can make differ.
+func (m *Model) saveTheme(name string) tea.Cmd {
+	s := m.themeSaves
+	if s == nil || name == s.target() {
 		return nil
 	}
-	m.themeSaveSeq++
-	seq, saver := m.themeSaveSeq, m.themeSaver
+	if s.inFlight != "" {
+		s.pending = name
+		return nil
+	}
+	s.inFlight = name
+	save := s.save
 	return func() tea.Msg {
-		return ThemeSaved{Seq: seq, Name: name, Err: saver.run(seq, name)}
+		return ThemeSaved{Name: name, Err: save(name)}
 	}
 }
 
-// handleThemeSaved reports a failed save of the latest choice. The theme
-// stays applied for the session either way.
+// handleThemeSaved records a finished save and starts the pending one, if
+// any; only the last save's result is reported. The theme stays applied for
+// the session either way.
 func (m *Model) handleThemeSaved(msg ThemeSaved) tea.Cmd {
-	if msg.Seq != m.themeSaveSeq {
+	s := m.themeSaves
+	if s == nil || msg.Name != s.inFlight {
 		return nil
+	}
+	s.inFlight = ""
+	if msg.Err == nil {
+		s.saved = msg.Name
+	}
+	if next := s.pending; next != "" {
+		s.pending = ""
+		return m.saveTheme(next)
 	}
 	if msg.Err == nil {
 		m.logDebug("theme saved", "theme", msg.Name)
