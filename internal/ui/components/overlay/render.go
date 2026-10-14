@@ -13,7 +13,10 @@ import (
 )
 
 const (
-	maxBoxWidth = 100
+	maxBoxWidth = 80
+	// themeBoxWidth fits a theme row (edge, name column, swatch, "current"
+	// tag) and the border: the picker's content never gets wider.
+	themeBoxWidth = 48
 	// boxChrome is the rows around the result list: top border, query,
 	// divider and bottom border.
 	boxChrome = 4
@@ -69,6 +72,9 @@ func (m Model) boxSize() (int, int) {
 	}
 	boxW := int(math.Round(float64(m.width) * 0.6))
 	boxW = min(max(boxW, minBoxWidth), maxBoxWidth, m.width)
+	if m.pickKind == pickTheme {
+		boxW = min(themeBoxWidth, m.width)
+	}
 	boxH := min(boxChrome+m.resultRows(), m.height)
 	return boxW, boxH
 }
@@ -89,9 +95,15 @@ func (m Model) visibleResultCount() int {
 }
 
 // boxOrigin places the box horizontally centred, a fifth of the way down, so
-// its top edge stays put while the result list grows and shrinks.
+// its top edge stays put while the result list grows and shrinks. The theme
+// picker's list is short and fixed, so it sits in the middle instead, centred
+// on its unfiltered height so filtering doesn't move it.
 func (m Model) boxOrigin(boxW, boxH int) (row, col int) {
 	row = max(min(m.height/5, m.height-boxH), 0)
+	if m.pickKind == pickTheme {
+		full := min(boxChrome+min(len(m.pickPool), defaultSearchLimit), m.height)
+		row = max(min((m.height-full)/2, m.height-boxH), 0)
+	}
 	col = max((m.width-boxW)/2, 0)
 	return row, col
 }
