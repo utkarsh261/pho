@@ -1,0 +1,379 @@
+package app
+
+import (
+	"errors"
+	"strings"
+	"sync"
+	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/muesli/termenv"
+
+	"github.com/utkarsh261/pho/internal/config"
+	"github.com/utkarsh261/pho/internal/domain"
+	"github.com/utkarsh261/pho/internal/ui/theme"
+	"github.com/utkarsh261/pho/internal/ui/views/prdetail"
+)
+
+// recordingSaver records saved theme names; when hold is set, each save
+// waits for the test to release it.
+type recordingSaver struct {
+	mu    sync.Mutex
+	names []string
+	err   error
+}
+
+func (s *recordingSaver) save(name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.names = append(s.names, name)
+	return s.err
+}
+
+func (s *recordingSaver) saved() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.names...)
+}
+
+func key(m *Model, msg tea.KeyMsg) tea.Cmd {
+	_, cmd := m.Update(msg)
+	return cmd
+}
+
+var (
+	keyDown  = tea.KeyMsg{Type: tea.KeyDown}
+	keyEsc   = tea.KeyMsg{Type: tea.KeyEsc}
+	keyEnter = tea.KeyMsg{Type: tea.KeyEnter}
+	keyT     = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'T'}}
+)
+
+// openPicker presses T and runs what it returns: from PR detail, T asks the
+// root model to open the picker with a message.
+func openPicker(m *Model) {
+	drainCmds(m, key(m, keyT))
+}
+
+func themePickerModel(t *testing.T) (*Model, *recordingSaver) {
+	t.Helper()
+	m := ansiPRDetail(t, "2")
+	s := &recordingSaver{}
+	m.themeSaves = &themeSaves{save: s.save, saved: theme.DefaultName}
+	return m, s
+}
+
+func TestThemePickerPreviewsSynchronously(t *testing.T) {
+	withColorProfile(t, termenv.TrueColor)
+	m, _ := themePickerModel(t)
+	openPicker(m)
+	if !m.themePicking() {
+		t.Fatal("T did not open the theme picker from PR detail")
+	}
+	key(m, keyDown)
+	key(m, keyDown)
+	if want := theme.Names()[2]; m.theme.Name != want {
+		t.Errorf("theme after ↓↓ = %q, want %q", m.theme.Name, want)
+	}
+	// The diff's added-line tint comes from the PR detail view, so seeing
+	// the new theme's tint shows the preview reached it.
+	tint := termenv.TrueColor.Color(string(m.theme.DiffAddBg)).Sequence(true)
+	if !strings.Contains(m.View(), tint) {
+		t.Errorf("view lacks the previewed theme's diff tint %s", tint)
+	}
+	if !strings.Contains(m.status.HintOverride, "Revert") {
+		t.Errorf("status hint = %q, want the picker's hints", m.status.HintOverride)
+	}
+}
+
+func TestThemePickerEscRestoresExactly(t *testing.T) {
+	withColorProfile(t, termenv.TrueColor)
+	m, s := themePickerModel(t)
+	before := m.View()
+
+	openPicker(m)
+	// Rapid movement then Esc, without draining anything in between.
+	var cmds []tea.Cmd
+	for _, k := range []tea.KeyMsg{keyDown, keyDown, keyDown, keyEsc} {
+		cmds = append(cmds, key(m, k))
+	}
+	for _, c := range cmds {
+		drainCmds(m, c)
+	}
+
+	if m.theme.Name != theme.DefaultName {
+		t.Errorf("theme after Esc = %q, want %q", m.theme.Name, theme.DefaultName)
+	}
+	if m.themePicking() {
+		t.Error("picker still open after Esc")
+	}
+	if got := m.View(); got != before {
+		t.Error("screen after Esc differs from before the picker opened")
+	}
+	if len(s.saved()) != 0 {
+		t.Errorf("Esc saved %v", s.saved())
+	}
+}
+
+func TestThemePickerEnterCommitsBeforeSave(t *testing.T) {
+	m, s := themePickerModel(t)
+	openPicker(m)
+	key(m, keyDown)
+	want := theme.Names()[1]
+	save := key(m, keyEnter)
+
+	if m.theme.Name != want || m.themePicking() {
+		t.Fatalf("after Enter: theme %q, picking %v; want %q, closed", m.theme.Name, m.themePicking(), want)
+	}
+	if len(s.saved()) != 0 {
+		t.Fatal("saved before the command ran")
+	}
+	drainCmds(m, save)
+	if got := s.saved(); len(got) != 1 || got[0] != want {
+		t.Errorf("saved %v, want [%s]", got, want)
+	}
+}
+
+// TestThemePickerReopenBeforeSave keeps the choice made with Enter when the
+// picker is reopened and cancelled before the save has run.
+func TestThemePickerReopenBeforeSave(t *testing.T) {
+	m, s := themePickerModel(t)
+	openPicker(m)
+	key(m, keyDown)
+	chosen := theme.Names()[1]
+	save := key(m, keyEnter)
+
+	openPicker(m)
+	key(m, keyDown)
+	key(m, keyEsc)
+	drainCmds(m, save)
+
+	if m.theme.Name != chosen {
+		t.Errorf("theme = %q, want %q", m.theme.Name, chosen)
+	}
+	if got := s.saved(); len(got) != 1 || got[0] != chosen {
+		t.Errorf("saved %v, want [%s]", got, chosen)
+	}
+}
+
+// TestThemePickerQueuesSaves picks twice before the first save finishes:
+// the second waits until the first is done, so the config ends up with the
+// last pick, and only the last save's result is reported.
+func TestThemePickerQueuesSaves(t *testing.T) {
+	m, s := themePickerModel(t)
+	s.err = errors.New("disk full") // the first save fails
+
+	openPicker(m)
+	key(m, keyDown)
+	saveA := key(m, keyEnter)
+	openPicker(m)
+	key(m, keyDown)
+	if cmd := key(m, keyEnter); cmd != nil {
+		t.Fatal("a second save started while the first was running")
+	}
+	a, b := theme.Names()[1], theme.Names()[2]
+
+	msgA := saveA()
+	s.err = nil
+	drainCmds(m, func() tea.Msg { return msgA })
+	if got := s.saved(); len(got) != 2 || got[0] != a || got[1] != b {
+		t.Fatalf("saved %v, want [%s %s]", got, a, b)
+	}
+	if len(m.state.Errors.Errors) != 0 {
+		t.Errorf("the superseded save's failure was shown: %v", m.state.Errors.Errors)
+	}
+}
+
+// TestThemePickerSavesWhenConfigDiffers covers picks equal to the theme on
+// screen but not to the config: an unknown configured theme (shown as the
+// default) and a --theme override.
+func TestThemePickerSavesWhenConfigDiffers(t *testing.T) {
+	t.Run("unknown configured theme", func(t *testing.T) {
+		m, s := themePickerModel(t)
+		m.themeSaves.saved = "" // the config names a theme pho doesn't know
+		openPicker(m)
+		drainCmds(m, key(m, keyEnter)) // keep the default on screen
+		if got := s.saved(); len(got) != 1 || got[0] != theme.DefaultName {
+			t.Errorf("saved %v, want [%s]", got, theme.DefaultName)
+		}
+	})
+	t.Run("--theme override", func(t *testing.T) {
+		m, s := themePickerModel(t)
+		m.themeSaves.saved = "nord"
+		dracula, _ := theme.Get("dracula")
+		m.SetTheme(dracula) // started with --theme dracula
+		openPicker(m)
+		drainCmds(m, key(m, keyEnter))
+		if got := s.saved(); len(got) != 1 || got[0] != "dracula" {
+			t.Errorf("saved %v, want [dracula]", got)
+		}
+	})
+}
+
+// TestThemePickerAndHelpDontStack checks the picker and the help overlay
+// never open together, in either order: from PR detail, T and ? each reach
+// the root model as a message, so a quick T then ? delivers both.
+func TestThemePickerAndHelpDontStack(t *testing.T) {
+	m, _ := themePickerModel(t)
+	m.Update(prdetail.ToggleKeymapOverlayMsg{})
+	m.Update(prdetail.OpenThemePicker{})
+	if m.themePicking() {
+		t.Error("the picker opened over the help overlay")
+	}
+
+	m, _ = themePickerModel(t)
+	m.Update(prdetail.OpenThemePicker{})
+	m.Update(prdetail.ToggleKeymapOverlayMsg{})
+	if m.keymapOverlay.Visible {
+		t.Error("the help overlay opened over the picker")
+	}
+}
+
+func TestThemePickerNoMatchEnterStaysOpen(t *testing.T) {
+	m, s := themePickerModel(t)
+	openPicker(m)
+	for _, r := range "zzz" {
+		key(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	if cmd := key(m, keyEnter); cmd != nil {
+		drainCmds(m, cmd)
+	}
+	if !m.themePicking() {
+		t.Error("Enter with no matches closed the picker")
+	}
+	if m.theme.Name != theme.DefaultName {
+		t.Errorf("theme = %q, want the original", m.theme.Name)
+	}
+	if len(s.saved()) != 0 {
+		t.Errorf("saved %v", s.saved())
+	}
+}
+
+func TestThemePickerSaveFailureKeepsTheme(t *testing.T) {
+	for name, saveErr := range map[string]error{
+		"write error": errors.New("permission denied"),
+		"manual edit": config.ErrManualEdit,
+	} {
+		t.Run(name, func(t *testing.T) {
+			m, s := themePickerModel(t)
+			s.err = saveErr
+			openPicker(m)
+			key(m, keyDown)
+			drainCmds(m, key(m, keyEnter))
+
+			if want := theme.Names()[1]; m.theme.Name != want {
+				t.Errorf("theme = %q, want %q", m.theme.Name, want)
+			}
+			errs := m.state.Errors.Errors
+			if len(errs) != 1 || errs[0].Kind != domain.ErrorKindConfig || !strings.Contains(errs[0].Message, "theme set for this session") {
+				t.Errorf("errors = %+v", errs)
+			}
+		})
+	}
+}
+
+// TestThemePickerKeyTypesInSearch checks T is text, not a shortcut, while
+// the PR detail search is being typed.
+func TestThemePickerKeyTypesInSearch(t *testing.T) {
+	m, _ := themePickerModel(t)
+	ansiKeys(m, "/")
+	openPicker(m)
+	if m.themePicking() {
+		t.Error("T opened the theme picker while typing a search")
+	}
+}
+
+func TestThemePickerFromDashboard(t *testing.T) {
+	m := ansiDashboard(t, 120, 40)
+	openPicker(m)
+	if !m.themePicking() {
+		t.Fatal("T did not open the theme picker from the dashboard")
+	}
+	key(m, keyDown)
+	if want := theme.Names()[1]; m.theme.Name != want {
+		t.Errorf("theme = %q, want %q", m.theme.Name, want)
+	}
+}
+
+// TestThemePickerEnterOnCurrentDoesNotSave keeps the theme the config
+// already holds, which needs no write.
+func TestThemePickerEnterOnCurrentDoesNotSave(t *testing.T) {
+	m, s := themePickerModel(t)
+	openPicker(m)
+	drainCmds(m, key(m, keyEnter))
+	if len(s.saved()) != 0 {
+		t.Errorf("saved %v for an unchanged theme", s.saved())
+	}
+}
+
+func TestThemePickerSuccessClearsSaveError(t *testing.T) {
+	m, s := themePickerModel(t)
+	s.err = errors.New("permission denied")
+	openPicker(m)
+	key(m, keyDown)
+	drainCmds(m, key(m, keyEnter))
+	if len(m.state.Errors.Errors) != 1 {
+		t.Fatalf("errors = %+v, want the save failure", m.state.Errors.Errors)
+	}
+	if strings.Contains(m.state.Errors.Errors[0].Message, "config:") {
+		t.Errorf("message repeats the config label: %q", m.state.Errors.Errors[0].Message)
+	}
+
+	s.err = nil
+	openPicker(m)
+	key(m, keyDown)
+	drainCmds(m, key(m, keyEnter))
+	if len(m.state.Errors.Errors) != 0 {
+		t.Errorf("errors after a successful save = %+v", m.state.Errors.Errors)
+	}
+}
+
+// TestThemePickerKeepsDeepLink checks opening and closing the picker while
+// `pho pr <n>` is still waiting for discovery doesn't cancel the deep link,
+// and that discovery finishing cancels the picker like Esc.
+func TestThemePickerKeepsDeepLink(t *testing.T) {
+	for _, closeKey := range []tea.KeyMsg{keyEsc, keyEnter} {
+		m := ansiDashboard(t, 120, 40)
+		m.pendingPRNumber = 7
+		openPicker(m)
+		key(m, keyDown)
+		key(m, closeKey)
+		if m.pendingPRNumber != 7 {
+			t.Errorf("closing the picker with %v dropped the deep link", closeKey)
+		}
+	}
+
+	m := ansiDashboard(t, 120, 40)
+	m.pendingPRNumber = 7
+	openPicker(m)
+	key(m, keyDown)
+	m.consumeInitialPR(nil)
+	if m.themePicking() {
+		t.Error("picker still open after discovery finished")
+	}
+	if m.theme.Name != theme.DefaultName {
+		t.Errorf("theme = %q, want the one the picker opened with", m.theme.Name)
+	}
+}
+
+// TestThemePickerSaveClearsUnknownTheme checks saving a theme removes the
+// unknown-theme notice, but not other config problems.
+func TestThemePickerSaveClearsUnknownTheme(t *testing.T) {
+	m, _ := themePickerModel(t)
+	m.ReportConfigProblem(errors.New(`unknown [ui] background "x"`))
+	m.ReportUnknownTheme("drakula")
+
+	openPicker(m)
+	key(m, keyDown)
+	drainCmds(m, key(m, keyEnter))
+
+	errs := m.state.Errors.Errors
+	m.clearErrors() // a later load must not bring it back either
+	for _, e := range append(errs, m.state.Errors.Errors...) {
+		if strings.Contains(e.Message, "drakula") {
+			t.Errorf("unknown-theme notice still shown: %+v", e)
+		}
+	}
+	if len(m.state.Errors.Errors) != 1 || !strings.Contains(m.state.Errors.Errors[0].Message, "background") {
+		t.Errorf("errors = %+v, want only the background problem", m.state.Errors.Errors)
+	}
+}

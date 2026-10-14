@@ -23,6 +23,7 @@
 - **PR actions** - Edit title/body, merge (with method selection), close/reopen, and checkout the branch locally.
 - **Commit view** - Inspect individual commits and their diffs.
 - **Search** - `/` to search within diffs and descriptions; `n`/`N` to jump between matches.
+- **Themes** - Catppuccin Mocha, Tokyo Night, Gruvbox, Nord, Dracula and Rosé Pine. Press `T` to preview them live.
 - Works with Github Enterprise as well.
 
 ## Install
@@ -64,6 +65,21 @@ or simply start it in the current directory
 ```
 pho
 ```
+
+## Themes
+
+Press `T` anywhere to open the theme picker. Arrowing through it repaints the screen with each theme; `Enter` keeps one and saves it to your config, `Esc` puts the old one back. You can also set it in `~/.config/pho/config.toml`:
+
+```toml
+[ui]
+theme = "catppuccin-mocha"  # pho-default (the default), catppuccin-mocha, tokyo-night,
+                            # gruvbox-dark, nord, dracula, rose-pine
+background = "theme"        # or "terminal" to keep your terminal's own background
+```
+
+or for one run with `pho --theme nord`.
+
+Themes paint their own background so text stays readable whatever your terminal is set to. With `background = "terminal"` (handy for transparent terminals) contrast is only guaranteed when your terminal background matches the theme's. Colours are checked for contrast on truecolor and 256-colour terminals; on 16-colour terminals the cursor row switches to reverse video.
 
 ## Requirements
 

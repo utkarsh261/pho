@@ -1112,6 +1112,9 @@ type BackToPRDetail struct{}
 // ToggleKeymapOverlayMsg is emitted when the user presses ? (while not composing) in PR detail.
 type ToggleKeymapOverlayMsg struct{}
 
+// OpenThemePicker asks the root model to open the theme picker.
+type OpenThemePicker struct{}
+
 // OpenBrowserCommit is emitted when the user presses 'o' in commit mode.
 type OpenBrowserCommit struct {
 	Repo domain.Repository

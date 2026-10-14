@@ -340,6 +340,7 @@ func buildDashboardBindings(ctx Context) []Group {
 		Bindings: []Binding{
 			{Key: "ctrl+p", Description: "Jump to PR/Repo"},
 			{Key: "q", Description: "Quit"},
+			{Key: "T", Description: "Theme"},
 			{Key: "?", Description: "Keybindings"},
 		},
 	})
@@ -368,6 +369,13 @@ func buildCommitDetailBindings() []Group {
 				{Key: "y", Description: "Copy SHA"},
 				{Key: "R", Description: "Refresh"},
 				{Key: "esc / q", Description: "Back to PR detail"},
+			},
+		},
+		{
+			Name: "Global",
+			Bindings: []Binding{
+				{Key: "T", Description: "Theme"},
+				{Key: "?", Description: "Keybindings"},
 			},
 		},
 	}
@@ -459,6 +467,7 @@ func buildPRDetailBindings(ctx Context) []Group {
 	groups = append(groups, Group{
 		Name: "Global",
 		Bindings: []Binding{
+			{Key: "T", Description: "Theme"},
 			{Key: "?", Description: "Keybindings"},
 		},
 	})

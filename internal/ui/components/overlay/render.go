@@ -121,7 +121,8 @@ func (m Model) ViewOver(bg string) string {
 // palette's own keys.
 func (m Model) ViewOverStatus(body, status string) string {
 	bg, dimRows := body, 0
-	if m.theme != nil {
+	// The theme picker previews on the screen behind it, so leave it lit.
+	if m.theme != nil && m.pickKind != pickTheme {
 		dimRows = strings.Count(body, "\n") + 1
 	}
 	switch {
@@ -222,7 +223,7 @@ func (m Model) topRight(st styles) string {
 }
 
 func (m Model) loadingNote(st styles) string {
-	if m.hydrating && !m.pickMode {
+	if m.hydrating && m.pickKind == pickNone {
 		return st.dim.Render("Loading…")
 	}
 	return ""
@@ -238,8 +239,11 @@ func (m Model) queryLine(st styles, innerW int) string {
 }
 
 func (m Model) placeholder() string {
-	if m.pickMode {
+	switch m.pickKind {
+	case pickRepo:
 		return "Filter repositories"
+	case pickTheme:
+		return "Filter themes"
 	}
 	return "Search pull requests and repositories"
 }
@@ -248,8 +252,10 @@ func (m Model) emptyText() string {
 	switch {
 	case m.query != "":
 		return fmt.Sprintf("No matches for “%s”", m.query)
-	case m.pickMode:
+	case m.pickKind == pickRepo:
 		return "No repositories"
+	case m.pickKind == pickTheme:
+		return "No themes"
 	case m.hydrating:
 		return "Indexing pull requests…"
 	default:
@@ -270,6 +276,9 @@ func (m Model) visibleResults(rows int) []domain.SearchResult {
 // state glyph, the number, the title with the query match emphasised, and
 // right-aligned metadata. The selected row is tinted across its full width.
 func (m Model) resultLine(st styles, r domain.SearchResult, selected bool, width int) string {
+	if r.Kind == themeResult {
+		return m.themeLine(st, r.Title, selected, width)
+	}
 	edge := " "
 	if selected {
 		edge = st.edge.Render("▎")
@@ -404,8 +413,39 @@ func fit(s string, width int) string {
 	return s
 }
 
+// themeLine renders a theme picker row: the name, a swatch of the theme's
+// accent and status colours, and a tag on the theme active at open.
+func (m Model) themeLine(st styles, name string, selected bool, width int) string {
+	edge := " "
+	text := st.text
+	if selected {
+		edge = st.edge.Render("▎")
+		text = st.textSel
+	}
+	const nameW = 20
+	left := edge + "  " + highlightMatch(name, m.query, text, st.match) +
+		strings.Repeat(" ", max(nameW-lipgloss.Width(name), 1))
+
+	dots := make([]string, 0, 5)
+	for _, c := range m.themeSwatch[name] {
+		dots = append(dots, lipgloss.NewStyle().Foreground(c).Render("●"))
+	}
+	swatch := strings.Join(dots, " ")
+
+	tag := ""
+	if name == m.themeCurrent {
+		tag = st.faint.Render("current")
+	}
+	gap := max(width-lipgloss.Width(left)-lipgloss.Width(swatch)-lipgloss.Width(tag)-2, 1)
+	line := fit(left+swatch+strings.Repeat(" ", gap)+tag, width)
+	if selected && st.th != nil {
+		return st.th.FillRow(st.selBg, width, line)
+	}
+	return line
+}
+
 func (m Model) boxTitle() string {
-	if m.pickMode {
+	if m.pickKind != pickNone {
 		return m.pickHint
 	}
 	return "Go to"

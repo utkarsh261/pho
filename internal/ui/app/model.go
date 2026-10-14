@@ -71,6 +71,12 @@ type Dependencies struct {
 	// TerminalBackground keeps the terminal's own background even when the
 	// theme paints one (config: [ui] background = "terminal").
 	TerminalBackground bool
+
+	// SaveTheme persists a theme chosen in the theme picker; nil keeps the
+	// choice for the session only. ConfiguredTheme is [ui] theme as the
+	// config has it, so the picker saves only choices that change it.
+	SaveTheme       func(name string) error
+	ConfiguredTheme string
 }
 
 type Model struct {
@@ -105,8 +111,16 @@ type Model struct {
 	focus         domain.FocusTarget
 	previousFocus domain.FocusTarget
 
-	// configProblems are shown in the status bar until pho restarts.
+	// configProblems are shown in the status bar until pho restarts, or,
+	// for an unknown theme (unknownTheme), until the picker saves one.
 	configProblems []domain.AppError
+	unknownTheme   string
+
+	// Theme picker: the theme to restore on Esc, and the ordered saver for
+	// the theme kept with Enter.
+	themePickFrom string
+	pickThemes    map[string]*theme.Theme // themes built while the picker is open
+	themeSaves    *themeSaves
 
 	classifier achdashboard.SummaryTabClassifier
 
@@ -189,6 +203,14 @@ func NewModel(deps Dependencies) *Model {
 		},
 	}
 
+	if deps.SaveTheme != nil {
+		saved := ""
+		if p, ok := theme.PaletteFor(deps.ConfiguredTheme); ok {
+			saved = p.Name
+		}
+		m.themeSaves = &themeSaves{save: deps.SaveTheme, saved: saved}
+	}
+
 	m.syncPanels()
 	m.syncStatus()
 	m.syncPaletteStats()
@@ -215,6 +237,12 @@ func (m *Model) SetTheme(th *theme.Theme) {
 	m.palette.SetTheme(th)
 	m.keymapOverlay.SetTheme(th)
 	m.createPR.SetTheme(th)
+	if m.prDetail != nil {
+		m.prDetail.SetTheme(th)
+	}
+	if m.commitDetail != nil {
+		m.commitDetail.SetTheme(th)
+	}
 }
 
 // SetFocus changes the focused panel.
@@ -265,6 +293,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 	case prdetail.BackToDashboard:
 		return m, m.handleBackToDashboard()
+	case prdetail.OpenThemePicker:
+		return m, m.openThemePicker()
+	case ThemeSaved:
+		return m, m.handleThemeSaved(msg)
 	case prdetail.OpenBrowserFile:
 		url := fileBrowserURL(m.selectedRepoForURL(msg.Repo), msg)
 		return m, func() tea.Msg {
@@ -488,7 +520,7 @@ func (m *Model) paintBase(frame string) string {
 
 func (m *Model) viewFrame() string {
 	defer m.log.Timer("render root view", "view", string(m.currentView()))()
-	if m.state.Search.OverlayOpen {
+	if m.state.Search.OverlayOpen && !m.palette.IsThemePick() {
 		body, status := m.renderDashboardParts()
 		return m.palette.ViewOverStatus(body, status)
 	}
@@ -530,6 +562,9 @@ func (m *Model) viewFrame() string {
 		bg = m.renderDashboard()
 	}
 
+	if m.themePicking() {
+		return m.palette.ViewOver(bg)
+	}
 	if m.keymapOverlay.Visible {
 		return m.keymapOverlay.ViewOver(bg)
 	}
@@ -598,6 +633,11 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	// The theme picker can open over any view, so it routes its own keys.
+	if m.themePicking() {
+		return m, m.handleThemePickKey(msg)
+	}
+
 	// keymap.Dispatch is a dashboard-scoped concern. It understands the four
 	// dashboard focus targets (repo panel, PR list, preview, command palette)
 	// and maps keys to typed Actions that the root model then executes.
@@ -652,6 +692,8 @@ func (m *Model) handleRootAction(action keymap.Action) tea.Cmd {
 		return m.toggleKeymapOverlay()
 	case keymap.CreatePR:
 		return m.openCreatePROverlay()
+	case keymap.OpenThemePicker:
+		return m.openThemePicker()
 	default:
 		return nil
 	}
@@ -661,6 +703,9 @@ func (m *Model) toggleKeymapOverlay() tea.Cmd {
 	if m.keymapOverlay.Visible {
 		m.keymapOverlay.Visible = false
 		return nil
+	}
+	if m.themePicking() {
+		return nil // ? from PR detail can arrive after T opened the picker
 	}
 	ctx := keymapoverlay.Context{
 		View:  m.currentView(),
@@ -1163,6 +1208,13 @@ func (m *Model) closePalette() tea.Cmd {
 		m.pendingPRNumber = 0
 		m.logDebug("deeplink cancelled", "pr", number)
 	}
+	m.closeOverlay()
+	return nil
+}
+
+// closeOverlay hides the palette and gives focus back, without the deep-link
+// cancellation closePalette does for the repo picker.
+func (m *Model) closeOverlay() {
 	m.state.Search.OverlayOpen = false
 	if m.previousFocus == "" {
 		m.focus = domain.FocusRepoPanel
@@ -1170,7 +1222,6 @@ func (m *Model) closePalette() tea.Cmd {
 		m.focus = m.previousFocus
 	}
 	m.syncStatus()
-	return nil
 }
 
 func (m *Model) cycleFocus(direction keymap.CycleDirection) tea.Cmd {
@@ -1359,7 +1410,9 @@ func (m *Model) syncStatus() {
 	} else {
 		m.status.SelectedRepo = ""
 	}
-	if m.createPR != nil && m.createPR.Active() {
+	if m.themePicking() {
+		m.status.HintOverride = themePickHint
+	} else if m.createPR != nil && m.createPR.Active() {
 		m.status.HintOverride = "Tab: Next field   ←/→: Change option   Ctrl+S: Create PR   Esc: Cancel"
 	} else if m.currentView() == domain.PrimaryViewPRDetail && m.prDetail != nil {
 		m.status.HintOverride = m.prDetail.StatusHint()
@@ -1834,7 +1887,10 @@ func (m *Model) consumeInitialPR(repos []domain.Repository) tea.Cmd {
 
 	// A palette opened before discovery finished would either float over the
 	// pushed detail or be replaced mid-query by the picker; close it first.
-	if m.state.Search.OverlayOpen {
+	// A theme picker is cancelled as if by Esc.
+	if m.themePicking() {
+		m.cancelThemePicker()
+	} else if m.state.Search.OverlayOpen {
 		m.pendingPRNumber = 0
 		m.closePalette()
 		m.pendingPRNumber = number

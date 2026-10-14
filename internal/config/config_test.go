@@ -350,7 +350,7 @@ func TestLoad_Theme(t *testing.T) {
 	}{
 		{"no ui section", "[logging]\nlevel = \"info\"\n", ""},
 		{"empty theme", "[ui]\ntheme = \"\"\n", ""},
-		{"explicit theme", "[ui]\ntheme = \"terminal-workshop\"\n", "terminal-workshop"},
+		{"explicit theme", "[ui]\ntheme = \"pho-default\"\n", "pho-default"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 )
 
 // DefaultName is the theme used when none is configured.
-const DefaultName = "terminal-workshop"
+const DefaultName = "pho-default"
 
 var (
 	palettes = map[string]Palette{}
@@ -19,7 +19,7 @@ var (
 )
 
 func init() {
-	Register(terminalWorkshop)
+	Register(phoDefault)
 }
 
 // Register adds p to the themes Get can return, under its name lower-cased
@@ -42,7 +42,7 @@ func Register(p Palette) {
 }
 
 // Get builds the named theme. Names are case-insensitive, an empty name and
-// the aliases "pho" and "default" mean Terminal Workshop, and ok is false
+// the aliases "pho" and "default" mean pho-default, and ok is false
 // for unknown names.
 func Get(name string) (th *Theme, ok bool) {
 	p, ok := lookup(name)
@@ -58,6 +58,12 @@ func Exists(name string) bool {
 	return ok
 }
 
+// PaletteFor returns the named palette without building a theme from it,
+// resolving names like Get.
+func PaletteFor(name string) (Palette, bool) {
+	return lookup(name)
+}
+
 func lookup(name string) (Palette, bool) {
 	name = normalizeName(name)
 	if name == "" {
@@ -71,7 +77,7 @@ func lookup(name string) (Palette, bool) {
 }
 
 // NameList describes the valid names for help and error text, e.g.
-// "terminal-workshop (also: default, pho), nord".
+// "pho-default (also: default, pho), nord".
 func NameList() string {
 	var also []string
 	for alias := range aliases {

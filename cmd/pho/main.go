@@ -362,6 +362,10 @@ func main() {
 		InitialPRNumber:    inv.PRNumber,
 		Logger:             logger,
 		TerminalBackground: cfg.UI.Background == "terminal",
+		SaveTheme: func(name string) error {
+			return config.SaveTheme(configPath, name)
+		},
+		ConfiguredTheme: cfg.UI.Theme,
 	}
 	model := app.NewModel(deps)
 
@@ -370,7 +374,7 @@ func main() {
 	model.SetTheme(th)
 	if err != nil {
 		logger.Warn("unknown theme in config, using the default", "err", err)
-		model.ReportConfigProblem(fmt.Errorf("unknown theme %q, using the default (pho -h lists themes)", cfg.UI.Theme))
+		model.ReportUnknownTheme(cfg.UI.Theme)
 	}
 	if bg := cfg.UI.Background; bg != "theme" && bg != "terminal" {
 		logger.Warn("unknown [ui] background, painting the theme's", "background", bg)
