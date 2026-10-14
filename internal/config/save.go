@@ -33,13 +33,21 @@ func SaveTheme(path, name string) error {
 		return err
 	}
 
-	old, mode := "", fs.FileMode(0o600)
+	old, mode, inPlace := "", fs.FileMode(0o600), false
 	switch data, err := os.ReadFile(target); {
 	case err == nil:
 		old = string(data)
-		if info, err := os.Stat(target); err == nil {
-			mode = info.Mode().Perm()
+		info, err := os.Stat(target)
+		if err != nil {
+			return fmt.Errorf("config: stat %s: %w", target, err)
 		}
+		mode = info.Mode().Perm()
+		if mode&0o222 == 0 {
+			return fmt.Errorf("config: %s is read-only", target)
+		}
+		// Replacing a hard-linked file (say, into a dotfiles repo) would
+		// cut the link, so those are rewritten in place instead.
+		inPlace = linkCount(info) > 1
 	case errors.Is(err, fs.ErrNotExist):
 	default:
 		return fmt.Errorf("config: read %s: %w", target, err)
@@ -51,6 +59,12 @@ func SaveTheme(path, name string) error {
 	}
 	if err := verifyThemeEdit(old, updated, name); err != nil {
 		return err
+	}
+	if inPlace {
+		if err := os.WriteFile(target, []byte(updated), mode); err != nil {
+			return fmt.Errorf("config: write %s: %w", target, err)
+		}
+		return nil
 	}
 	return writeAtomic(target, []byte(updated), mode)
 }
@@ -106,14 +120,20 @@ func newFileIn(path string) (string, error) {
 var (
 	headerRe      = regexp.MustCompile(`^\s*\[\s*([^\[\]]+?)\s*\]\s*(#.*)?$`)
 	arrayHeaderRe = regexp.MustCompile(`^\s*\[\[.*\]\]\s*(#.*)?$`)
-	tableThemeRe  = regexp.MustCompile(`^(\s*theme\s*=\s*)("[^"\\]*"|'[^']*')(.*)$`)
-	dottedRe      = regexp.MustCompile(`^\s*ui\s*\.`)
-	dottedThemeRe = regexp.MustCompile(`^(\s*ui\s*\.\s*theme\s*=\s*)("[^"\\]*"|'[^']*')(.*)$`)
-	inlineUIRe    = regexp.MustCompile(`^\s*ui\s*=`)
+	// Keys may be bare or quoted: theme, "theme" or 'theme'.
+	tableThemeRe  = regexp.MustCompile(`^(\s*(?:theme|"theme"|'theme')\s*=\s*)("[^"\\]*"|'[^']*')(.*)$`)
+	dottedRe      = regexp.MustCompile(`^\s*(?:ui|"ui"|'ui')\s*\.`)
+	dottedThemeRe = regexp.MustCompile(`^(\s*(?:ui|"ui"|'ui')\s*\.\s*(?:theme|"theme"|'theme')\s*=\s*)("[^"\\]*"|'[^']*')(.*)$`)
+	inlineUIRe    = regexp.MustCompile(`^\s*(?:ui|"ui"|'ui')\s*=`)
 )
 
 // setTheme returns content with the theme set, editing a single line.
 func setTheme(content, name string) (string, error) {
+	// A byte-order mark stays where it is, out of the way of the matching.
+	if rest, ok := strings.CutPrefix(content, "\ufeff"); ok {
+		out, err := setTheme(rest, name)
+		return "\ufeff" + out, err
+	}
 	quoted := `"` + name + `"`
 	if strings.TrimSpace(content) == "" {
 		return "[ui]\ntheme = " + quoted + "\n", nil
@@ -154,7 +174,7 @@ func setTheme(content, name string) (string, error) {
 			continue
 		}
 		if m := headerRe.FindStringSubmatch(line); m != nil {
-			section = strings.ReplaceAll(m[1], " ", "")
+			section = tableName(m[1])
 			if section == "ui" {
 				uiHeader = i
 			}
@@ -189,6 +209,16 @@ func setTheme(content, name string) (string, error) {
 		out += nl
 	}
 	return out + nl + "[ui]" + nl + "theme = " + quoted + nl, nil
+}
+
+// tableName normalises a [header]'s name: whitespace and quotes around each
+// dotted part are dropped, so [ "ui" ] and ['ui'] both read as ui.
+func tableName(header string) string {
+	parts := strings.Split(header, ".")
+	for i, p := range parts {
+		parts[i] = strings.Trim(strings.TrimSpace(p), `"'`)
+	}
+	return strings.Join(parts, ".")
 }
 
 // verifyThemeEdit checks updated decodes to old's config with only

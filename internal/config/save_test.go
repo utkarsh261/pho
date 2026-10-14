@@ -50,6 +50,18 @@ func TestSetThemeSyntax(t *testing.T) {
 		{"array table after ui",
 			"[ui]\nbackground = \"theme\"\n[[hooks]]\ntheme = \"x\"\n",
 			"[ui]\ntheme = \"nord\"\nbackground = \"theme\"\n[[hooks]]\ntheme = \"x\"\n", nil},
+		{"byte-order mark",
+			"\ufeff[ui]\ntheme = \"dracula\"\n",
+			"\ufeff[ui]\ntheme = \"nord\"\n", nil},
+		{"quoted header and key",
+			"[\"ui\"]\n\"theme\" = \"dracula\"\n",
+			"[\"ui\"]\n\"theme\" = \"nord\"\n", nil},
+		{"quoted header, no theme",
+			"[ 'ui' ]\nbackground = \"theme\"\n",
+			"[ 'ui' ]\ntheme = \"nord\"\nbackground = \"theme\"\n", nil},
+		{"quoted dotted key",
+			"\"ui\".'theme' = \"dracula\"\n",
+			"\"ui\".'theme' = \"nord\"\n", nil},
 		{"inline table", "ui = { background = \"terminal\" }\n", "", ErrManualEdit},
 	}
 	for _, tc := range tests {
@@ -212,6 +224,42 @@ func TestSaveThemePaths(t *testing.T) {
 		t.Cleanup(func() { os.Chmod(dir, 0o755) })
 		if err := SaveTheme(path, "nord"); err == nil {
 			t.Error("expected an error writing into a read-only directory")
+		}
+		if data, _ := os.ReadFile(path); string(data) != orig {
+			t.Errorf("file changed: %q", data)
+		}
+	})
+
+	t.Run("hard link kept", func(t *testing.T) {
+		t.Parallel()
+		if runtime.GOOS == "windows" {
+			t.Skip("link counts not checked on windows")
+		}
+		root := t.TempDir()
+		repo := filepath.Join(root, "dotfiles.toml")
+		os.WriteFile(repo, []byte("[ui]\ntheme = \"dracula\"\n"), 0o600)
+		path := filepath.Join(root, "config.toml")
+		if err := os.Link(repo, path); err != nil {
+			t.Skip("hard links unsupported here")
+		}
+		if err := SaveTheme(path, "nord"); err != nil {
+			t.Fatal(err)
+		}
+		if got := readTheme(t, repo); got != "nord" {
+			t.Errorf("linked file theme = %q, want nord (the link was cut)", got)
+		}
+	})
+
+	t.Run("read-only file refused", func(t *testing.T) {
+		t.Parallel()
+		if runtime.GOOS == "windows" || os.Getuid() == 0 {
+			t.Skip("permissions not enforced")
+		}
+		path := filepath.Join(t.TempDir(), "config.toml")
+		orig := "[ui]\ntheme = \"dracula\"\n"
+		os.WriteFile(path, []byte(orig), 0o444)
+		if err := SaveTheme(path, "nord"); err == nil {
+			t.Error("expected an error saving into a read-only config")
 		}
 		if data, _ := os.ReadFile(path); string(data) != orig {
 			t.Errorf("file changed: %q", data)
