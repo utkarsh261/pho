@@ -2074,3 +2074,19 @@ func TestUpdateBranchMsgFailureDoesNotInvalidateDashboard(t *testing.T) {
 		t.Fatalf("expected 'Update branch failed:' in StatusHint after error, got %q", got)
 	}
 }
+
+// TestConfigProblemSurvivesLoads checks a config problem stays in the status
+// bar after a successful load clears the network errors.
+func TestConfigProblemSurvivesLoads(t *testing.T) {
+	t.Parallel()
+
+	repo := testutil.Repo("acme/alpha")
+	m := setupModelWithPRs(t, []domain.Repository{repo}, []domain.PullRequestSummary{pr(repo.FullName, 1, "one")})
+	m.ReportConfigProblem(errors.New(`unknown theme "drakula"`))
+	_, _ = m.Update(cmdsDashboardLoaded(repo.FullName, dashboardSnapshot(repo), false, nil))
+
+	errs := m.state.Errors.Errors
+	if len(errs) != 1 || errs[0].Kind != domain.ErrorKindConfig || !strings.Contains(errs[0].Message, "drakula") {
+		t.Errorf("errors after a successful load = %+v, want the config problem", errs)
+	}
+}

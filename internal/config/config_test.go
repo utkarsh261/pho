@@ -343,3 +343,28 @@ row_budget = 10000
 		t.Errorf("Diff = %+v", d)
 	}
 }
+
+func TestLoad_Theme(t *testing.T) {
+	tests := []struct {
+		name, toml, want string
+	}{
+		{"no ui section", "[logging]\nlevel = \"info\"\n", ""},
+		{"empty theme", "[ui]\ntheme = \"\"\n", ""},
+		{"explicit theme", "[ui]\ntheme = \"terminal-workshop\"\n", "terminal-workshop"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.toml")
+			if err := os.WriteFile(path, []byte(tc.toml), 0644); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := config.Load(path)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if cfg.UI.Theme != tc.want {
+				t.Errorf("UI.Theme: got %q, want %q", cfg.UI.Theme, tc.want)
+			}
+		})
+	}
+}

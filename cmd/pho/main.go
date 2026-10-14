@@ -94,6 +94,7 @@ type invocation struct {
 	Reset      bool
 	ConfigPath string
 	RootDir    string
+	Theme      string
 	PRNumber   int
 }
 
@@ -103,6 +104,7 @@ func registerFlags(fs *flag.FlagSet, inv *invocation, hidden map[string]bool) {
 	fs.BoolVar(&inv.Reset, "reset", false, "clear all caches (SQLite + discovery) and exit")
 	fs.StringVar(&inv.RootDir, "root", ".", "root directory to scan for git repos")
 	fs.StringVar(&inv.ConfigPath, "config", "", "path to config file (default: XDG config dir)")
+	fs.StringVar(&inv.Theme, "theme", "", "colour theme, overriding the config file: "+theme.NameList())
 	hidden["config"] = true
 }
 
@@ -169,9 +171,29 @@ func parseInvocation(args []string) (invocation, error) {
 			inv.RootDir = tail.RootDir
 		case "config":
 			inv.ConfigPath = tail.ConfigPath
+		case "theme":
+			inv.Theme = tail.Theme
 		}
 	})
 	return inv, nil
+}
+
+// selectTheme picks the --theme flag over the configured theme. An unknown
+// name returns the default theme with an error, so a typo never stops pho
+// from starting.
+func selectTheme(configured, flagValue string) (*theme.Theme, error) {
+	name := configured
+	if flagValue != "" {
+		name = flagValue
+	}
+	if th, ok := theme.Get(name); ok {
+		return th, nil
+	}
+	return theme.Default(), unknownTheme(name)
+}
+
+func unknownTheme(name string) error {
+	return fmt.Errorf("unknown theme %q (available: %s)", name, theme.NameList())
 }
 
 func printUsage(w io.Writer) {
@@ -230,6 +252,12 @@ func main() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "pho: failed to load config: %v\n  [config]\n", err)
 		os.Exit(1)
+	}
+	// A --theme typo stops pho straight away; one in the config only gets
+	// reported, once the UI is up.
+	if inv.Theme != "" && !theme.Exists(inv.Theme) {
+		fmt.Fprintf(os.Stderr, "pho: %v\n", unknownTheme(inv.Theme))
+		os.Exit(2)
 	}
 
 	level := cfg.Logging.Level
@@ -337,8 +365,12 @@ func main() {
 	model := app.NewModel(deps)
 
 	lipgloss.SetColorProfile(termenv.NewOutput(os.Stderr).Profile)
-	th := theme.Default()
+	th, err := selectTheme(cfg.UI.Theme, inv.Theme)
 	model.SetTheme(th)
+	if err != nil {
+		logger.Warn("unknown theme in config, using the default", "err", err)
+		model.ReportConfigProblem(fmt.Errorf("unknown theme %q, using the default (pho -h lists themes)", cfg.UI.Theme))
+	}
 	wireDone()
 
 	defer logger.Timer("total session")()

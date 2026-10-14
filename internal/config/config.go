@@ -65,6 +65,9 @@ type rawConfig struct {
 		MaxLineWidth      int `toml:"max_line_width"`
 		RowBudget         int `toml:"row_budget"`
 	} `toml:"diff"`
+	UI struct {
+		Theme string `toml:"theme"`
+	} `toml:"ui"`
 }
 
 type Config struct {
@@ -102,6 +105,9 @@ type Config struct {
 		MaxLines          int // files with more changed lines only open on GitHub
 		MaxLineWidth      int // files with a longer line only open on GitHub
 		RowBudget         int // collapse the largest files beyond this many rows
+	}
+	UI struct {
+		Theme string // theme name, e.g. "terminal-workshop"; empty means the default
 	}
 }
 
@@ -258,6 +264,7 @@ func Load(path string) (Config, error) {
 	cfg.Diff.MaxLines = raw.Diff.MaxLines
 	cfg.Diff.MaxLineWidth = raw.Diff.MaxLineWidth
 	cfg.Diff.RowBudget = raw.Diff.RowBudget
+	cfg.UI.Theme = raw.UI.Theme
 
 	// Fill zero-value fields with defaults.
 	applyDefaults(&cfg, def)
