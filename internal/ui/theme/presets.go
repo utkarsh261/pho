@@ -180,7 +180,9 @@ var presets = []spec{
 		muted: "#A89984", subtext: "#BDAE93", text: "#EBDBB2", bright: "#FBF1C7",
 		accent: "#FE8019", accent2: "#8EC07C", accentTx: "#FABD2F",
 		green: "#B8BB26", yellow: "#FABD2F", red: "#FB4934", orange: "#FE8019",
-		purple: "#D3869B", blue: "#83A598", cyan: "#8EC07C", pink: "#D3869B",
+		// purple is #D3869B nudged by one: blue 155 converts to a
+		// different xterm colour on arm64 than on amd64.
+		purple: "#D3869A", blue: "#83A598", cyan: "#8EC07C", pink: "#D3869A",
 		diffLift: 0.35, base256: 235,
 		highlight: 0.16, selection: 0.30, diffLine: 0.14, diffEmph: 0.30, searchRow: 0.30,
 	},

@@ -2,10 +2,12 @@ package theme
 
 import (
 	"fmt"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -230,4 +232,66 @@ func luminance(hex string) float64 {
 		return math.Pow((c+0.055)/1.055, 2.4)
 	}
 	return 0.2126*lin(r) + 0.7152*lin(g) + 0.0722*lin(b)
+}
+
+// termenvCutoffs are the channel values whose 256-colour conversion
+// depends on the CPU. termenv computes the cube index as (v*255-35)/40 and
+// tests v*255 < 48, with v = channel/255; on arm64 the compiler fuses the
+// multiply and subtract (FMA), on amd64 it rounds in between, and for these
+// two channels that tips the result. A preset colour with one renders as a
+// different xterm colour on CI's Linux runners than on Apple silicon.
+var termenvCutoffs = map[uint8]bool{48: true, 155: true}
+
+// TestPresetColoursAvoidTermenvCutoffs builds each preset for a 256-colour
+// terminal, so tints that switch to fixed xterm indices there are skipped
+// and only colours termenv actually converts are checked. It sets the
+// global colour profile, so it must not run in parallel.
+func TestPresetColoursAvoidTermenvCutoffs(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.ANSI256)
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+
+	for _, name := range Names() {
+		if name == DefaultName {
+			continue
+		}
+		th, _ := Get(name)
+		for where, hex := range hexColours(reflect.ValueOf(th.Palette), "") {
+			r, g, b := hexRGB(hex)
+			for _, c := range []uint8{r, g, b} {
+				if termenvCutoffs[c] {
+					t.Errorf("%s %s = %s has a channel of %d, which 256-colour terminals round inconsistently", name, where, hex, c)
+				}
+			}
+		}
+	}
+}
+
+var hexColourRe = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
+
+// hexColours collects every "#RRGGBB" colour reachable from v, keyed by
+// field path, following pointers, arrays and nested structs.
+func hexColours(v reflect.Value, path string) map[string]string {
+	out := map[string]string{}
+	switch v.Kind() {
+	case reflect.Pointer:
+		if !v.IsNil() {
+			maps.Copy(out, hexColours(v.Elem(), path))
+		}
+	case reflect.Struct:
+		for i := range v.NumField() {
+			if f := v.Type().Field(i); f.IsExported() {
+				maps.Copy(out, hexColours(v.Field(i), path+"."+f.Name))
+			}
+		}
+	case reflect.Array, reflect.Slice:
+		for i := range v.Len() {
+			maps.Copy(out, hexColours(v.Index(i), fmt.Sprintf("%s[%d]", path, i)))
+		}
+	case reflect.String:
+		if s := v.String(); hexColourRe.MatchString(s) {
+			out[path] = s
+		}
+	}
+	return out
 }
