@@ -3,13 +3,22 @@
 // panel model — no globals, no side effects.
 package theme
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"reflect"
 
-// Theme holds every reusable lipgloss style used across the application.
-// Call Default() to get the standard colour palette, or construct your own
-// for a custom look.
-type Theme struct {
-	// ── colour values ──────────────────────────────────────────────
+	"github.com/charmbracelet/lipgloss"
+)
+
+// AvatarCount is the number of colours used to tell comment authors apart.
+const AvatarCount = 8
+
+// Palette holds the colours a theme is built from. Build derives every style
+// from it, so a new look only needs a new Palette.
+//
+// A built Theme's palette is read-only: its styles were derived from these
+// colours, so changing one afterwards leaves the styles on the old value.
+// Use Theme.With to get a theme with different colours.
+type Palette struct {
 	Primary   lipgloss.Color
 	Secondary lipgloss.Color
 	Success   lipgloss.Color
@@ -37,7 +46,9 @@ type Theme struct {
 	UnresolvedBorder lipgloss.Color
 
 	// Colours used to tell comment authors apart.
-	AvatarPalette []lipgloss.Color
+	// An array rather than a slice, so copying a Palette or Theme never
+	// shares it.
+	AvatarPalette [AvatarCount]lipgloss.Color
 
 	// Diff line backgrounds.
 	DiffAddBg lipgloss.Color
@@ -63,6 +74,23 @@ type Theme struct {
 	HelpText  lipgloss.Color // non-key status bar text
 	BoxText   lipgloss.Color // unselected overlay rows
 	HintKeyFg lipgloss.Color // the key in a key hint
+
+	// Base is the background the palette is designed against. Blends and
+	// contrast checks use it; it is painted only when PaintBackground is set.
+	Base lipgloss.Color
+	// PaintBackground fills the whole UI with Base instead of leaving the
+	// terminal's own background showing.
+	PaintBackground bool
+	// ANSIFallback marks the cursor and selection with reverse video on
+	// 16-colour terminals, where background tints can collapse together.
+	ANSIFallback bool
+}
+
+// Theme holds every reusable lipgloss style used across the application,
+// along with the Palette it was built from. Call Default() for the standard
+// look, or Build with your own Palette.
+type Theme struct {
+	Palette
 
 	// ── panel borders ──────────────────────────────────────────────
 	Panel        lipgloss.Style // normal panel left border (gray)
@@ -141,58 +169,80 @@ type Theme struct {
 	HintDesc lipgloss.Style // what it does ("send")
 }
 
+// terminalWorkshop is pho's original palette.
+var terminalWorkshop = Palette{
+	Primary:   lipgloss.Color("#7C3AED"),
+	Secondary: lipgloss.Color("#06B6D4"),
+	Success:   lipgloss.Color("#10B981"),
+	Warning:   lipgloss.Color("#F59E0B"),
+	Error:     lipgloss.Color("#EF4444"),
+	Muted:     lipgloss.Color("#6B7280"),
+	Border:    lipgloss.Color("#30363D"),
+	Subtle:    lipgloss.Color("#1F2937"),
+
+	Text:       lipgloss.Color("#E6EDF3"),
+	TextBright: lipgloss.Color("#FFFFFF"),
+	AccentText: lipgloss.Color("#A78BFA"),
+	TextDim:    lipgloss.Color("#9CA3AF"),
+	Faint:      lipgloss.Color("#4B5563"),
+	Highlight:  lipgloss.Color("#262338"),
+	Selection:  lipgloss.Color("#3B2F66"),
+
+	StateOpen:   lipgloss.Color("#238636"),
+	StateMerged: lipgloss.Color("#8957E5"),
+	StateClosed: lipgloss.Color("#DA3633"),
+	StateDraft:  lipgloss.Color("#6E7681"),
+
+	UnresolvedBorder: lipgloss.Color("#7A5A12"),
+	AvatarPalette: [AvatarCount]lipgloss.Color{
+		"#F472B6", "#60A5FA", "#34D399", "#FBBF24",
+		"#A78BFA", "#F87171", "#22D3EE", "#FB923C",
+	},
+
+	DiffAddBg: lipgloss.Color("#12261E"),
+	DiffDelBg: lipgloss.Color("#2D1619"),
+
+	DiffAddEmphBg: lipgloss.Color("#1F5A3A"),
+	DiffDelEmphBg: lipgloss.Color("#6E2630"),
+
+	DiffAddFg:  lipgloss.Color("#7EE2A8"),
+	DiffDelFg:  lipgloss.Color("#F7A8A8"),
+	DiffHunkFg: lipgloss.Color("#6B8EAE"),
+
+	SearchCurrentBg: lipgloss.Color("#F59E0B"),
+	SearchOtherBg:   lipgloss.Color("#22D3EE"),
+	SearchMatchFg:   lipgloss.Color("#0F172A"),
+	SearchLineBg:    lipgloss.Color("#1D4ED8"),
+	SearchActiveFg:  lipgloss.Color("#FDE047"),
+
+	OnPrimary: lipgloss.Color("#FFFFFF"),
+	HelpText:  lipgloss.Color("#9CA3AF"),
+	BoxText:   lipgloss.Color("#CBD5E1"),
+	HintKeyFg: lipgloss.Color("#C9D1D9"),
+
+	Base: lipgloss.Color("#0D1117"),
+}
+
 // Default constructs a Theme with the standard "Terminal Workshop" palette.
 func Default() *Theme {
-	t := &Theme{
-		Primary:   lipgloss.Color("#7C3AED"),
-		Secondary: lipgloss.Color("#06B6D4"),
-		Success:   lipgloss.Color("#10B981"),
-		Warning:   lipgloss.Color("#F59E0B"),
-		Error:     lipgloss.Color("#EF4444"),
-		Muted:     lipgloss.Color("#6B7280"),
-		Border:    lipgloss.Color("#30363D"),
-		Subtle:    lipgloss.Color("#1F2937"),
+	return Build(terminalWorkshop)
+}
 
-		Text:       lipgloss.Color("#E6EDF3"),
-		TextBright: lipgloss.Color("#FFFFFF"),
-		AccentText: lipgloss.Color("#A78BFA"),
-		TextDim:    lipgloss.Color("#9CA3AF"),
-		Faint:      lipgloss.Color("#4B5563"),
-		Highlight:  lipgloss.Color("#262338"),
-		Selection:  lipgloss.Color("#3B2F66"),
+// With returns a new theme built from t's palette after change edits it.
+// It is the way to adjust colours: setting a colour on a built theme leaves
+// its styles on the old value.
+func (t *Theme) With(change func(*Palette)) *Theme {
+	p := t.Palette
+	change(&p)
+	return Build(p)
+}
 
-		StateOpen:   lipgloss.Color("#238636"),
-		StateMerged: lipgloss.Color("#8957E5"),
-		StateClosed: lipgloss.Color("#DA3633"),
-		StateDraft:  lipgloss.Color("#6E7681"),
-
-		UnresolvedBorder: lipgloss.Color("#7A5A12"),
-		AvatarPalette: []lipgloss.Color{
-			"#F472B6", "#60A5FA", "#34D399", "#FBBF24",
-			"#A78BFA", "#F87171", "#22D3EE", "#FB923C",
-		},
-
-		DiffAddBg: lipgloss.Color("#12261E"),
-		DiffDelBg: lipgloss.Color("#2D1619"),
-
-		DiffAddEmphBg: lipgloss.Color("#1F5A3A"),
-		DiffDelEmphBg: lipgloss.Color("#6E2630"),
-
-		DiffAddFg:  lipgloss.Color("#7EE2A8"),
-		DiffDelFg:  lipgloss.Color("#F7A8A8"),
-		DiffHunkFg: lipgloss.Color("#6B8EAE"),
-
-		SearchCurrentBg: lipgloss.Color("#F59E0B"),
-		SearchOtherBg:   lipgloss.Color("#22D3EE"),
-		SearchMatchFg:   lipgloss.Color("#0F172A"),
-		SearchLineBg:    lipgloss.Color("#1D4ED8"),
-		SearchActiveFg:  lipgloss.Color("#FDE047"),
-
-		OnPrimary: lipgloss.Color("#FFFFFF"),
-		HelpText:  lipgloss.Color("#9CA3AF"),
-		BoxText:   lipgloss.Color("#CBD5E1"),
-		HintKeyFg: lipgloss.Color("#C9D1D9"),
-	}
+// Build constructs a Theme, deriving every style from p. Colours p leaves
+// empty are taken from the default palette, so a partial palette still
+// draws tints, cursors and borders.
+func Build(p Palette) *Theme {
+	fillMissing(&p, terminalWorkshop)
+	t := &Theme{Palette: p}
 
 	// Panel borders.
 	t.Panel = lipgloss.NewStyle().
@@ -330,4 +380,24 @@ func Default() *Theme {
 	t.HintDesc = lipgloss.NewStyle().Foreground(t.Muted)
 
 	return t
+}
+
+// fillMissing sets every empty colour in p, avatar colours included, from
+// def.
+func fillMissing(p *Palette, def Palette) {
+	pv, dv := reflect.ValueOf(p).Elem(), reflect.ValueOf(def)
+	for i := range pv.NumField() {
+		switch f := pv.Field(i); f.Interface().(type) {
+		case lipgloss.Color:
+			if f.String() == "" {
+				f.Set(dv.Field(i))
+			}
+		case [AvatarCount]lipgloss.Color:
+			for j := range AvatarCount {
+				if f.Index(j).String() == "" {
+					f.Index(j).Set(dv.Field(i).Index(j))
+				}
+			}
+		}
+	}
 }

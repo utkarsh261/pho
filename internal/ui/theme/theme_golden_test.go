@@ -60,13 +60,24 @@ func TestDefaultThemeGolden(t *testing.T) {
 // field added to Theme is picked up without touching this test.
 func dumpTheme(th *Theme) map[string]string {
 	out := map[string]string{}
-	v := reflect.ValueOf(th).Elem()
+	dumpFields(reflect.ValueOf(th).Elem(), out)
+	return out
+}
+
+// dumpFields flattens embedded structs (Theme embeds Palette) so entries
+// keep the plain field names they are used by.
+func dumpFields(v reflect.Value, out map[string]string) {
 	for i := range v.NumField() {
-		name := v.Type().Field(i).Name
+		field := v.Type().Field(i)
+		if field.Anonymous {
+			dumpFields(v.Field(i), out)
+			continue
+		}
+		name := field.Name
 		switch f := v.Field(i).Interface().(type) {
 		case lipgloss.Color:
 			out[name] = string(f)
-		case []lipgloss.Color:
+		case [AvatarCount]lipgloss.Color:
 			parts := make([]string, len(f))
 			for j, c := range f {
 				parts[j] = string(c)
@@ -74,11 +85,12 @@ func dumpTheme(th *Theme) map[string]string {
 			out[name] = strings.Join(parts, " ")
 		case lipgloss.Style:
 			out[name] = describeStyle(f)
+		case bool:
+			out[name] = fmt.Sprint(f)
 		default:
 			out[name] = fmt.Sprintf("unhandled %T", f)
 		}
 	}
-	return out
 }
 
 func describeStyle(s lipgloss.Style) string {

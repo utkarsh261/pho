@@ -679,7 +679,7 @@ func (m *PRDetailModel) buildCommentEntryInner(e commentEntry, innerW int, activ
 			if active {
 				nameStyle = nameStyle.Foreground(th.TextBright)
 			}
-			headerText = lipgloss.NewStyle().Foreground(avatarColor(e.login, th.AvatarPalette)).Render("●") + " " + nameStyle.Render(e.login)
+			headerText = lipgloss.NewStyle().Foreground(avatarColor(e.login, th.AvatarPalette[:])).Render("●") + " " + nameStyle.Render(e.login)
 		}
 		headerText += "  " + m.reviewVerb(e)
 		// Optional parts are added only while they fit, so narrow cards drop
