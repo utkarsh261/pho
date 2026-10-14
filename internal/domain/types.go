@@ -389,6 +389,7 @@ const (
 	ErrorKindParse     ErrorKind = "parse"
 	ErrorKindCache     ErrorKind = "cache"
 	ErrorKindDiscovery ErrorKind = "discovery"
+	ErrorKindConfig    ErrorKind = "config"
 )
 
 type ErrorState struct {

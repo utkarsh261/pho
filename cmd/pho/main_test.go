@@ -145,6 +145,7 @@ func TestSelectTheme(t *testing.T) {
 		wantName               string
 		wantErr                bool
 	}{
+		{"nothing configured", "", "", "terminal-workshop", false},
 		{"config default", "terminal-workshop", "", "terminal-workshop", false},
 		{"alias from config", "pho", "", "terminal-workshop", false},
 		{"flag overrides config", "nope", "default", "terminal-workshop", false},

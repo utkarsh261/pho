@@ -348,9 +348,9 @@ func TestLoad_Theme(t *testing.T) {
 	tests := []struct {
 		name, toml, want string
 	}{
-		{"no ui section", "[logging]\nlevel = \"info\"\n", "terminal-workshop"},
-		{"empty theme", "[ui]\ntheme = \"\"\n", "terminal-workshop"},
-		{"explicit theme", "[ui]\ntheme = \"catppuccin-mocha\"\n", "catppuccin-mocha"},
+		{"no ui section", "[logging]\nlevel = \"info\"\n", ""},
+		{"empty theme", "[ui]\ntheme = \"\"\n", ""},
+		{"explicit theme", "[ui]\ntheme = \"terminal-workshop\"\n", "terminal-workshop"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

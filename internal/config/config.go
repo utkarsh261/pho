@@ -107,7 +107,7 @@ type Config struct {
 		RowBudget         int // collapse the largest files beyond this many rows
 	}
 	UI struct {
-		Theme string // theme name, e.g. "catppuccin-mocha"
+		Theme string // theme name, e.g. "terminal-workshop"; empty means the default
 	}
 }
 
@@ -168,7 +168,6 @@ func defaults() Config {
 	cfg.Cache.SearchIndexTTL = 2 * time.Minute
 	cfg.Logging.Level = "info"
 	cfg.Palette.MaxPRs = 300
-	cfg.UI.Theme = "terminal-workshop"
 	return cfg
 }
 
@@ -206,9 +205,6 @@ func applyDefaults(cfg *Config, def Config) {
 	}
 	if cfg.Palette.MaxPRs == 0 {
 		cfg.Palette.MaxPRs = def.Palette.MaxPRs
-	}
-	if cfg.UI.Theme == "" {
-		cfg.UI.Theme = def.UI.Theme
 	}
 }
 

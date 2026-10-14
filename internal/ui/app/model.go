@@ -99,6 +99,9 @@ type Model struct {
 	focus         domain.FocusTarget
 	previousFocus domain.FocusTarget
 
+	// configProblems are shown in the status bar until pho restarts.
+	configProblems []domain.AppError
+
 	classifier achdashboard.SummaryTabClassifier
 
 	currentDashboard domain.DashboardSnapshot
@@ -184,6 +187,16 @@ func NewModel(deps Dependencies) *Model {
 	m.syncStatus()
 	m.syncPaletteStats()
 	return m
+}
+
+// ReportConfigProblem shows a problem with the user's config in the status
+// bar, for issues pho works around (such as an unknown theme) rather than
+// stopping on.
+// Unlike network errors it stays until pho restarts, since the config is
+// still wrong.
+func (m *Model) ReportConfigProblem(err error) {
+	m.configProblems = append(m.configProblems, domain.AppError{Kind: domain.ErrorKindConfig, Message: err.Error()})
+	m.recordError(domain.ErrorKindConfig, err, "")
 }
 
 // SetTheme applies a theme to all child panel models.
@@ -1625,8 +1638,9 @@ func (m *Model) refreshBareViewedSummary(repo string, number int) {
 	}
 }
 
+// clearErrors drops errors from earlier loads; config problems stay.
 func (m *Model) clearErrors() {
-	m.state.Errors.Errors = nil
+	m.state.Errors.Errors = append([]domain.AppError(nil), m.configProblems...)
 	m.state.Errors.RateLimitReset = nil
 }
 
