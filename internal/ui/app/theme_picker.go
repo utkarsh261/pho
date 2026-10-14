@@ -156,11 +156,38 @@ func (m *Model) handleThemeSaved(msg ThemeSaved) tea.Cmd {
 	return nil
 }
 
-// clearConfigErrors drops a config error left by an earlier failed save.
+// ReportUnknownTheme shows that the configured theme doesn't exist. Saving a
+// theme from the picker fixes the config, which clears the message.
+func (m *Model) ReportUnknownTheme(name string) {
+	err := fmt.Errorf("unknown theme %q, using the default (pho -h lists themes)", name)
+	m.unknownTheme = err.Error()
+	m.ReportConfigProblem(err)
+}
+
+// clearConfigErrors runs after a successful save: it drops an earlier failed
+// save's error and the unknown-theme problem, since the config now names a
+// real theme. Other config problems stay.
 func (m *Model) clearConfigErrors() {
+	if m.unknownTheme != "" {
+		problems := m.configProblems[:0:0]
+		for _, p := range m.configProblems {
+			if p.Message != m.unknownTheme {
+				problems = append(problems, p)
+			}
+		}
+		m.configProblems, m.unknownTheme = problems, ""
+	}
+	isProblem := func(e domain.AppError) bool {
+		for _, p := range m.configProblems {
+			if p == e {
+				return true
+			}
+		}
+		return false
+	}
 	errs := m.state.Errors.Errors[:0:0]
 	for _, e := range m.state.Errors.Errors {
-		if e.Kind != domain.ErrorKindConfig {
+		if e.Kind != domain.ErrorKindConfig || isProblem(e) {
 			errs = append(errs, e)
 		}
 	}

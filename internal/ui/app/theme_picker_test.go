@@ -307,3 +307,26 @@ func TestThemePickerKeepsDeepLink(t *testing.T) {
 		t.Errorf("theme = %q, want the one the picker opened with", m.theme.Name)
 	}
 }
+
+// TestThemePickerSaveClearsUnknownTheme checks saving a theme removes the
+// unknown-theme notice, but not other config problems.
+func TestThemePickerSaveClearsUnknownTheme(t *testing.T) {
+	m, _ := themePickerModel(t)
+	m.ReportConfigProblem(errors.New(`unknown [ui] background "x"`))
+	m.ReportUnknownTheme("drakula")
+
+	openPicker(m)
+	key(m, keyDown)
+	drainCmds(m, key(m, keyEnter))
+
+	errs := m.state.Errors.Errors
+	m.clearErrors() // a later load must not bring it back either
+	for _, e := range append(errs, m.state.Errors.Errors...) {
+		if strings.Contains(e.Message, "drakula") {
+			t.Errorf("unknown-theme notice still shown: %+v", e)
+		}
+	}
+	if len(m.state.Errors.Errors) != 1 || !strings.Contains(m.state.Errors.Errors[0].Message, "background") {
+		t.Errorf("errors = %+v, want only the background problem", m.state.Errors.Errors)
+	}
+}

@@ -109,8 +109,10 @@ type Model struct {
 	focus         domain.FocusTarget
 	previousFocus domain.FocusTarget
 
-	// configProblems are shown in the status bar until pho restarts.
+	// configProblems are shown in the status bar until pho restarts, or,
+	// for an unknown theme (unknownTheme), until the picker saves one.
 	configProblems []domain.AppError
+	unknownTheme   string
 
 	// Theme picker: the theme to restore on Esc, and the ordered saver for
 	// the theme kept with Enter.
