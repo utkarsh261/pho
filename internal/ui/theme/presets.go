@@ -2,7 +2,11 @@ package theme
 
 import (
 	"fmt"
+	"math"
+	"strings"
 
+	"github.com/alecthomas/chroma/v2"
+	chromastyles "github.com/alecthomas/chroma/v2/styles"
 	"github.com/charmbracelet/glamour/ansi"
 	"github.com/charmbracelet/glamour/styles"
 	"github.com/charmbracelet/lipgloss"
@@ -38,6 +42,8 @@ type spec struct {
 	diffLift float64
 	// base256 is the xterm index closest to base, for 256-colour terminals.
 	base256 int
+	// chroma names the chroma style for fenced code, matching the theme.
+	chroma string
 
 	// Tint strengths, as the share of the colour blended over base.
 	highlight float64 // cursor row
@@ -145,15 +151,92 @@ func markdownStyle(s spec) ansi.StyleConfig {
 	m.Code.Color = str(string(blend(s.bright, s.orange, s.diffLift)))
 	m.Code.BackgroundColor = str(s.surface)
 	m.CodeBlock.Color = str(s.text)
+	// Highlight fenced code with the theme's own chroma style. A custom
+	// Chroma config would be registered by glamour under one global name,
+	// once, so every later theme would reuse the first one's colours.
+	m.CodeBlock.Chroma = nil
+	m.CodeBlock.Theme = codeStyle(s)
 	m.HorizontalRule.Color = str(s.faint)
 	m.Item.Color = nil
 	return m
 }
 
+// codeContrast is the contrast each fenced-code token must reach against
+// the code background; comments, dimmed on purpose by every theme, get the
+// lower bar.
+var codeContrast = []struct {
+	token chroma.TokenType
+	min   float64
+}{
+	{chroma.Text, 4.5},
+	{chroma.Keyword, 4.5},
+	{chroma.LiteralString, 4.5},
+	{chroma.LiteralNumber, 4.5},
+	{chroma.NameFunction, 4.5},
+	{chroma.Operator, 3.0},
+	{chroma.Comment, 3.0},
+}
+
+// codeStyle registers "pho-<theme>": the theme's published chroma style
+// with any token below codeContrast lifted toward the bright text colour,
+// and returns its name.
+func codeStyle(s spec) string {
+	base := chromastyles.Get(s.chroma)
+	b := chroma.NewStyleBuilder("pho-" + s.name)
+	for _, tt := range base.Types() {
+		b.AddEntry(tt, base.Get(tt))
+	}
+	bgOf := func(e chroma.StyleEntry) string {
+		if e.Background.IsSet() {
+			return strings.ToUpper(e.Background.String())
+		}
+		return s.base
+	}
+	for _, c := range codeContrast {
+		e := base.Get(c.token)
+		if !e.Colour.IsSet() {
+			continue
+		}
+		fg, bg := strings.ToUpper(e.Colour.String()), bgOf(e)
+		for share := 0.05; contrast(fg, bg) < c.min && share <= 1; share += 0.05 {
+			fg = string(blend(s.bright, strings.ToUpper(e.Colour.String()), share))
+		}
+		e.Colour = chroma.ParseColour(fg)
+		b.AddEntry(c.token, e)
+	}
+	style, err := b.Build()
+	if err != nil {
+		panic(fmt.Sprintf("theme: build code style for %s: %v", s.name, err))
+	}
+	chromastyles.Register(style)
+	return style.Name
+}
+
+// contrast is the WCAG 2 contrast ratio of two "#RRGGBB" colours.
+func contrast(a, b string) float64 {
+	la, lb := luminance(a), luminance(b)
+	if la < lb {
+		la, lb = lb, la
+	}
+	return (la + 0.05) / (lb + 0.05)
+}
+
+func luminance(hex string) float64 {
+	r, g, b := hexRGB(hex)
+	lin := func(v uint8) float64 {
+		c := float64(v) / 255
+		if c <= 0.03928 {
+			return c / 12.92
+		}
+		return math.Pow((c+0.055)/1.055, 2.4)
+	}
+	return 0.2126*lin(r) + 0.7152*lin(g) + 0.0722*lin(b)
+}
+
 var presets = []spec{
 	{
 		// https://catppuccin.com/palette (Mocha)
-		name: "catppuccin-mocha",
+		name: "catppuccin-mocha", chroma: "catppuccin-mocha",
 		base: "#1E1E2E", surface: "#313244", border: "#45475A", faint: "#585B70",
 		muted: "#9399B2", subtext: "#A6ADC8", text: "#CDD6F4", bright: "#F5F5FA",
 		accent: "#CBA6F7", accent2: "#89DCEB", accentTx: "#B4BEFE",
@@ -164,7 +247,7 @@ var presets = []spec{
 	},
 	{
 		// https://github.com/folke/tokyonight.nvim (night)
-		name: "tokyo-night",
+		name: "tokyo-night", chroma: "tokyonight-night",
 		base: "#1A1B26", surface: "#292E42", border: "#3B4261", faint: "#545C7E",
 		muted: "#737AA2", subtext: "#A9B1D6", text: "#C0CAF5", bright: "#E4E9FF",
 		accent: "#7AA2F7", accent2: "#7DCFFF", accentTx: "#BB9AF7",
@@ -175,7 +258,7 @@ var presets = []spec{
 	},
 	{
 		// https://github.com/morhetz/gruvbox (dark, medium contrast)
-		name: "gruvbox-dark",
+		name: "gruvbox-dark", chroma: "gruvbox",
 		base: "#282828", surface: "#3C3836", border: "#504945", faint: "#665C54",
 		muted: "#A89984", subtext: "#BDAE93", text: "#EBDBB2", bright: "#FBF1C7",
 		accent: "#FE8019", accent2: "#8EC07C", accentTx: "#FABD2F",
@@ -188,7 +271,7 @@ var presets = []spec{
 	},
 	{
 		// https://www.nordtheme.com/docs/colors-and-palettes
-		name: "nord",
+		name: "nord", chroma: "nord",
 		base: "#2E3440", surface: "#3B4252", border: "#434C5E", faint: "#4C566A",
 		muted: "#9AA3B5", subtext: "#B6BECC", text: "#D8DEE9", bright: "#ECEFF4",
 		accent: "#88C0D0", accent2: "#8FBCBB", accentTx: "#88C0D0",
@@ -199,7 +282,7 @@ var presets = []spec{
 	},
 	{
 		// https://draculatheme.com/contribute (spec)
-		name: "dracula",
+		name: "dracula", chroma: "dracula",
 		base: "#282A36", surface: "#44475A", border: "#44475A", faint: "#6272A4",
 		muted: "#8D99C4", subtext: "#BDC3DC", text: "#F8F8F2", bright: "#FFFFFF",
 		accent: "#BD93F9", accent2: "#8BE9FD", accentTx: "#FF79C6",
@@ -210,7 +293,7 @@ var presets = []spec{
 	},
 	{
 		// https://rosepinetheme.com/palette (main)
-		name: "rose-pine",
+		name: "rose-pine", chroma: "rose-pine",
 		base: "#191724", surface: "#26233A", border: "#403D52", faint: "#524F67",
 		muted: "#908CAA", subtext: "#ABA7C5", text: "#E0DEF4", bright: "#F4F2FF",
 		accent: "#C4A7E7", accent2: "#9CCFD8", accentTx: "#EBBCBA",

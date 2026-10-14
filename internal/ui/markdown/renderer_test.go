@@ -308,3 +308,24 @@ func TestRenderConcurrentWithSetStyle(t *testing.T) {
 		}
 	}
 }
+
+// TestColourGoldenCodeTrueColor pins highlighted fenced code at truecolor,
+// where chroma's formatter has no nearest-colour ties to break (the lower
+// profiles do, so they stay out of the colour goldens).
+func TestColourGoldenCodeTrueColor(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+
+	got := strings.Join(New().Render(readFixture(t, "code_blocks.md"), 80), "\n")
+	goldenPath := filepath.Join("testdata", "golden", "ansi", "TrueColor", "code_blocks_w80.ansi")
+	if *update {
+		if err := os.WriteFile(goldenPath, []byte(got), 0o644); err != nil {
+			t.Fatalf("write golden %s: %v", goldenPath, err)
+		}
+		return
+	}
+	if want := string(readGolden(t, goldenPath)); got != want {
+		t.Errorf("colour golden mismatch for code blocks\ngot:\n%q\nwant:\n%q", got, want)
+	}
+}

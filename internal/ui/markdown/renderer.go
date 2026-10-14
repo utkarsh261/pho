@@ -43,6 +43,20 @@ func noMargin(style glamouransi.StyleConfig) glamouransi.StyleConfig {
 	return style
 }
 
+// chromaFormatter picks the code-highlighting formatter for profile. Glamour
+// defaults to 256 colours everywhere, which approximates truecolor themes
+// and breaks ties between equally close xterm colours at random.
+func chromaFormatter(profile termenv.Profile) string {
+	switch profile {
+	case termenv.TrueColor:
+		return "terminal16m"
+	case termenv.ANSI:
+		return "terminal16"
+	default:
+		return "terminal256"
+	}
+}
+
 type renderCacheKey struct {
 	src     string
 	width   int
@@ -117,6 +131,7 @@ func (r *Renderer) Render(src string, width int) []string {
 			glamour.WithStyles(r.style),
 			glamour.WithWordWrap(w),
 			glamour.WithColorProfile(profile),
+			glamour.WithChromaFormatter(chromaFormatter(profile)),
 		)
 		if err == nil {
 			r.inner = tr

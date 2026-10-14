@@ -3,7 +3,6 @@ package theme
 import (
 	"fmt"
 	"maps"
-	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -11,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	chromastyles "github.com/alecthomas/chroma/v2/styles"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 )
@@ -45,6 +45,9 @@ func contrastPairs(th *Theme) []contrastPair {
 	add("search other match", 4.5, th.SearchOtherBg, th.SearchMatchFg)
 	add("search line", 4.5, th.SearchLineBg, th.Text)
 	add("section tab", 4.5, th.Primary, th.OnPrimary)
+	add("create-PR chosen option", 4.5, th.Primary, th.OnPrimary)
+	add("create-PR other option", 3.0, th.Highlight, th.TextDim)
+	add("create-PR option, field unfocused", 4.5, th.Selection, th.Text)
 	add("status and icons", 3.0, th.Base,
 		th.Success, th.Warning, th.Error, th.Secondary, th.SearchActiveFg,
 		th.StateOpen, th.StateMerged, th.StateClosed, th.StateDraft)
@@ -213,27 +216,6 @@ func asProfile(c lipgloss.Color, p termenv.Profile) string {
 	return strings.ToUpper(termenv.ConvertToRGB(p.Color(string(c))).Hex())
 }
 
-// contrast is the WCAG 2 contrast ratio of two "#RRGGBB" colours.
-func contrast(a, b string) float64 {
-	la, lb := luminance(a), luminance(b)
-	if la < lb {
-		la, lb = lb, la
-	}
-	return (la + 0.05) / (lb + 0.05)
-}
-
-func luminance(hex string) float64 {
-	r, g, b := hexRGB(hex)
-	lin := func(v uint8) float64 {
-		c := float64(v) / 255
-		if c <= 0.03928 {
-			return c / 12.92
-		}
-		return math.Pow((c+0.055)/1.055, 2.4)
-	}
-	return 0.2126*lin(r) + 0.7152*lin(g) + 0.0722*lin(b)
-}
-
 // termenvCutoffs are the channel values whose 256-colour conversion
 // depends on the CPU. termenv computes the cube index as (v*255-35)/40 and
 // tests v*255 < 48, with v = channel/255; on arm64 the compiler fuses the
@@ -294,4 +276,37 @@ func hexColours(v reflect.Value, path string) map[string]string {
 		}
 	}
 	return out
+}
+
+// TestPresetCodeContrast checks fenced-code tokens against their code
+// background in each preset's chroma style (comments get the lower bar,
+// since every published palette dims them on purpose).
+func TestPresetCodeContrast(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range Names() {
+		if name == DefaultName {
+			continue
+		}
+		th, _ := Get(name)
+		styleName := th.Markdown.CodeBlock.Theme
+		style, ok := chromastyles.Registry[styleName]
+		if !ok || th.Markdown.CodeBlock.Chroma != nil {
+			t.Errorf("%s: fenced code should use a chroma style by name, got %q", name, styleName)
+			continue
+		}
+		for _, tk := range codeContrast {
+			e := style.Get(tk.token)
+			fg, bg := e.Colour.String(), e.Background.String()
+			if !e.Colour.IsSet() {
+				continue // inherits the terminal's text colour on the painted base
+			}
+			if !e.Background.IsSet() {
+				bg = string(th.Base)
+			}
+			if r := contrast(strings.ToUpper(fg), strings.ToUpper(bg)); r < tk.min {
+				t.Errorf("%s code %s: %s on %s is %.2f:1, want %.1f:1", name, tk.token, fg, bg, r, tk.min)
+			}
+		}
+	}
 }
