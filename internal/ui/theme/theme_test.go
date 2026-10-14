@@ -125,8 +125,8 @@ func TestBuildFillsMissingColours(t *testing.T) {
 func TestDefaultMatchesBuild(t *testing.T) {
 	t.Parallel()
 
-	if !reflect.DeepEqual(Default(), Build(terminalWorkshop)) {
-		t.Error("Default() differs from Build(terminalWorkshop)")
+	if !reflect.DeepEqual(Default(), Build(phoDefault)) {
+		t.Error("Default() differs from Build(phoDefault)")
 	}
 }
 
@@ -149,6 +149,6 @@ func TestFallbackMarksCursorInSelection(t *testing.T) {
 
 	tw := Default()
 	if got, want := tw.FillCursorInSelection(10, "row"), FillBg(tw.Selection, 10, "row"); got != want {
-		t.Errorf("Terminal Workshop cursor-in-selection = %q, want the selection fill %q", got, want)
+		t.Errorf("default theme cursor-in-selection = %q, want the selection fill %q", got, want)
 	}
 }

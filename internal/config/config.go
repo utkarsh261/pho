@@ -108,7 +108,7 @@ type Config struct {
 		RowBudget         int // collapse the largest files beyond this many rows
 	}
 	UI struct {
-		Theme string // theme name, e.g. "terminal-workshop"; empty means the default
+		Theme string // theme name, e.g. "pho-default"; empty means the default
 		// Background is "theme" to paint the theme's background or
 		// "terminal" to keep the terminal's own (for transparency).
 		Background string

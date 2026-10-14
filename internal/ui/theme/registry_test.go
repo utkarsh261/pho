@@ -9,7 +9,7 @@ import (
 func TestGetResolvesDefaultAndAliases(t *testing.T) {
 	t.Parallel()
 
-	for _, name := range []string{"", "terminal-workshop", "pho", "default", "  Terminal-Workshop "} {
+	for _, name := range []string{"", "pho-default", "pho", "default", "  Pho-Default "} {
 		th, ok := Get(name)
 		if !ok {
 			t.Errorf("Get(%q) not found", name)
@@ -58,10 +58,10 @@ func TestRegisterRejectsDuplicates(t *testing.T) {
 
 	defer func() {
 		if recover() == nil {
-			t.Error("expected a panic registering terminal-workshop twice")
+			t.Error("expected a panic registering pho-default twice")
 		}
 	}()
-	Register(terminalWorkshop)
+	Register(phoDefault)
 }
 
 func TestRegisterRejectsAliases(t *testing.T) {
@@ -74,7 +74,7 @@ func TestRegisterRejectsAliases(t *testing.T) {
 					t.Errorf("expected a panic registering %q, an alias", name)
 				}
 			}()
-			p := terminalWorkshop
+			p := phoDefault
 			p.Name = name
 			Register(p)
 		}()
@@ -83,7 +83,7 @@ func TestRegisterRejectsAliases(t *testing.T) {
 
 func TestRegisterNormalizesName(t *testing.T) {
 	// Not parallel: it adds to the registry and removes the entry again.
-	p := terminalWorkshop
+	p := phoDefault
 	p.Name = "  Test-Theme "
 	Register(p)
 	t.Cleanup(func() { delete(palettes, "test-theme") })

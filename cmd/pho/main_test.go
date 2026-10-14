@@ -145,12 +145,12 @@ func TestSelectTheme(t *testing.T) {
 		wantName               string
 		wantErr                bool
 	}{
-		{"nothing configured", "", "", "terminal-workshop", false},
-		{"config default", "terminal-workshop", "", "terminal-workshop", false},
-		{"alias from config", "pho", "", "terminal-workshop", false},
-		{"flag overrides config", "nope", "default", "terminal-workshop", false},
-		{"unknown falls back", "solarized-nope", "", "terminal-workshop", true},
-		{"unknown flag falls back", "terminal-workshop", "nope", "terminal-workshop", true},
+		{"nothing configured", "", "", "pho-default", false},
+		{"config default", "pho-default", "", "pho-default", false},
+		{"alias from config", "pho", "", "pho-default", false},
+		{"flag overrides config", "nope", "default", "pho-default", false},
+		{"unknown falls back", "solarized-nope", "", "pho-default", true},
+		{"unknown flag falls back", "pho-default", "nope", "pho-default", true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

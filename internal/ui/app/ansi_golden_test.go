@@ -99,7 +99,7 @@ func TestANSIGolden(t *testing.T) {
 		t.Run(sc.name, func(t *testing.T) {
 			withColorProfile(t, termenv.TrueColor)
 			got := sc.build(t).View()
-			checkANSIGolden(t, got, filepath.Join("terminal-workshop", "TrueColor", sc.name+".ansi"))
+			checkANSIGolden(t, got, filepath.Join("pho-default", "TrueColor", sc.name+".ansi"))
 		})
 	}
 }
@@ -119,7 +119,7 @@ func TestANSIGoldenProfiles(t *testing.T) {
 				if p.profile == termenv.Ascii && strings.Contains(got, "\x1b[") {
 					t.Errorf("Ascii render of %s contains escape codes", sc.name)
 				}
-				checkANSIGolden(t, got, filepath.Join("terminal-workshop", p.name, sc.name+".ansi"))
+				checkANSIGolden(t, got, filepath.Join("pho-default", p.name, sc.name+".ansi"))
 			})
 		}
 	}
@@ -341,7 +341,7 @@ func ansiPRDetail(t testing.TB, tab string) *Model {
 }
 
 // BenchmarkViewPaint compares a diff frame with and without the painted
-// background (Terminal Workshop paints none; catppuccin-mocha does).
+// background (pho-default paints none; catppuccin-mocha does).
 func BenchmarkViewPaint(b *testing.B) {
 	for _, name := range []string{theme.DefaultName, "catppuccin-mocha", "catppuccin-mocha/unpainted"} {
 		b.Run(name, func(b *testing.B) {

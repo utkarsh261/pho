@@ -22,7 +22,7 @@ const AvatarCount = 8
 // colours, so changing one afterwards leaves the styles on the old value.
 // Use Theme.With to get a theme with different colours.
 type Palette struct {
-	// Name identifies the palette, e.g. "terminal-workshop".
+	// Name identifies the palette, e.g. "pho-default".
 	Name string
 
 	Primary   lipgloss.Color
@@ -210,9 +210,9 @@ type Theme struct {
 	HintDesc lipgloss.Style // what it does ("send")
 }
 
-// terminalWorkshop is pho's original palette.
-var terminalWorkshop = Palette{
-	Name: "terminal-workshop",
+// phoDefault is pho's original palette.
+var phoDefault = Palette{
+	Name: "pho-default",
 
 	Primary:   lipgloss.Color("#7C3AED"),
 	Secondary: lipgloss.Color("#06B6D4"),
@@ -268,9 +268,9 @@ var terminalWorkshop = Palette{
 	Base: lipgloss.Color("#0D1117"),
 }
 
-// Default constructs a Theme with the standard "Terminal Workshop" palette.
+// Default constructs a Theme with pho's default palette.
 func Default() *Theme {
-	return Build(terminalWorkshop)
+	return Build(phoDefault)
 }
 
 // With returns a new theme built from t's palette after change edits it.
@@ -289,7 +289,7 @@ func (t *Theme) With(change func(*Palette)) *Theme {
 // Build reads the lipgloss colour profile, so call it after the profile is
 // set: palettes with Colors256 use them on 256-colour terminals.
 func Build(p Palette) *Theme {
-	fillMissing(&p, terminalWorkshop)
+	fillMissing(&p, phoDefault)
 	if p.Colors256 != nil && lipgloss.ColorProfile() == termenv.ANSI256 {
 		p.apply256(p.Colors256)
 	}

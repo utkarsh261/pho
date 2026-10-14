@@ -72,7 +72,7 @@ Press `T` anywhere to open the theme picker. Arrowing through it repaints the sc
 
 ```toml
 [ui]
-theme = "catppuccin-mocha"  # terminal-workshop (default), catppuccin-mocha, tokyo-night,
+theme = "catppuccin-mocha"  # pho-default (the default), catppuccin-mocha, tokyo-night,
                             # gruvbox-dark, nord, dracula, rose-pine
 background = "theme"        # or "terminal" to keep your terminal's own background
 ```

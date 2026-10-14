@@ -138,7 +138,7 @@ func themeFailures(t *testing.T, name string) []string {
 func TestPresetContrastAndDistinctness(t *testing.T) {
 	for _, name := range Names() {
 		if name == DefaultName {
-			continue // report-only, see TestTerminalWorkshopReport
+			continue // report-only, see TestDefaultThemeReport
 		}
 		for _, f := range themeFailures(t, name) {
 			t.Errorf("%s: %s", name, f)
@@ -146,11 +146,11 @@ func TestPresetContrastAndDistinctness(t *testing.T) {
 	}
 }
 
-// TestTerminalWorkshopReport records the default theme's failures without
+// TestDefaultThemeReport records the default theme's failures without
 // failing: its look is frozen, so they are reported rather than fixed.
-func TestTerminalWorkshopReport(t *testing.T) {
+func TestDefaultThemeReport(t *testing.T) {
 	got := strings.Join(themeFailures(t, DefaultName), "\n") + "\n"
-	path := filepath.Join("testdata", "known_tw_failures.txt")
+	path := filepath.Join("testdata", "known_default_failures.txt")
 	if *update {
 		if err := os.WriteFile(path, []byte(got), 0o644); err != nil {
 			t.Fatal(err)
@@ -158,13 +158,13 @@ func TestTerminalWorkshopReport(t *testing.T) {
 		return
 	}
 	if want, err := os.ReadFile(path); err != nil || string(want) != got {
-		t.Logf("Terminal Workshop report changed; run with -update to refresh %s:\n%s", path, got)
+		t.Logf("default theme report changed; run with -update to refresh %s:\n%s", path, got)
 	}
 }
 
 // TestPresetsComplete checks each registered palette sets every colour
 // itself. It reads the palettes before Build, which would fill any gap from
-// Terminal Workshop and hide a missing colour.
+// the default palette and hide a missing colour.
 func TestPresetsComplete(t *testing.T) {
 	t.Parallel()
 
