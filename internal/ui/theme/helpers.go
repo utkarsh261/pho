@@ -97,9 +97,17 @@ func FillBg(bg lipgloss.Color, width int, s string) string {
 		s = lipgloss.NewStyle().MaxWidth(width).Render(s)
 	}
 	if seq := bgSequence(bg); seq != "" {
-		s = strings.ReplaceAll(s, "\x1b[0m", "\x1b[0m"+seq)
+		s = reapplyAfterResets(s, seq)
 	}
 	return lipgloss.NewStyle().Background(bg).Width(width).Render(s)
+}
+
+const sgrReset = "\x1b[0m"
+
+// reapplyAfterResets writes seq again after every SGR reset inside s, so a
+// background or attribute set around s survives its styled segments.
+func reapplyAfterResets(s, seq string) string {
+	return strings.ReplaceAll(s, sgrReset, sgrReset+seq)
 }
 
 // PaintRow sets background bg under a whole rendered row, padding it with
@@ -110,24 +118,8 @@ func PaintRow(bg lipgloss.Color, width int, s string) string {
 	if seq == "" {
 		return s
 	}
-	var b strings.Builder
-	b.Grow(len(s) + len(seq)*8 + width)
-	b.WriteString(seq)
-	for {
-		i := strings.Index(s, "\x1b[0m")
-		if i < 0 {
-			break
-		}
-		b.WriteString(s[:i+4])
-		b.WriteString(seq)
-		s = s[i+4:]
-	}
-	b.WriteString(s)
-	if pad := width - rowWidth(b.String()); pad > 0 {
-		b.WriteString(strings.Repeat(" ", pad))
-	}
-	b.WriteString("\x1b[0m")
-	return b.String()
+	pad := max(width-rowWidth(s), 0)
+	return seq + reapplyAfterResets(s, seq) + strings.Repeat(" ", pad) + sgrReset
 }
 
 // rowWidth is ansi.StringWidth with a fast path for rows of ASCII, box
@@ -225,11 +217,8 @@ func fillReverse(width int, s, extra string) string {
 		s = lipgloss.NewStyle().MaxWidth(width).Render(s)
 	}
 	reverse := "\x1b[7m" + extra
-	s = strings.ReplaceAll(s, "\x1b[0m", "\x1b[0m"+reverse)
-	if pad := width - lipgloss.Width(s); pad > 0 {
-		s += strings.Repeat(" ", pad)
-	}
-	return reverse + s + "\x1b[0m"
+	pad := max(width-lipgloss.Width(s), 0)
+	return reverse + reapplyAfterResets(s, reverse) + strings.Repeat(" ", pad) + sgrReset
 }
 
 // bgSeqCache memoises the escape sequence that sets each background colour,
