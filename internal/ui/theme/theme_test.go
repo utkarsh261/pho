@@ -1,7 +1,9 @@
 package theme
 
 import (
+	"github.com/muesli/termenv"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
@@ -125,5 +127,28 @@ func TestDefaultMatchesBuild(t *testing.T) {
 
 	if !reflect.DeepEqual(Default(), Build(terminalWorkshop)) {
 		t.Error("Default() differs from Build(terminalWorkshop)")
+	}
+}
+
+// TestFallbackMarksCursorInSelection checks that on 16 colours, where a
+// selection and the cursor are both reverse video, the cursor row inside a
+// selection is also underlined; and that without the fallback it is the
+// plain selection tint, as before.
+func TestFallbackMarksCursorInSelection(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+	lipgloss.SetColorProfile(termenv.ANSI)
+
+	preset, _ := Get("nord")
+	if got := preset.FillCursorInSelection(10, "row"); !strings.HasPrefix(got, "\x1b[7m\x1b[4m") {
+		t.Errorf("fallback cursor-in-selection = %q, want reverse and underline", got)
+	}
+	if got := preset.FillRow(preset.Selection, 10, "row"); strings.Contains(got, "\x1b[4m") {
+		t.Errorf("fallback selection row = %q, should not be underlined", got)
+	}
+
+	tw := Default()
+	if got, want := tw.FillCursorInSelection(10, "row"), FillBg(tw.Selection, 10, "row"); got != want {
+		t.Errorf("Terminal Workshop cursor-in-selection = %q, want the selection fill %q", got, want)
 	}
 }

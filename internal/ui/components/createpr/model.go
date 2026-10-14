@@ -620,10 +620,18 @@ func (m *Model) toHuhTheme() *huh.Theme {
 	// Confirm (Draft) renders as a segmented Yes/No toggle; the chosen side
 	// is filled. The submit button reuses FocusedButton/BlurredButton.
 	seg := lipgloss.NewStyle().Padding(0, 1)
-	ht.Focused.FocusedButton = seg.Foreground(th.TextBright).Background(th.Primary).Bold(true)
+	ht.Focused.FocusedButton = seg.Foreground(th.OnPrimary).Background(th.Primary).Bold(true)
 	ht.Focused.BlurredButton = seg.Foreground(th.TextDim).Background(th.Highlight)
 	ht.Blurred.FocusedButton = seg.Foreground(th.Text).Background(th.Selection)
 	ht.Blurred.BlurredButton = seg.Foreground(th.Faint).Background(th.Highlight)
+	if th.FallbackActive() {
+		// 16 colours can't tell the tints apart: mark the chosen side with
+		// reverse video and leave the other plain.
+		ht.Focused.FocusedButton = seg.Reverse(true).Bold(true)
+		ht.Focused.BlurredButton = seg.Foreground(th.TextDim)
+		ht.Blurred.FocusedButton = seg.Reverse(true)
+		ht.Blurred.BlurredButton = seg.Foreground(th.Faint)
+	}
 
 	ht.Focused.ErrorIndicator = fg(th.Error).SetString(" *")
 	ht.Focused.ErrorMessage = fg(th.Error)

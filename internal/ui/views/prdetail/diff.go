@@ -285,6 +285,8 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 						s = lipgloss.NewStyle().Reverse(true).Width(cw).Render(gutter + s)
 					case m.theme == nil:
 						s = gutter + truncateText(s, bodyW)
+					case isSelected && isCursor:
+						s = m.theme.FillCursorInSelection(cw, gutter+s)
 					case isSelected:
 						s = m.theme.FillRow(m.theme.Selection, cw, gutter+s)
 					case isCursor:

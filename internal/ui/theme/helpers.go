@@ -174,8 +174,10 @@ func narrowRune(r rune) bool {
 	switch {
 	case r == utf8.RuneError:
 		return false
+	case r < 0xA0:
+		return r < 0x80 // C1 control characters take no cell
 	case r < 0x300:
-		return true
+		return r != 0xAD // soft hyphen takes no cell
 	case r >= 0x2010 && r <= 0x2027, r >= 0x2190 && r <= 0x21ff, r >= 0x2200 && r <= 0x22ff:
 		return true
 	case r >= 0x2500 && r <= 0x25fc:
@@ -190,22 +192,39 @@ func narrowRune(r rune) bool {
 // palette with ANSIFallback marks the row with reverse video instead, since
 // its tints there land on the user's own colours and can vanish.
 func (t *Theme) FillRow(bg lipgloss.Color, width int, s string) string {
-	if t.ANSIFallback && lipgloss.ColorProfile() == termenv.ANSI {
-		return fillReverse(width, s)
+	if t.FallbackActive() {
+		return fillReverse(width, s, "")
 	}
 	return FillBg(bg, width, s)
 }
 
+// FillCursorInSelection is FillRow for the cursor row inside a range
+// selection. With the 16-colour fallback both are reverse video, so the
+// cursor is also underlined to stay visible.
+func (t *Theme) FillCursorInSelection(width int, s string) string {
+	if t.FallbackActive() {
+		return fillReverse(width, s, "\x1b[4m")
+	}
+	return FillBg(t.Selection, width, s)
+}
+
+// FallbackActive reports whether the 16-colour fallback is in use: the
+// palette asks for it and the terminal has only 16 colours.
+func (t *Theme) FallbackActive() bool {
+	return t.ANSIFallback && lipgloss.ColorProfile() == termenv.ANSI
+}
+
 // fillReverse renders s padded/truncated to width cells in reverse video,
-// re-applied after every reset inside s like FillBg's background.
-func fillReverse(width int, s string) string {
+// plus any extra SGR sequence, re-applied after every reset inside s like
+// FillBg's background.
+func fillReverse(width int, s, extra string) string {
 	if width <= 0 {
 		return ""
 	}
 	if lipgloss.Width(s) > width {
 		s = lipgloss.NewStyle().MaxWidth(width).Render(s)
 	}
-	const reverse = "\x1b[7m"
+	reverse := "\x1b[7m" + extra
 	s = strings.ReplaceAll(s, "\x1b[0m", "\x1b[0m"+reverse)
 	if pad := width - lipgloss.Width(s); pad > 0 {
 		s += strings.Repeat(" ", pad)
