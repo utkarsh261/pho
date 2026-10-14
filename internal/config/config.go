@@ -273,7 +273,7 @@ func Load(path string) (Config, error) {
 	cfg.Diff.MaxLineWidth = raw.Diff.MaxLineWidth
 	cfg.Diff.RowBudget = raw.Diff.RowBudget
 	cfg.UI.Theme = raw.UI.Theme
-	cfg.UI.Background = raw.UI.Background
+	cfg.UI.Background = strings.ToLower(strings.TrimSpace(raw.UI.Background))
 
 	// Fill zero-value fields with defaults.
 	applyDefaults(&cfg, def)

@@ -375,6 +375,7 @@ func TestLoad_Background(t *testing.T) {
 	}{
 		{"default paints the theme", "[ui]\ntheme = \"nord\"\n", "theme"},
 		{"terminal", "[ui]\nbackground = \"terminal\"\n", "terminal"},
+		{"case and spaces", "[ui]\nbackground = \" Terminal \"\n", "terminal"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
