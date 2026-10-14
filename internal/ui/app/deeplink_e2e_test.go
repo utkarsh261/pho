@@ -56,7 +56,7 @@ func drainCmds(m *Model, cmd tea.Cmd) {
 	}
 }
 
-func newDeepLinkTestModel(t *testing.T, initialPR int, repos []domain.Repository, prSvc *stubPRService) *Model {
+func newDeepLinkTestModel(t testing.TB, initialPR int, repos []domain.Repository, prSvc *stubPRService) *Model {
 	t.Helper()
 	deps := Dependencies{
 		Viewer: &stubViewerService{login: "octocat"},

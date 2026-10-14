@@ -10,6 +10,8 @@ import (
 
 	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 
 	"github.com/utkarsh261/pho/internal/application/cmds"
 	achdashboard "github.com/utkarsh261/pho/internal/application/dashboard"
@@ -65,6 +67,10 @@ type Dependencies struct {
 	Now        func() time.Time
 
 	Logger *pholog.Logger
+
+	// TerminalBackground keeps the terminal's own background even when the
+	// theme paints one (config: [ui] background = "terminal").
+	TerminalBackground bool
 }
 
 type Model struct {
@@ -459,6 +465,28 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) View() string {
+	return m.paintBase(m.viewFrame())
+}
+
+// paintBase fills every row of frame with the theme's Base colour, when the
+// theme paints a background and the terminal has at least 256 colours. On
+// 16-colour terminals Base would land on one of the user's own colours.
+func (m *Model) paintBase(frame string) string {
+	th := m.theme
+	if th == nil || !th.PaintBackground || m.deps.TerminalBackground || m.layout.Width <= 0 {
+		return frame
+	}
+	if p := lipgloss.ColorProfile(); p == termenv.ANSI || p == termenv.Ascii {
+		return frame
+	}
+	lines := strings.Split(frame, "\n")
+	for i, line := range lines {
+		lines[i] = theme.PaintRow(th.Base, m.layout.Width, line)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (m *Model) viewFrame() string {
 	defer m.log.Timer("render root view", "view", string(m.currentView()))()
 	if m.state.Search.OverlayOpen {
 		body, status := m.renderDashboardParts()

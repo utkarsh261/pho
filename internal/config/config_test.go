@@ -368,3 +368,28 @@ func TestLoad_Theme(t *testing.T) {
 		})
 	}
 }
+
+func TestLoad_Background(t *testing.T) {
+	tests := []struct {
+		name, toml, want string
+	}{
+		{"default paints the theme", "[ui]\ntheme = \"nord\"\n", "theme"},
+		{"terminal", "[ui]\nbackground = \"terminal\"\n", "terminal"},
+		{"case and spaces", "[ui]\nbackground = \" Terminal \"\n", "terminal"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.toml")
+			if err := os.WriteFile(path, []byte(tc.toml), 0644); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := config.Load(path)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if cfg.UI.Background != tc.want {
+				t.Errorf("UI.Background: got %q, want %q", cfg.UI.Background, tc.want)
+			}
+		})
+	}
+}

@@ -17,6 +17,7 @@ CIFailure: fg=#EF4444 bg={} bold=false underline=false faint=false reverse=false
 CIMuted: fg=#6B7280 bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
 CIPending: fg=#F59E0B bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
 CISuccess: fg=#10B981 bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
+Colors256: none
 Deletions: fg=#EF4444 bg={} bold=false underline=false faint=false reverse=false pad=0,0,0,0 border="","","","" sides=false,false,false,false borderfg={},{},{},{}
 DiffAddBg: #12261E
 DiffAddEmphBg: #1F5A3A

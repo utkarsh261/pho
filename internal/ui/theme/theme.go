@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/glamour/ansi"
 	"github.com/charmbracelet/glamour/styles"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 )
 
 // AvatarCount is the number of colours used to tell comment authors apart.
@@ -92,6 +93,38 @@ type Palette struct {
 	// ANSIFallback marks the cursor and selection with reverse video on
 	// 16-colour terminals, where background tints can collapse together.
 	ANSIFallback bool
+	// Colors256 replaces the subtle backgrounds on 256-colour terminals,
+	// where downsampled hex tints collapse into the same few xterm colours.
+	Colors256 *Colors256
+}
+
+// Colors256 holds xterm palette indices ("236") used in place of a
+// palette's tints when the terminal has 256 colours.
+type Colors256 struct {
+	Base, Surface        lipgloss.Color
+	Highlight, Selection lipgloss.Color
+	DiffAddBg, DiffDelBg lipgloss.Color
+	DiffAddEmphBg        lipgloss.Color
+	DiffDelEmphBg        lipgloss.Color
+	DiffAddFg, DiffDelFg lipgloss.Color
+	SearchLineBg         lipgloss.Color
+}
+
+// apply256 swaps in c's colours, including the ones derived from Base.
+func (p *Palette) apply256(c *Colors256) {
+	p.Base, p.OnPrimary, p.SearchMatchFg = c.Base, c.Base, c.Base
+	p.Subtle = c.Surface
+	p.Highlight, p.Selection = c.Highlight, c.Selection
+	p.DiffAddBg, p.DiffDelBg = c.DiffAddBg, c.DiffDelBg
+	p.DiffAddEmphBg, p.DiffDelEmphBg = c.DiffAddEmphBg, c.DiffDelEmphBg
+	p.DiffAddFg, p.DiffDelFg = c.DiffAddFg, c.DiffDelFg
+	p.SearchLineBg = c.SearchLineBg
+
+	md := p.Markdown
+	base, surface := string(c.Base), string(c.Surface)
+	md.H1.Color = &base
+	md.Code.BackgroundColor = &surface
+	p.Markdown = md
 }
 
 // Theme holds every reusable lipgloss style used across the application,
@@ -252,8 +285,14 @@ func (t *Theme) With(change func(*Palette)) *Theme {
 // Build constructs a Theme, deriving every style from p. Colours p leaves
 // empty are taken from the default palette, so a partial palette still
 // draws tints, cursors and borders.
+//
+// Build reads the lipgloss colour profile, so call it after the profile is
+// set: palettes with Colors256 use them on 256-colour terminals.
 func Build(p Palette) *Theme {
 	fillMissing(&p, terminalWorkshop)
+	if p.Colors256 != nil && lipgloss.ColorProfile() == termenv.ANSI256 {
+		p.apply256(p.Colors256)
+	}
 	t := &Theme{Palette: p}
 
 	// Panel borders.

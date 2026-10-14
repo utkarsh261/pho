@@ -173,7 +173,7 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 			onCursor := m.isInDiffSection() && hasValidCursor && cursorFileIdx == i && cursorLineIdx == placeholderLine
 			switch {
 			case onCursor && m.theme != nil:
-				text = theme.FillBg(m.theme.Highlight, cw, m.theme.PrimaryTxt.Render("▎")+truncateText(text[1:], cw-1))
+				text = m.theme.FillRow(m.theme.Highlight, cw, m.theme.PrimaryTxt.Render("▎")+truncateText(text[1:], cw-1))
 			case onCursor:
 				text = lipgloss.NewStyle().Reverse(true).Width(cw).Render(truncateText(text, cw))
 			default:
@@ -285,10 +285,12 @@ func (m *PRDetailModel) renderDiffSectionLines(localStart, localEnd, contentWidt
 						s = lipgloss.NewStyle().Reverse(true).Width(cw).Render(gutter + s)
 					case m.theme == nil:
 						s = gutter + truncateText(s, bodyW)
+					case isSelected && isCursor:
+						s = m.theme.FillCursorInSelection(cw, gutter+s)
 					case isSelected:
-						s = theme.FillBg(m.theme.Selection, cw, gutter+s)
+						s = m.theme.FillRow(m.theme.Selection, cw, gutter+s)
 					case isCursor:
-						s = theme.FillBg(m.theme.Highlight, cw, gutter+s)
+						s = m.theme.FillRow(m.theme.Highlight, cw, gutter+s)
 					case lineBg != "":
 						s = gutter + theme.FillBg(lineBg, bodyW, s)
 					case isDrafted:

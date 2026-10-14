@@ -3,6 +3,7 @@ package createpr
 import (
 	"flag"
 	"fmt"
+	"github.com/muesli/termenv"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -662,5 +663,28 @@ func TestBranchOptions(t *testing.T) {
 
 	if len(opts) != 2 {
 		t.Fatalf("expected 2 options, got %d", len(opts))
+	}
+}
+
+// TestToggleFallbackOn16Colours checks the Yes/No toggle marks the chosen
+// side with reverse video on 16-colour terminals, where the tint
+// backgrounds collapse, and uses OnPrimary text on the accent otherwise.
+func TestToggleFallbackOn16Colours(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	th, _ := theme.Get("catppuccin-mocha")
+	m := &Model{theme: th}
+	if got := m.toHuhTheme().Focused.FocusedButton.GetForeground(); got != th.OnPrimary {
+		t.Errorf("chosen option text = %v, want OnPrimary %v", got, th.OnPrimary)
+	}
+
+	lipgloss.SetColorProfile(termenv.ANSI)
+	th, _ = theme.Get("catppuccin-mocha")
+	m = &Model{theme: th}
+	ht := m.toHuhTheme()
+	if !ht.Focused.FocusedButton.GetReverse() || ht.Focused.BlurredButton.GetReverse() {
+		t.Error("on 16 colours only the chosen option should be reverse video")
 	}
 }

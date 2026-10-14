@@ -1,0 +1,8 @@
+TrueColor markdown title: missing colour
+ANSI256 cursor row secondary: #5F5F87 on #00005F is 2.98:1, want 3.0:1
+ANSI256 section tab: #FFFFFF on #875FFF is 4.11:1, want 4.5:1
+ANSI256 markdown title: missing colour
+ANSI256 #12261E and #2D1619 both render as #080808
+ANSI256 #12261E and #0D1117 both render as #080808
+ANSI256 #2D1619 and #0D1117 both render as #080808
+ANSI256 #6E2630 and #2D1619 both render as #080808

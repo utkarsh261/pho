@@ -1,0 +1,40 @@
+╭───────────────────────────╮ ╭──────────────────────────────────────────────────╮ ╭──────────────────────────────────╮ 
+│ █████╗  ██╗  ██╗  █████╗  │ │ Pull requests                                    │ │ Fix login flow on Safari         │ 
+│ ██╔══██╗██║  ██║ ██╔══██╗ │ │                                                  │ │                                  │ 
+│ █████╔╝ ███████║ ██║  ██║ │ │ Mine 4   Review   Involved   All   Recent        │ │ acme/alpha  #101                 │ 
+│ ██╔══╝  ██╔══██║ ██║  ██║ │ │                                                  │ │ Author: octocat   State: open    │ 
+│ ██║     ██║  ██║ ╚█████╔╝ │ │▎● #101 Fix login flow on Safari              ✓ ✓ │ │ CI: success   Review: none       │ 
+│ ╚═╝     ╚═╝  ╚═╝  ╚════╝  │ │▎   feature/test · octocat · Apr 09               │ │                                  │ 
+│                           │ │                                                  │ │ Created: 2026-04-07 12:00 UTC    │ 
+╰───────────────────────────╯ │ ● #102 Add retry to webhook sender           ! ! │ │ Updated: 2026-04-09 10:00 UTC    │ 
+╭───────────────────────────╮ │    feature/test · octocat · Apr 09               │ │                                  │ 
+│ Repositories  1           │ │                                                  │ │ ──────────────────────────────── │ 
+│                           │ │ ● #103 Bump golang.org/x/net                 … ? │ │ Body:                            │ 
+│▎● acme/alpha              │ │    feature/test · octocat · Apr 09               │ │ ## Why                           │ 
+│                           │ │                                                  │ │                                  │ 
+│                           │ │ ● #104 WIP: new settings page                · D │ │ The login button did nothing     │ 
+│                           │ │    feature/test · octocat · Apr 09               │ │ on Safari.                       │ 
+│                           │ │                                                  │ │                                  │ 
+│                           │ │                                                  │ │ • clears the stale  session      │ 
+│                           │ │                                                  │ │ cookie                           │ 
+│                           │ │                                                  │ │ • adds a regression test         │ 
+│                           │ │                                                  │ │ https://example.com              │ 
+│                           │ │                                                  │ │                                  │ 
+│                           │ │                                                  │ │ │ Safari only.                   │ 
+│                           │ │                                                  │ │                                  │ 
+│                           │ │                                                  │ │ ──────────────────────────────── │ 
+│                           │ │                                                  │ │ CI checks:                       │ 
+│                           │ │                                                  │ │   ✓ ci/build                     │ 
+│                           │ │                                                  │ │   ✓ ci/test                      │ 
+│                           │ │                                                  │ │   ✗ ci/lint                      │ 
+│                           │ │                                                  │ │                                  │ 
+│                           │ │                                                  │ │                                  │ 
+│                           │ │                                                  │ │                                  │ 
+│                           │ │                                                  │ │                                  │ 
+│                           │ │                                                  │ │                                  │ 
+│                           │ │                                                  │ │                                  │ 
+│                           │ │                                                  │ │                                  │ 
+│                           │ │                                                  │ │                                  │ 
+╰───────────────────────────╯ ╰──────────────────────────────────────────────────╯ ╰──────────────────────────────────╯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ j/k Move  ·  Enter Select  ·  Tab Next panel  ·  ? Keymap                                                              

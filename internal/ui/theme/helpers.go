@@ -97,9 +97,128 @@ func FillBg(bg lipgloss.Color, width int, s string) string {
 		s = lipgloss.NewStyle().MaxWidth(width).Render(s)
 	}
 	if seq := bgSequence(bg); seq != "" {
-		s = strings.ReplaceAll(s, "\x1b[0m", "\x1b[0m"+seq)
+		s = reapplyAfterResets(s, seq)
 	}
 	return lipgloss.NewStyle().Background(bg).Width(width).Render(s)
+}
+
+const sgrReset = "\x1b[0m"
+
+// reapplyAfterResets writes seq again after every SGR reset inside s, so a
+// background or attribute set around s survives its styled segments.
+func reapplyAfterResets(s, seq string) string {
+	return strings.ReplaceAll(s, sgrReset, sgrReset+seq)
+}
+
+// PaintRow sets background bg under a whole rendered row, padding it with
+// spaces to width. It is a cheaper FillBg for full-screen painting: rows
+// wider than width are left as they are rather than truncated.
+func PaintRow(bg lipgloss.Color, width int, s string) string {
+	seq := bgSequence(bg)
+	if seq == "" {
+		return s
+	}
+	pad := max(width-rowWidth(s), 0)
+	return seq + reapplyAfterResets(s, seq) + strings.Repeat(" ", pad) + sgrReset
+}
+
+// rowWidth is ansi.StringWidth with a fast path for rows of ASCII, box
+// drawing and other narrow symbols, which is nearly every rendered row. It
+// falls back to the full measure on combining marks or possibly wide runes.
+func rowWidth(s string) int {
+	w := 0
+	for i := 0; i < len(s); {
+		c := s[i]
+		if c == 0x1b { // skip a CSI sequence: ESC [ params final
+			if i+1 >= len(s) || s[i+1] != '[' {
+				return ansi.StringWidth(s) // OSC and others: full parser
+			}
+			i += 2
+			for i < len(s) && (s[i] < 0x40 || s[i] > 0x7e) {
+				i++
+			}
+			i++
+			continue
+		}
+		if c < 0x80 {
+			if c >= 0x20 && c != 0x7f {
+				w++
+			}
+			i++
+			continue
+		}
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if !narrowRune(r) {
+			return ansi.StringWidth(s)
+		}
+		w++
+		i += size
+	}
+	return w
+}
+
+// narrowRune reports runes known to take one cell: Latin-1 and Latin
+// Extended (below the combining marks at U+0300), and the punctuation,
+// arrows, maths, box drawing, shapes and check marks the UI draws with.
+// Scripts with combining marks, emoji-width shapes and anything else go to
+// the full measure.
+func narrowRune(r rune) bool {
+	switch {
+	case r == utf8.RuneError:
+		return false
+	case r < 0xA0:
+		return r < 0x80 // C1 control characters take no cell
+	case r < 0x300:
+		return r != 0xAD // soft hyphen takes no cell
+	case r >= 0x2010 && r <= 0x2027, r >= 0x2190 && r <= 0x21ff, r >= 0x2200 && r <= 0x22ff:
+		return true
+	case r >= 0x2500 && r <= 0x25fc:
+		return true
+	case r == 0x2713 || r == 0x2714 || r == 0x2717 || r == 0x2718:
+		return true
+	}
+	return false
+}
+
+// FillRow is FillBg for cursor and selection rows. On 16-colour terminals a
+// palette with ANSIFallback marks the row with reverse video instead, since
+// its tints there land on the user's own colours and can vanish.
+func (t *Theme) FillRow(bg lipgloss.Color, width int, s string) string {
+	if t.FallbackActive() {
+		return fillReverse(width, s, "")
+	}
+	return FillBg(bg, width, s)
+}
+
+// FillCursorInSelection is FillRow for the cursor row inside a range
+// selection. With the 16-colour fallback both are reverse video, so the
+// cursor is also underlined to stay visible.
+func (t *Theme) FillCursorInSelection(width int, s string) string {
+	if t.FallbackActive() {
+		return fillReverse(width, s, "\x1b[4m")
+	}
+	return FillBg(t.Selection, width, s)
+}
+
+// FallbackActive reports whether the 16-colour fallback is in use: the
+// palette asks for it and the terminal has only 16 colours.
+func (t *Theme) FallbackActive() bool {
+	return t.ANSIFallback && lipgloss.ColorProfile() == termenv.ANSI
+}
+
+// fillReverse renders s padded/truncated to width cells in reverse video,
+// plus any extra SGR sequence, re-applied after every reset inside s like
+// FillBg's background.
+func fillReverse(width int, s, extra string) string {
+	if width <= 0 {
+		return ""
+	}
+	if lipgloss.Width(s) > width {
+		s = lipgloss.NewStyle().MaxWidth(width).Render(s)
+	}
+	reverse := "\x1b[7m" + extra
+	pad := max(width-lipgloss.Width(s), 0)
+	return reverse + reapplyAfterResets(s, reverse) + strings.Repeat(" ", pad) + sgrReset
 }
 
 // bgSeqCache memoises the escape sequence that sets each background colour,
