@@ -120,6 +120,8 @@ level = "info"             # debug, info, warn or error
 ```
 
 ## Themes
+<img width="1600" height="900" alt="pho-themes" src="https://github.com/user-attachments/assets/7d452bdc-015c-43b3-bcaf-cd24e83f562c" />
+
 
 Press `T` anywhere to open the theme picker. Arrowing through it repaints the screen with each theme; `Enter` keeps one and saves it to your config, `Esc` puts the old one back. You can also set it in the config:
 
