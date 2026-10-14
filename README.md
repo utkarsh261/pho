@@ -40,35 +40,88 @@ Or with Go:
 go install github.com/utkarsh261/pho/cmd/pho@latest
 ```
 
-Binary lands in `$(go env GOPATH)/bin/pho`.
-
-Or pin a specific version:
-
-```
-go install github.com/utkarsh261/pho/cmd/pho@v0.1.0
-```
+Binary lands in `$(go env GOPATH)/bin/pho`. To pin a version, swap `@latest` for a tag from the [releases page](https://github.com/utkarsh261/pho/releases), e.g. `@v0.1.49`.
 
 Add it to the `$PATH`:
 ```
 echo 'export PATH="$(go env GOPATH)/bin:$PATH"' >> ~/.zshrc
-````
+```
+
+## Requirements
+
+- Git
+- [GitHub CLI (`gh`)](https://cli.github.com), logged in with `gh auth login`. pho reuses its token, including for GitHub Enterprise hosts.
+- Go 1.25+, only if you install with `go install` or build from source
 
 ## Usage
 
-Right now, pho looks at only the `cwd` and its direct children directories (if they are actually git repos). So if you have some repositories cloned in a directory, you can either open pho in that directory or: 
-
-```
-$(go env GOPATH)/bin/pho -root ~/path/to/dir/containing/all/cloned/repositories
-```
-or simply start it in the current directory
+pho looks at the current directory and its direct children for git repos with a GitHub remote. Start it in a directory holding your clones:
 
 ```
 pho
 ```
 
+or point it at one:
+
+```
+pho --root ~/path/to/dir/containing/all/cloned/repositories
+```
+
+To open a pull request straight in its detail view:
+
+```
+pho pr 123
+```
+
+Flags work before or after `pr <number>`:
+
+| Flag | Description |
+|------|-------------|
+| `--root <dir>` | Directory to scan for git repos (default `.`) |
+| `--theme <name>` | Theme for this run, overriding the config file |
+| `--config <path>` | Config file to use (default `~/.config/pho/config.toml`) |
+| `--debug` | Log at debug level (also `PHO_DEBUG=1`) |
+| `--reset` | Clear the SQLite and repo discovery caches before starting |
+| `--version` | Print the version and exit |
+
+## Configuration
+
+pho reads `$XDG_CONFIG_HOME/pho/config.toml`, which defaults to `~/.config/pho/config.toml`. It runs fine without one. Every key is optional; the values below are the defaults.
+
+```toml
+[repos]
+pin = []                   # "owner/repo" entries to list first
+exclude = []               # "owner/repo" entries to hide
+
+[dashboard]
+max_prs = 300              # open PRs the All tab loads at most
+
+[palette]
+max_prs = 300              # PRs the Ctrl+P jump list holds
+
+[diff]
+collapse_lines = 1000      # files with more changed lines start collapsed
+collapse_line_width = 5000 # so do files with a line longer than this
+max_lines = 5000           # files past this can only be opened on GitHub
+max_line_width = 20000     # same, for line length
+row_budget = 20000         # past this many diff rows, the largest files collapse
+
+[ui]
+theme = "pho-default"      # see Themes below
+background = "theme"       # or "terminal"
+
+[cache]
+dir = "~/.cache/pho"       # where cache.db lives
+max_memory_mb = 16         # in-memory cache size
+
+[logging]
+file = "~/.local/state/pho/debug.log"
+level = "info"             # debug, info, warn or error
+```
+
 ## Themes
 
-Press `T` anywhere to open the theme picker. Arrowing through it repaints the screen with each theme; `Enter` keeps one and saves it to your config, `Esc` puts the old one back. You can also set it in `~/.config/pho/config.toml`:
+Press `T` anywhere to open the theme picker. Arrowing through it repaints the screen with each theme; `Enter` keeps one and saves it to your config, `Esc` puts the old one back. You can also set it in the config:
 
 ```toml
 [ui]
@@ -81,68 +134,19 @@ or for one run with `pho --theme nord`.
 
 Themes paint their own background so text stays readable whatever your terminal is set to. With `background = "terminal"` (handy for transparent terminals) contrast is only guaranteed when your terminal background matches the theme's. Colours are checked for contrast on truecolor and 256-colour terminals; on 16-colour terminals the cursor row switches to reverse video.
 
-## Requirements
-
-- Go 1.25+
-- Git
-- [GitHub CLI (`gh`)](https://cli.github.com) — run `gh auth login` to authenticate
-
-## Build
-
-```
-go build -o pho ./cmd/pho
-```
-
-With `just`:
-
-```
-just build
-```
-
-## Run
-
-```
-./pho
-```
-
-Flags:
-
-| Flag | Description |
-|------|-------------|
-| `--version` | Print version and exit |
-| `--debug` | Enable debug logging |
-| `--reset` | Clear all caches and exit |
-| `--config <path>` | Path to config file |
-| `--root <dir>` | Root directory to scan for git repos (default `.`) |
-
-## Test
-
-```
-go test ./...
-```
-
-With `just`:
-
-```
-just test
-```
-
-## Vet
-
-```
-go vet ./...
-```
-
-With `just`:
-
-```
-just vet
-```
-
 ## Logs
 
 ```
 tail -f ~/.local/state/pho/debug.log
+```
+
+## Development
+
+```
+just build      # go build -o pho ./cmd/pho
+just test       # go test ./...
+just test-race  # go test -race -count=1 ./...
+just vet        # go vet ./...
 ```
 
 ## Why
