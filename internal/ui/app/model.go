@@ -621,8 +621,18 @@ func (m *Model) Layout() layout.LayoutState {
 }
 
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Keymap overlay takes priority when visible.
+	// Keymap overlay takes priority when visible. Its Direct keys close it
+	// and run straight away.
 	if m.keymapOverlay.Visible {
+		if key, ok := m.keymapOverlay.DirectKey(msg); ok {
+			m.keymapOverlay.Visible = false
+			switch key {
+			case "T":
+				return m, m.openThemePicker()
+			case "ctrl+p":
+				return m, m.togglePalette()
+			}
+		}
 		m.keymapOverlay, _ = m.keymapOverlay.Update(msg)
 		return m, nil
 	}
