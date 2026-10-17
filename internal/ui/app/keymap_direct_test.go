@@ -44,9 +44,22 @@ func TestKeymapOverlayDirectKeys(t *testing.T) {
 	t.Run("ctrl+p in PR detail opens the file picker", func(t *testing.T) {
 		m := ansiPRDetail(t, "2")
 		drainCmds(m, key(m, keyHelp))
-		key(m, tea.KeyMsg{Type: tea.KeyCtrlP})
+		drainCmds(m, key(m, tea.KeyMsg{Type: tea.KeyCtrlP}))
 		if m.keymapOverlay.Visible || !m.filePicking() {
 			t.Error("ctrl+p from the PR detail overlay did not open the file picker")
+		}
+	})
+
+	t.Run("ctrl+p in PR detail says why when the diff is loading", func(t *testing.T) {
+		m := ansiPRDetail(t, "2")
+		m.prDetail.Diff, m.prDetail.DiffLoading = nil, true
+		drainCmds(m, key(m, keyHelp))
+		drainCmds(m, key(m, tea.KeyMsg{Type: tea.KeyCtrlP}))
+		if m.keymapOverlay.Visible || m.filePicking() {
+			t.Errorf("help visible %v, picking %v; want both closed", m.keymapOverlay.Visible, m.filePicking())
+		}
+		if got := m.status.HintOverride; got != "Diff still loading" {
+			t.Errorf("status hint = %q, want the loading notice", got)
 		}
 	})
 

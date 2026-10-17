@@ -635,8 +635,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			case "T":
 				return m, m.openThemePicker()
 			case "ctrl+p":
+				// In a PR or commit, the view's own ctrl+p decides: it
+				// asks for the picker, or says why there are no files.
 				if m.diffView() != nil {
-					return m, m.openFilePicker()
+					return m, m.forwardKey(msg)
 				}
 				return m, m.togglePalette()
 			}
