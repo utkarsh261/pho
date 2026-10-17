@@ -3,6 +3,7 @@ package prdetail
 import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/utkarsh261/pho/internal/application/cmds"
+	diffmodel "github.com/utkarsh261/pho/internal/diff/model"
 )
 
 // isInCommentsSection reports whether the Comments tab is active.
@@ -148,6 +149,47 @@ func (m *PRDetailModel) jumpToFile(idx int) {
 	if fi, hi, li, ok := m.firstDiffLineAtOrBelow(fileOffset); ok {
 		m.setDiffCursor(diffCursorLine{FileIdx: fi, HunkIdx: hi, LineIdx: li})
 	}
+}
+
+// FilePath is the path a file is listed and picked by.
+func FilePath(f *diffmodel.DiffFile) string {
+	if f.NewPath != "" {
+		return f.NewPath
+	}
+	return f.OldPath
+}
+
+// CurrentFile is the path of the file under the diff cursor on the Diff tab,
+// otherwise of the file selected in the file list; "" with no diff.
+func (m *PRDetailModel) CurrentFile() string {
+	if m.Diff == nil || len(m.Diff.Files) == 0 {
+		return ""
+	}
+	i := m.leftPanel.Cursor
+	if m.activeTab == TabDiff && m.validDiffCursor() {
+		i = m.diffCursor.FileIdx
+	}
+	if i < 0 || i >= len(m.Diff.Files) {
+		return ""
+	}
+	return FilePath(&m.Diff.Files[i])
+}
+
+// GoToFile jumps to the file at path as Enter on the file list does, and
+// selects it in the list. It reports false when the diff has no such file.
+func (m *PRDetailModel) GoToFile(path string) bool {
+	if m.Diff == nil {
+		return false
+	}
+	for i := range m.Diff.Files {
+		if FilePath(&m.Diff.Files[i]) == path {
+			m.jumpToFile(i)
+			m.leftPanel.Cursor = i
+			m.ensureFileVisible()
+			return true
+		}
+	}
+	return false
 }
 
 // cycleForward advances focus: Files → CI (if checks) → Content → Files.

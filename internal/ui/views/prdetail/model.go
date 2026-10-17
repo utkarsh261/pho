@@ -1115,6 +1115,9 @@ type ToggleKeymapOverlayMsg struct{}
 // OpenThemePicker asks the root model to open the theme picker.
 type OpenThemePicker struct{}
 
+// OpenFilePicker asks the root model to open the file picker.
+type OpenFilePicker struct{}
+
 // OpenBrowserCommit is emitted when the user presses 'o' in commit mode.
 type OpenBrowserCommit struct {
 	Repo domain.Repository

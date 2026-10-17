@@ -295,6 +295,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.handleBackToDashboard()
 	case prdetail.OpenThemePicker:
 		return m, m.openThemePicker()
+	case prdetail.OpenFilePicker:
+		return m, m.openFilePicker()
 	case ThemeSaved:
 		return m, m.handleThemeSaved(msg)
 	case prdetail.OpenBrowserFile:
@@ -520,6 +522,9 @@ func (m *Model) paintBase(frame string) string {
 
 func (m *Model) viewFrame() string {
 	defer m.log.Timer("render root view", "view", string(m.currentView()))()
+	if m.filePicking() {
+		return m.palette.ViewOverStatus(m.diffViewBody(), m.status.View())
+	}
 	if m.state.Search.OverlayOpen && !m.palette.IsThemePick() {
 		body, status := m.renderDashboardParts()
 		return m.palette.ViewOverStatus(body, status)
@@ -630,6 +635,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			case "T":
 				return m, m.openThemePicker()
 			case "ctrl+p":
+				if m.diffView() != nil {
+					return m, m.openFilePicker()
+				}
 				return m, m.togglePalette()
 			}
 		}
@@ -646,6 +654,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// The theme picker can open over any view, so it routes its own keys.
 	if m.themePicking() {
 		return m, m.handleThemePickKey(msg)
+	}
+	if m.filePicking() {
+		return m, m.handleFilePickKey(msg)
 	}
 
 	// keymap.Dispatch is a dashboard-scoped concern. It understands the four
@@ -1422,6 +1433,8 @@ func (m *Model) syncStatus() {
 	}
 	if m.themePicking() {
 		m.status.HintOverride = themePickHint
+	} else if m.filePicking() {
+		m.status.HintOverride = filePickHint
 	} else if m.createPR != nil && m.createPR.Active() {
 		m.status.HintOverride = "Tab: Next field   ←/→: Change option   Ctrl+S: Create PR   Esc: Cancel"
 	} else if m.currentView() == domain.PrimaryViewPRDetail && m.prDetail != nil {

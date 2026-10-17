@@ -74,6 +74,17 @@ type Model struct {
 	// swatch colours (read from its palette; no theme is built).
 	themeCurrent string
 	themeSwatch  map[string][]lipgloss.Color
+
+	// File picker: each listed file's details, by path.
+	fileItems map[string]FileItem
+}
+
+// FileItem is one file in the file picker.
+type FileItem struct {
+	Path      string
+	Status    string // as in diffmodel.DiffFile: "added", "modified", "removed" or "renamed"
+	Additions int
+	Deletions int
 }
 
 type pickKind int
@@ -82,10 +93,14 @@ const (
 	pickNone pickKind = iota
 	pickRepo
 	pickTheme
+	pickFile
 )
 
-// themeResult marks a row of the theme picker.
-const themeResult domain.SearchResultKind = "theme"
+// themeResult and fileResult mark rows of the theme and file pickers.
+const (
+	themeResult domain.SearchResultKind = "theme"
+	fileResult  domain.SearchResultKind = "file"
+)
 
 // NewModel constructs a command palette overlay model.
 func NewModel(search SearchService) Model {
@@ -109,7 +124,7 @@ func (m *Model) SetHydrating(hydrating bool) {
 }
 
 // RefreshResults re-queries the search service and updates displayed
-// results. The repo and theme pickers list a fixed pool, so it leaves them
+// results. The repo, theme and file pickers list a fixed pool, so it leaves them
 // (and their selection) alone.
 func (m *Model) RefreshResults() {
 	if m.pickKind != pickNone {
@@ -164,6 +179,42 @@ func (m *Model) OpenThemePick(names []string, current string) {
 			break
 		}
 	}
+}
+
+// OpenFilePick switches the palette into a file chooser listing files in
+// order, with the selection starting on current. The caller handles Enter
+// and Esc itself, reading the choice from SelectedFile.
+func (m *Model) OpenFilePick(files []FileItem, current string) {
+	m.pickKind = pickFile
+	m.pickHint = "Go to file"
+	m.fileItems = make(map[string]FileItem, len(files))
+	m.pickPool = make([]domain.SearchResult, 0, len(files))
+	for _, f := range files {
+		m.fileItems[f.Path] = f
+		m.pickPool = append(m.pickPool, domain.SearchResult{Kind: fileResult, Title: f.Path})
+	}
+	m.refreshResults()
+	for i, r := range m.results {
+		if r.Title == current {
+			m.selectedIndex = i
+			m.ensureSelectionVisible()
+			break
+		}
+	}
+}
+
+// IsFilePick reports whether the palette is the file chooser.
+func (m Model) IsFilePick() bool {
+	return m.pickKind == pickFile
+}
+
+// SelectedFile is the path under the selection in the file chooser, or ""
+// when nothing matches the filter (or the palette is not the chooser).
+func (m Model) SelectedFile() string {
+	if m.pickKind != pickFile || m.selectedIndex < 0 || m.selectedIndex >= len(m.results) {
+		return ""
+	}
+	return m.results[m.selectedIndex].Title
 }
 
 // IsThemePick reports whether the palette is the theme chooser.
@@ -291,6 +342,9 @@ func (m *Model) refreshResults() {
 			prev = m.results[m.selectedIndex].Title
 		}
 		m.results = filterPickPool(m.pickPool, m.query)
+		if m.pickKind == pickFile {
+			rankFileNameMatches(m.results, m.query)
+		}
 		m.selectedIndex = clampIndex(0, len(m.results))
 		for i, r := range m.results {
 			if r.Title == prev {
@@ -353,6 +407,21 @@ func filterPickPool(pool []domain.SearchResult, query string) []domain.SearchRes
 		}
 	}
 	return out
+}
+
+// rankFileNameMatches moves files whose name (not just directory) contains
+// query ahead of the rest, keeping each group in order.
+func rankFileNameMatches(results []domain.SearchResult, query string) {
+	q := strings.ToLower(strings.TrimSpace(query))
+	if q == "" {
+		return
+	}
+	inName := func(path string) bool {
+		return strings.Contains(strings.ToLower(path[strings.LastIndex(path, "/")+1:]), q)
+	}
+	sort.SliceStable(results, func(i, j int) bool {
+		return inName(results[i].Title) && !inName(results[j].Title)
+	})
 }
 
 func (m *Model) moveSelection(delta int) {

@@ -256,6 +256,8 @@ func (m Model) placeholder() string {
 		return "Filter repositories"
 	case pickTheme:
 		return "Filter themes"
+	case pickFile:
+		return "Filter files"
 	}
 	return "Search pull requests and repositories"
 }
@@ -268,6 +270,8 @@ func (m Model) emptyText() string {
 		return "No repositories"
 	case m.pickKind == pickTheme:
 		return "No themes"
+	case m.pickKind == pickFile:
+		return "No files"
 	case m.hydrating:
 		return "Indexing pull requests…"
 	default:
@@ -288,8 +292,11 @@ func (m Model) visibleResults(rows int) []domain.SearchResult {
 // state glyph, the number, the title with the query match emphasised, and
 // right-aligned metadata. The selected row is tinted across its full width.
 func (m Model) resultLine(st styles, r domain.SearchResult, selected bool, width int) string {
-	if r.Kind == themeResult {
+	switch r.Kind {
+	case themeResult:
 		return m.themeLine(st, r.Title, selected, width)
+	case fileResult:
+		return m.fileLine(st, r.Title, selected, width)
 	}
 	edge := " "
 	if selected {
@@ -461,4 +468,83 @@ func (m Model) boxTitle() string {
 		return m.pickHint
 	}
 	return "Go to"
+}
+
+// fileLine renders a file picker row: the change status, the path with its
+// directory dimmed and the query match emphasised, and the line counts. A
+// path too long for the row loses its start, so the file name stays.
+func (m Model) fileLine(st styles, path string, selected bool, width int) string {
+	f := m.fileItems[path]
+	edge, name := " ", st.text
+	if selected {
+		edge, name = st.edge.Render("▎"), st.textSel
+	}
+	status, adds, dels := fileStatusLetter(f.Status), fmt.Sprintf("+%d", f.Additions), fmt.Sprintf("-%d", f.Deletions)
+	if th := st.th; th != nil {
+		switch f.Status {
+		case "added":
+			status = th.Additions.Render(status)
+		case "removed":
+			status = th.Deletions.Render(status)
+		case "renamed":
+			status = th.CIPending.Render(status)
+		default:
+			status = th.DimTxt.Render(status)
+		}
+		adds, dels = th.Additions.Render(adds), th.Deletions.Render(dels)
+	}
+	prefix := edge + " " + status + " "
+	meta := adds + " " + dels
+	pathW := width - lipgloss.Width(prefix) - lipgloss.Width(meta) - 3
+	if pathW <= 0 {
+		return fit(prefix+meta, width)
+	}
+	shown := path
+	if ansi.StringWidth(shown) > pathW {
+		shown = ansi.TruncateLeft(shown, ansi.StringWidth(shown)-pathW+1, "…")
+	}
+
+	// Style a span of shown by which side of the last "/" it falls on.
+	dirEnd := strings.LastIndex(shown, "/") + 1
+	span := func(from, to int, hl bool) string {
+		if from >= to {
+			return ""
+		}
+		if hl {
+			return st.match.Render(shown[from:to])
+		}
+		mid := min(max(dirEnd, from), to)
+		return st.dim.Render(shown[from:mid]) + name.Render(shown[mid:to])
+	}
+	// Mark the last occurrence, so a match in the file name wins over one
+	// in its directory. highlightMatch marks the first and styles the text
+	// as one span, hence the separate pass here.
+	styled := span(0, len(shown), false)
+	q := strings.ToLower(strings.TrimSpace(m.query))
+	lower := strings.ToLower(shown)
+	if i := strings.LastIndex(lower, q); q != "" && i >= 0 && len(lower) == len(shown) {
+		j := i + len(q)
+		styled = span(0, i, false) + span(i, j, true) + span(j, len(shown), false)
+	}
+
+	left := prefix + styled
+	gap := max(width-lipgloss.Width(left)-lipgloss.Width(meta)-1, 1)
+	line := fit(left+strings.Repeat(" ", gap)+meta, width)
+	if selected && st.th != nil {
+		return st.th.FillRow(st.selBg, width, line)
+	}
+	return line
+}
+
+func fileStatusLetter(status string) string {
+	switch status {
+	case "added":
+		return "A"
+	case "removed":
+		return "D"
+	case "renamed":
+		return "R"
+	default:
+		return "M"
+	}
 }

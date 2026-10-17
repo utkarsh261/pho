@@ -41,12 +41,12 @@ func TestKeymapOverlayDirectKeys(t *testing.T) {
 		}
 	})
 
-	t.Run("ctrl+p in PR detail is not bound there", func(t *testing.T) {
+	t.Run("ctrl+p in PR detail opens the file picker", func(t *testing.T) {
 		m := ansiPRDetail(t, "2")
 		drainCmds(m, key(m, keyHelp))
 		key(m, tea.KeyMsg{Type: tea.KeyCtrlP})
-		if !m.keymapOverlay.Visible || m.state.Search.OverlayOpen {
-			t.Error("ctrl+p acted from the PR detail overlay, where it has no binding")
+		if m.keymapOverlay.Visible || !m.filePicking() {
+			t.Error("ctrl+p from the PR detail overlay did not open the file picker")
 		}
 	})
 
