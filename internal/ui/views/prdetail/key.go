@@ -121,6 +121,15 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		return m, func() tea.Msg { return ToggleKeymapOverlayMsg{} }
 	case "T":
 		return m, func() tea.Msg { return OpenThemePicker{} }
+	case "ctrl+p":
+		if m.Diff == nil || len(m.Diff.Files) == 0 {
+			m.diffNotice = "No files to go to"
+			if m.DiffLoading {
+				m.diffNotice = "Diff still loading"
+			}
+			return m, nil
+		}
+		return m, func() tea.Msg { return OpenFilePicker{} }
 	case "/":
 		m.activateSearch()
 		return m, nil

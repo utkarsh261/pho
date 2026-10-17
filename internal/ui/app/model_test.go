@@ -175,6 +175,7 @@ type stubPRService struct {
 	loadDetailCalls int
 	loadDiffCalls   int
 	commits         []domain.Commit
+	commitDiff      model.DiffModel
 }
 
 func (s *stubPRService) LoadDetail(ctx context.Context, repo domain.Repository, number int, force bool) (domain.PRPreviewSnapshot, bool, error) {
@@ -237,7 +238,7 @@ func (s *stubPRService) LoadPRCommits(_ context.Context, _ domain.Repository, _ 
 	return s.commits, nil
 }
 func (s *stubPRService) LoadCommitDiff(_ context.Context, _ domain.Repository, _ string, _ bool) (model.DiffModel, error) {
-	return model.DiffModel{}, nil
+	return s.commitDiff, nil
 }
 func (s *stubPRService) CreatePR(_ context.Context, _ domain.CreatePRParams) (domain.PullRequestSummary, error) {
 	return domain.PullRequestSummary{}, nil
