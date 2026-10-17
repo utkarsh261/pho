@@ -279,3 +279,27 @@ func TestFilePickerInCommitView(t *testing.T) {
 		t.Errorf("view = %s, want the commit view", m.currentView())
 	}
 }
+
+// TestFilePickerOwnsStatusBarDuringSearch checks the picker opened over an
+// active PR detail search shows its own hints, and the search returns on
+// close. (ctrl+p is the only picker key that works mid-search: T types.)
+func TestFilePickerOwnsStatusBarDuringSearch(t *testing.T) {
+	m := filePickerModel(t, "2")
+	ansiKeys(m, "/")
+	typeKeys(m, "login")
+	const search = "/ login"
+	if bar := ansi.Strip(m.status.View()); !strings.Contains(bar, search) {
+		t.Fatalf("search not in the status bar: %q", bar)
+	}
+
+	drainCmds(m, key(m, keyCtrlP))
+	bar := ansi.Strip(m.status.View())
+	if strings.Contains(bar, search) || !strings.Contains(bar, "Go to file") || m.status.Mode != "" {
+		t.Errorf("status bar with the picker open = %q (mode %q), want only the picker's hints", bar, m.status.Mode)
+	}
+
+	key(m, keyEsc)
+	if bar := ansi.Strip(m.status.View()); !strings.Contains(bar, search) || m.status.Mode != "SEARCH" {
+		t.Errorf("search didn't come back after closing: %q (mode %q)", bar, m.status.Mode)
+	}
+}

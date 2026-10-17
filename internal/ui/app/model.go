@@ -1450,8 +1450,11 @@ func (m *Model) syncStatus() {
 	m.syncPRDetailSearchStatus()
 }
 
+// syncPRDetailSearchStatus shows the PR detail search in the status bar. A
+// picker open over PR detail owns the bar, so the search waits until it
+// closes.
 func (m *Model) syncPRDetailSearchStatus() {
-	if m.currentView() != domain.PrimaryViewPRDetail || m.prDetail == nil {
+	if m.currentView() != domain.PrimaryViewPRDetail || m.prDetail == nil || m.state.Search.OverlayOpen {
 		m.status.SetSearchState("", 0, 0)
 		return
 	}
