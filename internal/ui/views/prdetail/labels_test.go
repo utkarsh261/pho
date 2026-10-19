@@ -102,7 +102,7 @@ func TestBeginLabelApplyIsOptimistic(t *testing.T) {
 		Remove: []string{"area/diff"},
 	}
 	target := []domain.Label{{Name: "bug"}, {Name: "needs-qa", Color: "1d76db"}}
-	msgs := runCmd(m.BeginLabelApply(change, target))
+	msgs := runCmd(m.BeginLabelApply(change, target, true))
 
 	if names(m.Detail.Labels) != "bug,needs-qa," || m.Detail.LabelCount != 2 {
 		t.Errorf("labels now %q (%d)", names(m.Detail.Labels), m.Detail.LabelCount)
@@ -116,7 +116,7 @@ func TestBeginLabelApplyIsOptimistic(t *testing.T) {
 	if _, ok := msgs[0].(cmds.LabelsApplied); !ok {
 		t.Fatalf("msg = %T", msgs[0])
 	}
-	if m.BeginLabelApply(change, target) != nil {
+	if m.BeginLabelApply(change, target, true) != nil {
 		t.Error("a second apply while one is running must be refused")
 	}
 	if _, cmd := m.Update(keyL()); hasMsg[OpenLabelPicker](runCmd(cmd)) || m.StatusHint() != "Updating labels..." {
@@ -127,7 +127,7 @@ func TestBeginLabelApplyIsOptimistic(t *testing.T) {
 func TestLabelsAppliedSuccessKeepsLabelsUntilReloadConfirms(t *testing.T) {
 	t.Parallel()
 	m := labelModel()
-	m.BeginLabelApply(domain.LabelChange{Add: []string{"new"}}, []domain.Label{{Name: "bug"}, {Name: "area/diff"}, {Name: "new"}})
+	m.BeginLabelApply(domain.LabelChange{Add: []string{"new"}}, []domain.Label{{Name: "bug"}, {Name: "area/diff"}, {Name: "new"}}, true)
 
 	// A reload issued before the change lands carries the old labels.
 	stale := *m.Detail
@@ -144,12 +144,20 @@ func TestLabelsAppliedSuccessKeepsLabelsUntilReloadConfirms(t *testing.T) {
 		t.Errorf("stale reload overwrote the change: %q", names(m.Detail.Labels))
 	}
 
-	// The reload after the change is the truth, whatever it says.
+	// The reload issued after the change may still trail it (GraphQL lag),
+	// so it keeps the change on screen, then lets go.
+	m.Update(cmds.PRDetailLoaded{Host: "github.com", Repo: "org/repo", Number: 42, RequestID: m.detailRequestID, Detail: stale})
+	if names(m.Detail.Labels) != "bug,area/diff,new," || m.labelApply.active {
+		t.Errorf("lagging confirm reload: %q active=%v", names(m.Detail.Labels), m.labelApply.active)
+	}
+
+	// Later reloads are the truth, whatever they say.
 	fresh := stale
 	fresh.Labels = []domain.Label{{Name: "bug"}, {Name: "new"}}
+	m.detailRequestID++
 	m.Update(cmds.PRDetailLoaded{Host: "github.com", Repo: "org/repo", Number: 42, RequestID: m.detailRequestID, Detail: fresh})
-	if names(m.Detail.Labels) != "bug,new," || m.labelApply.active {
-		t.Errorf("confirming reload ignored: %q active=%v", names(m.Detail.Labels), m.labelApply.active)
+	if names(m.Detail.Labels) != "bug,new," {
+		t.Errorf("later reload ignored: %q", names(m.Detail.Labels))
 	}
 	if m.StatusHint() == "Updating labels..." {
 		t.Error("hint should clear after success")
@@ -166,7 +174,7 @@ func TestLabelsAppliedFailureRestores(t *testing.T) {
 		{errors.New("name is too long"), "Failed to update labels: name is too long"},
 	} {
 		m := labelModel()
-		m.BeginLabelApply(domain.LabelChange{Remove: []string{"bug"}}, []domain.Label{{Name: "area/diff"}})
+		m.BeginLabelApply(domain.LabelChange{Remove: []string{"bug"}}, []domain.Label{{Name: "area/diff"}}, true)
 		_, cmd := m.Update(cmds.LabelsApplied{Host: "github.com", Repo: "org/repo", Number: 42, RequestID: m.labelApply.reqID, Err: tc.err})
 		if names(m.Detail.Labels) != "bug,area/diff," || m.Detail.LabelCount != 2 {
 			t.Errorf("labels not restored: %q", names(m.Detail.Labels))
@@ -187,7 +195,7 @@ func TestLabelsAppliedFailureRestores(t *testing.T) {
 func TestLabelsAppliedIgnoresOtherRequests(t *testing.T) {
 	t.Parallel()
 	m := labelModel()
-	m.BeginLabelApply(domain.LabelChange{Add: []string{"x"}}, []domain.Label{{Name: "bug"}, {Name: "area/diff"}, {Name: "x"}})
+	m.BeginLabelApply(domain.LabelChange{Add: []string{"x"}}, []domain.Label{{Name: "bug"}, {Name: "area/diff"}, {Name: "x"}}, true)
 	id := m.labelApply.reqID
 	for _, msg := range []cmds.LabelsApplied{
 		{Host: "github.com", Repo: "org/repo", Number: 43, RequestID: id, Err: errors.New("x")},

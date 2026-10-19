@@ -228,7 +228,7 @@ func TestLabelPickFullPRListKeepsToggles(t *testing.T) {
 	t.Parallel()
 	m := newLabelPick(t)
 	m.SetPRLabelsLoading()
-	if !m.LoadingPRLabels() {
+	if m.BaselineComplete() {
 		t.Fatal("should be loading the PR's labels")
 	}
 	selectTitle(t, &m, "build")
@@ -236,7 +236,7 @@ func TestLabelPickFullPRListKeepsToggles(t *testing.T) {
 
 	// The full list shows the PR also has needs-review (beyond the first page).
 	m.SetPRLabels([]domain.Label{{Name: "zeta"}, {Name: "bug"}, {Name: "needs-review"}})
-	if m.LoadingPRLabels() {
+	if !m.BaselineComplete() {
 		t.Error("full list should end the loading state")
 	}
 	c := m.LabelChange()
@@ -277,5 +277,44 @@ func TestLabelPickRowsFitWidth(t *testing.T) {
 				t.Fatalf("width %d: line %d is %d wide: %q", w, i, lw, ansi.Strip(line))
 			}
 		}
+	}
+}
+
+// A label past the first page shows unmarked until the full list arrives.
+// Whatever the user chose for it meanwhile must survive the list arriving.
+func TestLabelPickFullPRListKeepsChoicesNotFlips(t *testing.T) {
+	t.Parallel()
+	m := newLabelPick(t) // PR: zeta, bug (first page)
+	m.SetPRLabelsLoading()
+
+	selectTitle(t, &m, "needs-review") // actually on the PR, past page one
+	m.ToggleMark(false)                // user marks it: wants it on
+	selectTitle(t, &m, "zeta")
+	m.ToggleMark(false) // user unmarks zeta: wants it off
+
+	m.SetPRLabels([]domain.Label{{Name: "zeta"}, {Name: "bug"}, {Name: "needs-review"}})
+	if !m.labels.marked["needs-review"] || m.labels.marked["zeta"] {
+		t.Errorf("choices flipped: needs-review=%v zeta=%v", m.labels.marked["needs-review"], m.labels.marked["zeta"])
+	}
+	c := m.LabelChange()
+	if len(c.Add) != 0 || strings.Join(c.Remove, ",") != "zeta" {
+		t.Errorf("change = %+v; needs-review is already on, only zeta goes", c)
+	}
+}
+
+func TestLabelPickFailedFullListStillShowsPending(t *testing.T) {
+	t.Parallel()
+	m := newLabelPick(t)
+	m.SetPRLabelsLoading()
+	m.SetPRLabelsErr("rest: unexpected status 502")
+	if view := ansi.Strip(m.View()); !strings.Contains(view, "Couldn't load this PR's labels") {
+		t.Errorf("error note missing:\n%s", view)
+	}
+	m, _ = m.Update(keyTab)
+	if view := ansi.Strip(m.View()); !strings.Contains(view, "1 pending") {
+		t.Errorf("pending count hidden by the error:\n%s", view)
+	}
+	if m.BaselineComplete() {
+		t.Error("a failed full list is not a complete baseline")
 	}
 }

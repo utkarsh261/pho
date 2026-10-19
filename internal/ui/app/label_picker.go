@@ -23,7 +23,18 @@ type labelPickTarget struct {
 
 func (t labelPickTarget) matches(host, repo string, number int, requestID uint64) bool {
 	return requestID == t.requestID && number == t.number &&
-		strings.EqualFold(host, t.repo.Host) && strings.EqualFold(repo, t.repo.FullName)
+		strings.EqualFold(host, t.repo.Host) && strings.EqualFold(repo, repoName(t.repo))
+}
+
+// repoName is a repository's "owner/name", as label messages carry it.
+func repoName(r domain.Repository) string {
+	if r.FullName != "" {
+		return r.FullName
+	}
+	if r.Owner != "" && r.Name != "" {
+		return r.Owner + "/" + r.Name
+	}
+	return r.Name
 }
 
 // labelPicking reports whether the label picker is open.
@@ -90,6 +101,7 @@ func (m *Model) handleLabelPickKey(msg tea.KeyMsg) tea.Cmd {
 func (m *Model) saveLabelPick() tea.Cmd {
 	change := m.palette.LabelChange()
 	target := m.palette.MarkedLabels()
+	complete := m.palette.BaselineComplete()
 	m.closeOverlay()
 	if change.Empty() {
 		return nil // nothing toggled, or toggled back to where it started
@@ -97,10 +109,10 @@ func (m *Model) saveLabelPick() tea.Cmd {
 
 	d := m.prDetail
 	if m.currentView() != domain.PrimaryViewPRDetail || d == nil ||
-		!m.labelPick.matches(d.Repo.Host, d.Repo.FullName, d.Summary.Number, m.labelPick.requestID) {
+		!m.labelPick.matches(d.Repo.Host, repoName(d.Repo), d.Summary.Number, m.labelPick.requestID) {
 		return nil // the PR on screen changed under the picker
 	}
-	cmd := d.BeginLabelApply(change, target)
+	cmd := d.BeginLabelApply(change, target, complete)
 	m.syncStatus()
 	return cmd
 }

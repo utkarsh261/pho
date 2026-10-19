@@ -358,6 +358,7 @@ func (m *Model) refreshResults() {
 			if row, ok := m.createRow(); ok {
 				m.results = append(m.results, row)
 			}
+			m.labels.nameW = m.labelNameWidth()
 		}
 		m.selectedIndex = clampIndex(0, len(m.results))
 		for i, r := range m.results {

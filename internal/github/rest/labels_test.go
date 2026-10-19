@@ -31,8 +31,8 @@ func serveLabels(t *testing.T, prefix, path string, total int) (*httptest.Server
 			t.Errorf("per_page = %q", got)
 		}
 		page, _ := strconv.Atoi(r.URL.Query().Get("page"))
-		start := (page - 1) * filesPerPage
-		n := min(filesPerPage, max(total-start, 0))
+		start := (page - 1) * restPageSize
+		n := min(restPageSize, max(total-start, 0))
 		if start+n < total {
 			w.Header().Set("Link", fmt.Sprintf(`<%s%s%s?per_page=100&page=%d>; rel="next"`, srv.URL, prefix, path, page+1))
 		}
@@ -72,7 +72,7 @@ func TestListRepoLabelsCapsPages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(labels) != maxLabelPages*filesPerPage || !truncated || int(calls.Load()) != maxLabelPages {
+	if len(labels) != maxLabelPages*restPageSize || !truncated || int(calls.Load()) != maxLabelPages {
 		t.Fatalf("%d labels, truncated=%v, %d calls", len(labels), truncated, calls.Load())
 	}
 }

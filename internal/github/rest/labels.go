@@ -68,7 +68,7 @@ func (c *Client) ListIssueLabels(ctx context.Context, owner, repo string, number
 func (c *Client) listLabels(ctx context.Context, base string) ([]Label, bool, error) {
 	var all []Label
 	for p := 1; p <= maxLabelPages; p++ {
-		body, link, err := c.getJSON(ctx, pageURL(base, p))
+		body, link, err := c.getJSON(ctx, "rest labels fetch", pageURL(base, p))
 		if err != nil {
 			return nil, false, err
 		}
@@ -77,7 +77,7 @@ func (c *Client) listLabels(ctx context.Context, base string) ([]Label, bool, er
 			return nil, false, fmt.Errorf("rest: decode labels page %d: %w", p, err)
 		}
 		all = append(all, page...)
-		if !nextPage(link) || len(page) < filesPerPage {
+		if !nextPage(link) || len(page) < restPageSize {
 			return all, false, nil
 		}
 	}

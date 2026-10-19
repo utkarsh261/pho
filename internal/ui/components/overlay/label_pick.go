@@ -47,6 +47,7 @@ type labelPick struct {
 	hold      bool   // full PR label list not in yet
 	holdErr   string // the full PR label list failed to load
 	truncated bool   // repo has more labels than were listed
+	nameW     int    // width of the name column for the listed rows
 	err       string
 }
 
@@ -115,35 +116,40 @@ func (m *Model) SetPRLabelsLoading() {
 	m.labels.hold = true
 }
 
-// LoadingPRLabels reports whether the PR's full label list is still loading.
-func (m Model) LoadingPRLabels() bool {
-	return m.pickKind == pickLabel && m.labels.hold
+// BaselineComplete reports whether the picker knows every label on the PR,
+// so the labels it marks are the PR's whole label list after saving.
+func (m Model) BaselineComplete() bool {
+	return m.pickKind == pickLabel && !m.labels.hold && m.labels.holdErr == ""
 }
 
 // SetPRLabelsErr records that the PR's full label list failed to load, so
 // labels past the first page may show unmarked.
 func (m *Model) SetPRLabelsErr(msg string) {
 	if m.pickKind == pickLabel {
-		m.labels.holdErr = msg
+		m.labels.hold, m.labels.holdErr = false, msg
 	}
 }
 
-// SetPRLabels replaces the baseline with the PR's full label list, keeping
-// any toggles the user already made.
+// SetPRLabels replaces the baseline with the PR's full label list. Labels the
+// user already toggled keep the state they chose; the rest follow the list.
 func (m *Model) SetPRLabels(full []domain.Label) {
 	if m.pickKind != pickLabel {
 		return
 	}
-	flipped := map[string]bool{}
+	chosen := map[string]bool{}
 	for name := range m.labels.items {
 		if m.labels.marked[name] != m.labels.applied[name] {
-			flipped[name] = true
+			chosen[name] = m.labels.marked[name]
 		}
 	}
 	m.labels.applied, m.labels.order = map[string]bool{}, nil
 	m.setAppliedLabels(full)
 	for name := range m.labels.items {
-		m.labels.marked[name] = m.labels.applied[name] != flipped[name]
+		if want, ok := chosen[name]; ok {
+			m.labels.marked[name] = want
+		} else {
+			m.labels.marked[name] = m.labels.applied[name]
+		}
 	}
 	m.labels.hold = false
 	m.rebuildLabelPool()
@@ -325,16 +331,17 @@ func removeString(s []string, v string) []string {
 // labelTopRight is the label picker's border note: loading, then a load
 // error, then pending changes, then how many labels the PR has.
 func (m Model) labelTopRight(st styles) string {
-	switch {
-	case m.labels.holdErr != "":
-		return st.dim.Render("Couldn't load this PR's labels")
-	case m.labels.loading || m.labels.hold:
+	if m.labels.loading || m.labels.hold {
 		return st.dim.Render("Loading…")
-	case m.labels.err != "":
-		return st.dim.Render("Couldn't load labels")
 	}
 	if n := m.PendingLabelCount(); n > 0 {
 		return st.num.Render(fmt.Sprintf("%d pending", n))
+	}
+	switch {
+	case m.labels.holdErr != "":
+		return st.dim.Render("Couldn't load this PR's labels")
+	case m.labels.err != "":
+		return st.dim.Render("Couldn't load labels")
 	}
 	note := fmt.Sprintf("%d applied", len(m.labels.applied))
 	if m.labels.truncated {
@@ -368,7 +375,7 @@ func (m Model) labelLine(st styles, name string, selected bool, width int) strin
 	if m.labels.marked[name] {
 		box = st.num.Render("[x]")
 	}
-	shown := ansi.Truncate(labels.CleanName(name), m.labelNameWidth(), "…")
+	shown := ansi.Truncate(labels.CleanName(name), m.labels.nameW, "…")
 	left := edge + box + " " + labels.Dot(st.th, it.Color) + " " + highlightMatch(shown, m.query, text, st.match)
 
 	desc := it.Description
@@ -376,7 +383,7 @@ func (m Model) labelLine(st styles, name string, selected bool, width int) strin
 		desc = "new"
 	}
 	if desc != "" {
-		pad := max(m.labelNameWidth()-ansi.StringWidth(shown), 0) + 2
+		pad := max(m.labels.nameW-ansi.StringWidth(shown), 0) + 2
 		left += strings.Repeat(" ", pad) + st.dim.Render(labels.CleanName(desc))
 	}
 	line := fit(left, width)
@@ -387,7 +394,8 @@ func (m Model) labelLine(st styles, name string, selected bool, width int) strin
 }
 
 // labelNameWidth is the name column: the widest listed name, capped so
-// descriptions keep some room.
+// descriptions keep some room. refreshResults stores it in labels.nameW so
+// rendering doesn't rescan every row.
 func (m Model) labelNameWidth() int {
 	w := 0
 	for _, r := range m.results {

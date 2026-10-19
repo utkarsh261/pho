@@ -67,14 +67,18 @@ func (m *PRDetailModel) Labels() ([]domain.Label, int) {
 }
 
 // BeginLabelApply shows target as the PR's labels straight away and sends
-// change. target is the full label list after the change, as far as the
-// picker knows it.
-func (m *PRDetailModel) BeginLabelApply(change domain.LabelChange, target []domain.Label) tea.Cmd {
+// change. target is the label list after the change as far as the picker
+// knows it; complete says the picker knew every label on the PR, so target is
+// the whole list. Otherwise the count is a best guess until the reload.
+func (m *PRDetailModel) BeginLabelApply(change domain.LabelChange, target []domain.Label, complete bool) tea.Cmd {
 	if change.Empty() || !m.CanEditLabels() {
 		return nil
 	}
 	prev, prevCount := m.Labels()
-	count := max(prevCount+len(change.Add)-len(change.Remove), len(target))
+	count := len(target)
+	if !complete {
+		count = max(prevCount+len(change.Add)-len(change.Remove), len(target))
+	}
 
 	m.labelApply.reqID++
 	m.labelApply = labelApplyState{
@@ -126,11 +130,13 @@ func (m *PRDetailModel) reconcileLabels(requestID uint64) {
 	if !a.active {
 		return
 	}
+	m.showLabels(a.target, a.targetCount)
+	// GitHub's GraphQL reads can trail a REST write, so even the reload
+	// issued after the change may predate it: keep the change on screen for
+	// that one, as the resolve toggle does, and let later reloads speak.
 	if !a.executing && a.confirmBy != 0 && requestID >= a.confirmBy {
 		a.active = false
-		return
 	}
-	m.showLabels(a.target, a.targetCount)
 }
 
 func labelErrText(err error) string {

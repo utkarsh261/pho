@@ -202,12 +202,12 @@ func TestLabelPickerLoadsFullListForLongLabelLists(t *testing.T) {
 	for _, msg := range runMsgs(key(m, keyL)) {
 		_, cmd = m.Update(msg)
 	}
-	if !m.palette.LoadingPRLabels() {
+	if m.palette.BaselineComplete() {
 		t.Fatal("the PR's full label list should be loading")
 	}
 	drainCmds(m, cmd)
-	if m.palette.LoadingPRLabels() {
-		t.Fatal("full list should release the hold")
+	if !m.palette.BaselineComplete() {
+		t.Fatal("full list should end the loading state")
 	}
 	if got := len(m.palette.MarkedLabels()); got != 2 {
 		t.Errorf("baseline has %d labels, want 2 (bug, docs)", got)
@@ -265,4 +265,14 @@ func runMsgs(cmd tea.Cmd) []tea.Msg {
 		return nil
 	}
 	return []tea.Msg{msg}
+}
+
+func TestLabelPickTargetMatchesOwnerName(t *testing.T) {
+	target := labelPickTarget{repo: domain.Repository{Host: "github.com", Owner: "acme", Name: "alpha"}, number: 7, requestID: 3}
+	if !target.matches("github.com", "acme/alpha", 7, 3) {
+		t.Error("a repo without FullName should match its owner/name")
+	}
+	if target.matches("github.com", "acme/alpha", 7, 2) || target.matches("ghe.io", "acme/alpha", 7, 3) {
+		t.Error("request id and host must still match")
+	}
 }
