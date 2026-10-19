@@ -616,3 +616,23 @@ func TestDirectKeys(t *testing.T) {
 		t.Error("q should not be a direct key")
 	}
 }
+
+func TestLabelsKeyOnlyInPRDetail(t *testing.T) {
+	t.Parallel()
+	find := func(groups []Group) (Binding, bool) {
+		for _, g := range groups {
+			for _, b := range g.Bindings {
+				if b.Key == "L" {
+					return b, true
+				}
+			}
+		}
+		return Binding{}, false
+	}
+	if b, ok := find(BuildBindings(Context{View: domain.PrimaryViewPRDetail, PRState: domain.PRStateOpen})); !ok || !b.Direct || b.Description != "Labels" {
+		t.Errorf("PR detail: L = %+v, %v; want a direct Labels binding", b, ok)
+	}
+	if _, ok := find(BuildBindings(Context{View: domain.PrimaryViewCommitDetail})); ok {
+		t.Error("commit view must not list L")
+	}
+}

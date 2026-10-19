@@ -5,6 +5,7 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
@@ -492,6 +493,36 @@ type CheckContext struct {
 type Label struct {
 	Name  string
 	Color string
+}
+
+// RepoLabel is a label defined in a repository, as offered by the label picker.
+type RepoLabel struct {
+	Label
+	Description string
+}
+
+// RepoLabelList is a repository's labels as the picker sees them.
+type RepoLabelList struct {
+	Labels []RepoLabel
+	// Truncated is true when the repo has more labels than were listed.
+	Truncated bool
+}
+
+// LabelChange is one apply from the label picker: labels to create in the
+// repository, then names to add to and remove from the pull request.
+type LabelChange struct {
+	Create []Label
+	Add    []string
+	Remove []string
+}
+
+// ErrLabelPermission is matched (errors.Is) by label requests GitHub refused
+// for lack of permission. The error's own text says what was refused.
+var ErrLabelPermission = errors.New("no permission to change labels")
+
+// Empty reports whether the change does nothing.
+func (c LabelChange) Empty() bool {
+	return len(c.Create) == 0 && len(c.Add) == 0 && len(c.Remove) == 0
 }
 
 // User is a minimal GitHub user.

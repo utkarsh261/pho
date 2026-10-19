@@ -228,6 +228,9 @@ func (m Model) borderLine(st styles, l, r, left, right string, innerW int) strin
 }
 
 func (m Model) topRight(st styles) string {
+	if m.pickKind == pickLabel {
+		return m.labelTopRight(st)
+	}
 	if len(m.results) == 0 {
 		return ""
 	}
@@ -258,11 +261,16 @@ func (m Model) placeholder() string {
 		return "Filter themes"
 	case pickFile:
 		return "Filter files"
+	case pickLabel:
+		return "Filter or create labels"
 	}
 	return "Search pull requests and repositories"
 }
 
 func (m Model) emptyText() string {
+	if m.pickKind == pickLabel {
+		return m.labelEmptyText()
+	}
 	switch {
 	case m.query != "":
 		return fmt.Sprintf("No matches for “%s”", m.query)
@@ -297,6 +305,10 @@ func (m Model) resultLine(st styles, r domain.SearchResult, selected bool, width
 		return m.themeLine(st, r.Title, selected, width)
 	case fileResult:
 		return m.fileLine(st, r.Title, selected, width)
+	case labelResult:
+		return m.labelLine(st, r.Title, selected, width)
+	case labelCreateResult:
+		return m.labelCreateLine(st, r.Title, selected, width)
 	}
 	edge := " "
 	if selected {

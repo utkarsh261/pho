@@ -814,3 +814,15 @@ func TestE2E_Resolve_MitigationOnStaleReload(t *testing.T) {
 		t.Errorf("expected mitigation to force ResolvedBy=octocat, got %q", th.ResolvedBy)
 	}
 }
+
+func (s *resolvePRService) LoadRepoLabels(_ context.Context, _ domain.Repository) (domain.RepoLabelList, error) {
+	return domain.RepoLabelList{}, nil
+}
+
+func (s *resolvePRService) LoadPRLabels(_ context.Context, _ domain.Repository, _ int) ([]domain.Label, error) {
+	return nil, nil
+}
+
+func (s *resolvePRService) ApplyLabels(_ context.Context, _ domain.Repository, _ int, _ domain.LabelChange) error {
+	return nil
+}

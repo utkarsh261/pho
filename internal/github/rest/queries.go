@@ -36,3 +36,18 @@ func buildCreatePRURL(baseURL, owner, repo string) string {
 func buildUpdateBranchURL(baseURL, owner, repo string, number int) string {
 	return fmt.Sprintf("%s/repos/%s/%s/pulls/%d/update-branch", baseURL, owner, repo, number)
 }
+
+// buildRepoLabelsURL constructs the REST API URL for a repository's labels.
+//
+// Format: {baseURL}/repos/{owner}/{repo}/labels
+func buildRepoLabelsURL(baseURL, owner, repo string) string {
+	return fmt.Sprintf("%s/repos/%s/%s/labels", baseURL, owner, repo)
+}
+
+// buildIssueLabelsURL constructs the REST API URL for an issue's or pull
+// request's labels (pull requests share the issues endpoint).
+//
+// Format: {baseURL}/repos/{owner}/{repo}/issues/{number}/labels
+func buildIssueLabelsURL(baseURL, owner, repo string, number int) string {
+	return fmt.Sprintf("%s/repos/%s/%s/issues/%d/labels", baseURL, owner, repo, number)
+}

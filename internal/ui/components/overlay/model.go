@@ -77,6 +77,9 @@ type Model struct {
 
 	// File picker: each listed file's details, by path.
 	fileItems map[string]FileItem
+
+	// Label picker state (label_pick.go).
+	labels labelPick
 }
 
 // FileItem is one file in the file picker.
@@ -94,6 +97,7 @@ const (
 	pickRepo
 	pickTheme
 	pickFile
+	pickLabel
 )
 
 // themeResult and fileResult mark rows of the theme and file pickers.
@@ -124,7 +128,7 @@ func (m *Model) SetHydrating(hydrating bool) {
 }
 
 // RefreshResults re-queries the search service and updates displayed
-// results. The repo, theme and file pickers list a fixed pool, so it leaves them
+// results. The repo, theme, file and label pickers list a fixed pool, so it leaves them
 // (and their selection) alone.
 func (m *Model) RefreshResults() {
 	if m.pickKind != pickNone {
@@ -252,6 +256,11 @@ func (m Model) updateKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, func() tea.Msg { return CloseCmdPalette{} }
 	case tea.KeyEnter:
 		return m, m.dispatchSelection()
+	case tea.KeyTab:
+		if m.pickKind == pickLabel {
+			m.ToggleMark(true)
+		}
+		return m, nil
 	case tea.KeyUp:
 		m.moveSelection(-1)
 		return m, nil
@@ -344,6 +353,11 @@ func (m *Model) refreshResults() {
 		m.results = filterPickPool(m.pickPool, m.query)
 		if m.pickKind == pickFile {
 			rankFileNameMatches(m.results, m.query)
+		}
+		if m.pickKind == pickLabel {
+			if row, ok := m.createRow(); ok {
+				m.results = append(m.results, row)
+			}
 		}
 		m.selectedIndex = clampIndex(0, len(m.results))
 		for i, r := range m.results {

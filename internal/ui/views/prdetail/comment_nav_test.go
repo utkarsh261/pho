@@ -491,3 +491,15 @@ func (s *prServiceStub) ResolveThread(_ context.Context, _ domain.Repository, _ 
 func (s *prServiceStub) UnresolveThread(_ context.Context, _ domain.Repository, _ int, _ string) error {
 	return nil
 }
+
+func (s *prServiceStub) LoadRepoLabels(_ context.Context, _ domain.Repository) (domain.RepoLabelList, error) {
+	return domain.RepoLabelList{}, nil
+}
+
+func (s *prServiceStub) LoadPRLabels(_ context.Context, _ domain.Repository, _ int) ([]domain.Label, error) {
+	return nil, nil
+}
+
+func (s *prServiceStub) ApplyLabels(_ context.Context, _ domain.Repository, _ int, _ domain.LabelChange) error {
+	return nil
+}

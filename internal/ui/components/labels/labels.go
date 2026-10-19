@@ -4,6 +4,7 @@ package labels
 
 import (
 	"fmt"
+	"hash/fnv"
 	"strings"
 	"unicode"
 
@@ -90,11 +91,7 @@ func chip(th *theme.Theme, l domain.Label) (string, bool) {
 	if th == nil {
 		return "● " + name, true
 	}
-	dot := th.MutedTxt.Render("●")
-	if c, ok := dotColor(th, l.Color); ok {
-		dot = lipgloss.NewStyle().Foreground(c).Render("●")
-	}
-	return dot + " " + th.MutedTxt.Render(name), true
+	return Dot(th, l.Color) + " " + th.MutedTxt.Render(name), true
 }
 
 // dotColor is the label's own colour when it's valid hex that stands out from
@@ -146,4 +143,35 @@ func hexColor(s string) (lipgloss.Color, bool) {
 		}
 	}
 	return lipgloss.Color("#" + s), true
+}
+
+// Dot renders a label's "●" in its colour, or muted when the colour is
+// missing, invalid or too close to the theme background (as in Strip).
+func Dot(th *theme.Theme, color string) string {
+	if th == nil {
+		return "●"
+	}
+	if c, ok := dotColor(th, color); ok {
+		return lipgloss.NewStyle().Foreground(c).Render("●")
+	}
+	return th.MutedTxt.Render("●")
+}
+
+// CleanName is a label name as Strip draws it: control and format
+// characters removed and whitespace folded, but not truncated.
+func CleanName(s string) string { return cleanName(s) }
+
+// presetColors are the colours GitHub offers when creating a label.
+var presetColors = []string{
+	"b60205", "d93f0b", "fbca04", "0e8a16", "006b75", "1d76db", "0052cc", "5319e7",
+	"e99695", "f9d0c4", "fef2c0", "c2e0c6", "bfdadc", "c5def5", "bfd4f2", "d4c5f9",
+}
+
+// PresetColor picks a colour for a new label from GitHub's presets, the same
+// one every time for the same name, so the dot shown before the label exists
+// matches the label that gets created.
+func PresetColor(name string) string {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(strings.ToLower(name)))
+	return presetColors[h.Sum32()%uint32(len(presetColors))]
 }

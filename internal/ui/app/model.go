@@ -122,6 +122,10 @@ type Model struct {
 	pickThemes    map[string]*theme.Theme // themes built while the picker is open
 	themeSaves    *themeSaves
 
+	// Label picker: the PR it was opened for, numbered per opening.
+	labelPick    labelPickTarget
+	labelPickSeq uint64
+
 	classifier achdashboard.SummaryTabClassifier
 
 	currentDashboard domain.DashboardSnapshot
@@ -297,6 +301,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.openThemePicker()
 	case prdetail.OpenFilePicker:
 		return m, m.openFilePicker()
+	case prdetail.OpenLabelPicker:
+		return m, m.openLabelPicker()
+	case cmds.RepoLabelsLoaded, cmds.PRLabelsLoaded:
+		m.handleLabelLists(msg)
+		return m, nil
+	case cmds.LabelsApplied:
+		return m, m.handleLabelsApplied(msg)
 	case ThemeSaved:
 		return m, m.handleThemeSaved(msg)
 	case prdetail.OpenBrowserFile:
@@ -522,7 +533,7 @@ func (m *Model) paintBase(frame string) string {
 
 func (m *Model) viewFrame() string {
 	defer m.log.Timer("render root view", "view", string(m.currentView()))()
-	if m.filePicking() {
+	if m.filePicking() || m.labelPicking() {
 		return m.palette.ViewOverStatus(m.diffViewBody(), m.status.View())
 	}
 	if m.state.Search.OverlayOpen && !m.palette.IsThemePick() {
@@ -641,6 +652,13 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					return m, m.forwardKey(msg)
 				}
 				return m, m.togglePalette()
+			case "L":
+				// PR detail's own L decides: it asks for the picker, or
+				// says why labels can't be changed right now.
+				if m.currentView() == domain.PrimaryViewPRDetail {
+					return m, m.forwardKey(msg)
+				}
+				return m, nil
 			}
 		}
 		m.keymapOverlay, _ = m.keymapOverlay.Update(msg)
@@ -659,6 +677,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.filePicking() {
 		return m, m.handleFilePickKey(msg)
+	}
+	if m.labelPicking() {
+		return m, m.handleLabelPickKey(msg)
 	}
 
 	// keymap.Dispatch is a dashboard-scoped concern. It understands the four
@@ -1437,6 +1458,8 @@ func (m *Model) syncStatus() {
 		m.status.HintOverride = themePickHint
 	} else if m.filePicking() {
 		m.status.HintOverride = filePickHint
+	} else if m.labelPicking() {
+		m.status.HintOverride = labelPickHint
 	} else if m.createPR != nil && m.createPR.Active() {
 		m.status.HintOverride = "Tab: Next field   ←/→: Change option   Ctrl+S: Create PR   Esc: Cancel"
 	} else if m.currentView() == domain.PrimaryViewPRDetail && m.prDetail != nil {

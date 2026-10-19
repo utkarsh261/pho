@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -230,12 +231,35 @@ func (s *Service) LoadOpenPRsPage(ctx context.Context, repo domain.Repository, c
 }
 
 // InvalidateRepo clears all cached dashboard and preview data for a repository.
+// It deletes by repository, so it also drops every PR's unsent review drafts
+// cached for that repo; prefer InvalidatePR after a change to one PR.
 func (s *Service) InvalidateRepo(ctx context.Context, repo domain.Repository) error {
 	if err := s.ensureReady(); err != nil {
 		return err
 	}
 	repo = normalizeRepository(repo)
 	return s.Cache.DeleteByRepo(ctx, repo.Host, repoIdentity(repo))
+}
+
+// InvalidatePR drops the cached dashboard lists for a repository and the
+// cached preview of one PR, so the next load shows the PR as it is now. It
+// leaves other cache entries, such as review drafts, alone.
+func (s *Service) InvalidatePR(ctx context.Context, repo domain.Repository, number int) error {
+	if err := s.ensureReady(); err != nil {
+		return err
+	}
+	repo = normalizeRepository(repo)
+	var errs []error
+	for _, key := range []string{
+		dashboardCacheKey(repo, "prs"),
+		dashboardCacheKey(repo, "involving"),
+		previewCacheKey(repo, number),
+	} {
+		if err := s.Cache.Delete(ctx, key); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func (s *Service) resolvePreviewRepo(raw string) (domain.Repository, error) {
