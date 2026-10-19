@@ -36,7 +36,7 @@ type LabelItem struct {
 // rather than in the filtered results, so filtering never loses them.
 type labelPick struct {
 	items   map[string]LabelItem
-	byFold  map[string]string // lower-cased name -> name, to dedupe by case
+	byFold  map[string]string // foldName(name) -> name, to dedupe by case
 	applied map[string]bool   // labels on the PR (the baseline)
 	marked  map[string]bool   // labels the PR will have after Enter
 	order   []string          // applied names in PR order, frozen at open
@@ -79,7 +79,7 @@ func (m *Model) SetRepoLabels(list []domain.RepoLabel, truncated bool) {
 		return
 	}
 	for _, l := range list {
-		if name, ok := m.labels.byFold[strings.ToLower(l.Name)]; ok {
+		if name, ok := m.labels.byFold[foldName(l.Name)]; ok {
 			it := m.labels.items[name]
 			if it.New {
 				continue // it now exists; leave the user's pending row alone
@@ -151,7 +151,7 @@ func (m *Model) SetPRLabels(full []domain.Label) {
 
 func (m *Model) setAppliedLabels(current []domain.Label) {
 	for _, l := range current {
-		name, ok := m.labels.byFold[strings.ToLower(l.Name)]
+		name, ok := m.labels.byFold[foldName(l.Name)]
 		if !ok {
 			name = l.Name
 			m.addLabelItem(LabelItem{Name: l.Name, Color: l.Color})
@@ -166,7 +166,13 @@ func (m *Model) setAppliedLabels(current []domain.Label) {
 
 func (m *Model) addLabelItem(it LabelItem) {
 	m.labels.items[it.Name] = it
-	m.labels.byFold[strings.ToLower(it.Name)] = it.Name
+	m.labels.byFold[foldName(it.Name)] = it.Name
+}
+
+// foldName is the key labels are matched by: the name as drawn (see
+// labels.CleanName), ignoring case.
+func foldName(name string) string {
+	return strings.ToLower(labels.CleanName(name))
 }
 
 // rebuildLabelPool orders the rows: the PR's labels as they were at open,
@@ -209,7 +215,7 @@ func (m Model) createRow() (domain.SearchResult, bool) {
 	if name == "" || !m.labels.loaded {
 		return domain.SearchResult{}, false
 	}
-	if _, exists := m.labels.byFold[strings.ToLower(name)]; exists {
+	if _, exists := m.labels.byFold[foldName(name)]; exists {
 		return domain.SearchResult{}, false
 	}
 	return domain.SearchResult{Kind: labelCreateResult, Title: name}, true
@@ -233,7 +239,7 @@ func (m *Model) ToggleMark(advance bool) bool {
 	if it.New {
 		// Not created yet: unmarking drops it.
 		delete(m.labels.items, it.Name)
-		delete(m.labels.byFold, strings.ToLower(it.Name))
+		delete(m.labels.byFold, foldName(it.Name))
 		delete(m.labels.marked, it.Name)
 		m.labels.created = removeString(m.labels.created, it.Name)
 		m.rebuildLabelPool()

@@ -202,6 +202,11 @@ func TestLabelErrors(t *testing.T) {
 		t.Errorf("422 = %v", err)
 	}
 
+	c, _ = newLabelServer(t, http.StatusForbidden, `{"message":"You have exceeded a secondary rate limit."}`)
+	if err := c.AddLabels(ctx, "o", "r", 7, []string{"x"}); errors.Is(err, domain.ErrLabelPermission) || err == nil {
+		t.Errorf("rate-limit 403 = %v, want a plain status error", err)
+	}
+
 	c, _ = newLabelServer(t, http.StatusInternalServerError, "boom")
 	if err := c.AddLabels(ctx, "o", "r", 7, []string{"x"}); err == nil || !strings.Contains(err.Error(), "unexpected status 500") {
 		t.Errorf("500 = %v", err)

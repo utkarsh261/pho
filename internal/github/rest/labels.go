@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/utkarsh261/pho/internal/domain"
@@ -132,13 +133,22 @@ func labelStatusErr(status int, body []byte, want int, op LabelOp, owner, repo s
 	case want:
 		return nil
 	case http.StatusForbidden:
-		return &LabelPermissionError{Op: op, Owner: owner, Repo: repo}
+		// GitHub also answers 403 for secondary rate limits and SSO
+		// enforcement; only a plain refusal is a permission problem.
+		if !forbiddenForOtherReasons(body) {
+			return &LabelPermissionError{Op: op, Owner: owner, Repo: repo}
+		}
 	case http.StatusUnprocessableEntity:
 		if msg := validationMessage(body); msg != "" {
 			return errors.New(msg)
 		}
 	}
 	return fmt.Errorf("rest: unexpected status %d: %s", status, string(body))
+}
+
+func forbiddenForOtherReasons(body []byte) bool {
+	msg := strings.ToLower(string(body))
+	return strings.Contains(msg, "rate limit") || strings.Contains(msg, "abuse") || strings.Contains(msg, "saml")
 }
 
 // apiError is GitHub's error body: a message plus per-field validation errors.

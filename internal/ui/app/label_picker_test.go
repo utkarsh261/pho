@@ -134,8 +134,8 @@ func TestLabelPickerFailureShowsError(t *testing.T) {
 	if got := m.status.HintOverride; got != "No permission to edit labels in acme/alpha" {
 		t.Errorf("hint = %q", got)
 	}
-	if len(dashboardStub(m).invalidatePRCalls) != 0 {
-		t.Error("nothing to invalidate after a failure")
+	if len(dashboardStub(m).invalidatePRCalls) != 1 {
+		t.Error("a failed change may have partly landed; the PR's dashboard cache should still go")
 	}
 }
 

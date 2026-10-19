@@ -99,7 +99,7 @@ func (m *Model) applyLabelPick() tea.Cmd {
 
 	d := m.prDetail
 	if m.currentView() != domain.PrimaryViewPRDetail || d == nil ||
-		d.Summary.Number != m.labelPick.number || !strings.EqualFold(d.Repo.FullName, m.labelPick.repo.FullName) {
+		!m.labelPick.matches(d.Repo.Host, d.Repo.FullName, d.Summary.Number, m.labelPick.requestID) {
 		return nil // the PR on screen changed under the picker
 	}
 	cmd := d.BeginLabelApply(change, target)
@@ -133,9 +133,10 @@ func (m *Model) handleLabelLists(msg tea.Msg) {
 	}
 }
 
-// handleLabelsApplied passes a finished label change to the PR view and, on
-// success, drops the dashboard's cached copy of that PR (not the whole repo,
-// which would also drop unsent review drafts).
+// handleLabelsApplied passes a finished label change to the PR view and
+// drops the dashboard's cached copy of that PR (not the whole repo, which
+// would also drop unsent review drafts). It does so on failure too, since
+// part of the change may have landed.
 func (m *Model) handleLabelsApplied(msg cmds.LabelsApplied) tea.Cmd {
 	if m.prDetail == nil {
 		return nil
@@ -143,7 +144,7 @@ func (m *Model) handleLabelsApplied(msg cmds.LabelsApplied) tea.Cmd {
 	next, cmd := m.prDetail.Update(msg)
 	m.prDetail = next
 	m.syncStatus()
-	if msg.Err == nil && m.deps.Dashboard != nil {
+	if m.deps.Dashboard != nil {
 		if repo, ok := m.findRepoByHostAndFullName(msg.Host, msg.Repo); ok {
 			_ = m.deps.Dashboard.InvalidatePR(context.Background(), repo, msg.Number)
 		}
