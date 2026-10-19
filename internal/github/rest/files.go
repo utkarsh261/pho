@@ -31,7 +31,7 @@ func isDiffTooLarge(status int, body []byte) bool {
 }
 
 const (
-	filesPerPage = 100
+	restPageSize = 100
 	// maxFilePages matches GitHub's cap of 3,000 files on the files endpoints.
 	maxFilePages     = 30
 	filePageWorkers  = 4
@@ -77,7 +77,7 @@ func (c *Client) FetchCommitFiles(ctx context.Context, owner, repo, sha string) 
 }
 
 func (c *Client) fetchFilePages(ctx context.Context, base string, decode func([]byte) ([]ChangedFile, error)) ([]ChangedFile, error) {
-	first, link, err := c.getJSON(ctx, pageURL(base, 1))
+	first, link, err := c.getJSON(ctx, "rest files fetch", pageURL(base, 1))
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +87,7 @@ func (c *Client) fetchFilePages(ctx context.Context, base string, decode func([]
 	}
 	last := lastPage(link)
 	if last <= 1 {
-		if nextPage(link) && len(files) == filesPerPage {
+		if nextPage(link) && len(files) == restPageSize {
 			return c.fetchFilePagesSequential(ctx, base, files, decode)
 		}
 		return files, nil
@@ -104,7 +104,7 @@ func (c *Client) fetchFilePages(ctx context.Context, base string, decode func([]
 		go func() {
 			defer wg.Done()
 			for p := range jobs {
-				body, _, err := c.getJSON(ctx, pageURL(base, p))
+				body, _, err := c.getJSON(ctx, "rest files fetch", pageURL(base, p))
 				if err == nil {
 					pages[p], err = decode(body)
 				}
@@ -131,7 +131,7 @@ func (c *Client) fetchFilePages(ctx context.Context, base string, decode func([]
 // no rel="last" (some GitHub Enterprise versions).
 func (c *Client) fetchFilePagesSequential(ctx context.Context, base string, files []ChangedFile, decode func([]byte) ([]ChangedFile, error)) ([]ChangedFile, error) {
 	for p := 2; p <= maxFilePages; p++ {
-		body, link, err := c.getJSON(ctx, pageURL(base, p))
+		body, link, err := c.getJSON(ctx, "rest files fetch", pageURL(base, p))
 		if err != nil {
 			return nil, fmt.Errorf("rest: files page %d: %w", p, err)
 		}
@@ -140,7 +140,7 @@ func (c *Client) fetchFilePagesSequential(ctx context.Context, base string, file
 			return nil, fmt.Errorf("rest: decode files page %d: %w", p, err)
 		}
 		files = append(files, page...)
-		if !nextPage(link) || len(page) < filesPerPage {
+		if !nextPage(link) || len(page) < restPageSize {
 			break
 		}
 	}
@@ -148,7 +148,7 @@ func (c *Client) fetchFilePagesSequential(ctx context.Context, base string, file
 }
 
 func pageURL(base string, page int) string {
-	return fmt.Sprintf("%s?per_page=%d&page=%d", base, filesPerPage, page)
+	return fmt.Sprintf("%s?per_page=%d&page=%d", base, restPageSize, page)
 }
 
 var lastLinkRE = regexp.MustCompile(`<([^>]+)>;\s*rel="last"`)
@@ -170,9 +170,9 @@ func lastPage(link string) int {
 func nextPage(link string) bool { return strings.Contains(link, `rel="next"`) }
 
 // getJSON performs an authenticated GET and returns the body and Link header.
-func (c *Client) getJSON(ctx context.Context, u string) ([]byte, string, error) {
+func (c *Client) getJSON(ctx context.Context, logMsg, u string) ([]byte, string, error) {
 	var statusCode int
-	defer c.logRequest("rest files fetch", time.Now(), &statusCode)
+	defer c.logRequest(logMsg, time.Now(), &statusCode)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {

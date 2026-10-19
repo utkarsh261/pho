@@ -483,6 +483,9 @@ func (s *dashboardService) LoadAllPRsPage(ctx context.Context, repo domain.Repos
 	return nil, false, "", nil
 }
 func (s *dashboardService) InvalidateRepo(_ context.Context, _ domain.Repository) error { return nil }
+func (s *dashboardService) InvalidatePR(_ context.Context, _ domain.Repository, _ int) error {
+	return nil
+}
 
 type searchService struct {
 	buildPRIndexFn   func(domain.Repository, domain.DashboardSnapshot) error
@@ -675,4 +678,16 @@ func TestUpdateBranchCmd(t *testing.T) {
 			t.Fatalf("expected identity fields preserved on error, got %#v", upd)
 		}
 	})
+}
+
+func (s *prService) LoadRepoLabels(_ context.Context, _ domain.Repository) (domain.RepoLabelList, error) {
+	return domain.RepoLabelList{}, nil
+}
+
+func (s *prService) LoadPRLabels(_ context.Context, _ domain.Repository, _ int) ([]domain.Label, error) {
+	return nil, nil
+}
+
+func (s *prService) ApplyLabels(_ context.Context, _ domain.Repository, _ int, _ domain.LabelChange) error {
+	return nil
 }

@@ -122,3 +122,16 @@ func TestDotColorMutesColoursThatVanishIntoBase(t *testing.T) {
 		}
 	}
 }
+
+func TestPresetColorIsStableAndValid(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"needs-qa", "bug", "🚀", ""} {
+		c := PresetColor(name)
+		if _, ok := hexColor(c); !ok {
+			t.Errorf("PresetColor(%q) = %q, not hex", name, c)
+		}
+		if PresetColor(name) != c || PresetColor(strings.ToUpper(name)) != c {
+			t.Errorf("PresetColor(%q) not stable across calls and case", name)
+		}
+	}
+}

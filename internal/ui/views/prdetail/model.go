@@ -255,6 +255,10 @@ type PRDetailModel struct {
 	pendingToggle    pendingToggleState
 	resolveErr       string
 
+	// Label change from the picker (labels.go)
+	labelApply labelApplyState
+	labelErr   string
+
 	// ViewerLogin is the authenticated user's login, used for optimistic
 	// resolver display. May be empty if viewer resolution hasn't completed.
 	ViewerLogin string
@@ -526,6 +530,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 			m.Summary.HeadRefName = msg.Detail.HeadRefName
 		}
 		m.commentEntriesDirty = true
+		m.reconcileLabels(msg.RequestID)
 
 		// Replication-lag mitigation: when a toggle is pending, force the
 		// optimistic state for the toggled thread over the reload payload.
@@ -940,6 +945,9 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		m.reloadDependentsIfHeadUnknown = true
 		return m, tea.Batch(spinCmd, composeCmd, m.loadPRDetailCmd(true))
 
+	case cmds.LabelsApplied:
+		return m, tea.Batch(spinCmd, composeCmd, m.handleLabelsApplied(msg))
+
 	case cmds.PRStateChangedMsg:
 		if m.closeStep != closeStepExecuting {
 			return m, tea.Batch(spinCmd, composeCmd)
@@ -1081,6 +1089,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		if m.resolveErr != "" && !m.pendingToggle.active() {
 			m.resolveErr = ""
 		}
+		m.labelErr = ""
 		if m.compose.active && m.compose.status == composeStatusIdle {
 			// Key already routed to compose.Update above; skip handleKey.
 			return m, tea.Batch(spinCmd, composeCmd)

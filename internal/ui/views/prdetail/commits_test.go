@@ -441,3 +441,15 @@ func TestHandleCommitRefreshFiresCommitDiffReload(t *testing.T) {
 		t.Fatal("expected DiffLoading=true after handleCommitRefresh")
 	}
 }
+
+func (s *fakePRService) LoadRepoLabels(_ context.Context, _ domain.Repository) (domain.RepoLabelList, error) {
+	return domain.RepoLabelList{}, nil
+}
+
+func (s *fakePRService) LoadPRLabels(_ context.Context, _ domain.Repository, _ int) ([]domain.Label, error) {
+	return nil, nil
+}
+
+func (s *fakePRService) ApplyLabels(_ context.Context, _ domain.Repository, _ int, _ domain.LabelChange) error {
+	return nil
+}

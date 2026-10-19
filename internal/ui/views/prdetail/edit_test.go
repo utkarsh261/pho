@@ -497,3 +497,15 @@ func TestPostedCommentTarget_RemembersCommentID(t *testing.T) {
 		t.Errorf("expected postedCommentTarget.commentID=pc1, got %q", m.postedCommentTarget.commentID)
 	}
 }
+
+func (s *editPRService) LoadRepoLabels(_ context.Context, _ domain.Repository) (domain.RepoLabelList, error) {
+	return domain.RepoLabelList{}, nil
+}
+
+func (s *editPRService) LoadPRLabels(_ context.Context, _ domain.Repository, _ int) ([]domain.Label, error) {
+	return nil, nil
+}
+
+func (s *editPRService) ApplyLabels(_ context.Context, _ domain.Repository, _ int, _ domain.LabelChange) error {
+	return nil
+}

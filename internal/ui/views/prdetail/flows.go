@@ -76,6 +76,12 @@ func (m *PRDetailModel) StatusHint() string {
 	if m.closeErr != "" {
 		return m.closeErr
 	}
+	if m.labelApply.executing {
+		return "Updating labels..."
+	}
+	if m.labelErr != "" {
+		return m.labelErr
+	}
 	if m.checkoutInFlight {
 		return "Checking out " + m.Summary.HeadRefName + "..."
 	}
@@ -260,7 +266,8 @@ func (m *PRDetailModel) isAnyActionInProgress() bool {
 		m.editPosting ||
 		m.editPrompt != "" ||
 		m.confirmDiscardAll ||
-		m.pendingToggle.active()
+		m.pendingToggle.active() ||
+		m.labelApply.executing
 }
 
 // handleCloseStart initiates the close/reopen flow when x is pressed.

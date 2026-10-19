@@ -30,7 +30,7 @@ func filesPage(start, n int) []ChangedFile {
 func serveFiles(t *testing.T, prefix, path string, total int, withLast bool, wrap func([]ChangedFile) any) (*httptest.Server, *atomic.Int32) {
 	t.Helper()
 	var calls atomic.Int32
-	pages := (total + filesPerPage - 1) / filesPerPage
+	pages := (total + restPageSize - 1) / restPageSize
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
@@ -52,8 +52,8 @@ func serveFiles(t *testing.T, prefix, path string, total int, withLast bool, wra
 			}
 		}
 		w.Header().Set("Link", strings.Join(links, ", "))
-		start := (page - 1) * filesPerPage
-		n := min(filesPerPage, max(total-start, 0))
+		start := (page - 1) * restPageSize
+		n := min(restPageSize, max(total-start, 0))
 		_ = json.NewEncoder(w).Encode(wrap(filesPage(start, n)))
 	}))
 	t.Cleanup(srv.Close)

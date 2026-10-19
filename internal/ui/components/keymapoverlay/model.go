@@ -485,6 +485,7 @@ func buildPRDetailBindings(ctx Context) []Group {
 		Name: "Global",
 		Bindings: []Binding{
 			{Key: "ctrl+p", Description: "Go to file", Direct: true},
+			{Key: "L", Description: "Labels", Direct: true},
 			{Key: "T", Description: "Theme", Direct: true},
 			{Key: "?", Description: "Keybindings"},
 		},

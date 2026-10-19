@@ -820,3 +820,15 @@ func TestUpdateStatusHint_Error422Golden(t *testing.T) {
 		checkGolden(t, got, fmt.Sprintf("update_branch_status_error_422_w%d.txt", w))
 	}
 }
+
+func (s *updateBranchPRService) LoadRepoLabels(_ context.Context, _ domain.Repository) (domain.RepoLabelList, error) {
+	return domain.RepoLabelList{}, nil
+}
+
+func (s *updateBranchPRService) LoadPRLabels(_ context.Context, _ domain.Repository, _ int) ([]domain.Label, error) {
+	return nil, nil
+}
+
+func (s *updateBranchPRService) ApplyLabels(_ context.Context, _ domain.Repository, _ int, _ domain.LabelChange) error {
+	return nil
+}

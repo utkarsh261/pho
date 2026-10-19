@@ -67,6 +67,7 @@ type stubDashboardService struct {
 	loadInvolvingCalls  []loadInvolvingCall
 	loadPreviewCalls    []loadPreviewCall
 	invalidateRepoCalls []domain.Repository
+	invalidatePRCalls   []string
 
 	// openPages maps a cursor to the open-PR page returned for it.
 	openPages          map[string]stubOpenPage
@@ -134,6 +135,10 @@ func (s *stubDashboardService) InvalidateRepo(_ context.Context, repo domain.Rep
 	s.invalidateRepoCalls = append(s.invalidateRepoCalls, repo)
 	return nil
 }
+func (s *stubDashboardService) InvalidatePR(_ context.Context, repo domain.Repository, number int) error {
+	s.invalidatePRCalls = append(s.invalidatePRCalls, fmt.Sprintf("%s#%d", repo.FullName, number))
+	return nil
+}
 
 type stubSearchService struct {
 	buildPRCalls   int
@@ -176,6 +181,23 @@ type stubPRService struct {
 	loadDiffCalls   int
 	commits         []domain.Commit
 	commitDiff      model.DiffModel
+
+	repoLabels    domain.RepoLabelList
+	repoLabelsErr error
+	prLabels      []domain.Label
+	applyErr      error
+	applied       []domain.LabelChange
+}
+
+func (s *stubPRService) LoadRepoLabels(_ context.Context, _ domain.Repository) (domain.RepoLabelList, error) {
+	return s.repoLabels, s.repoLabelsErr
+}
+func (s *stubPRService) LoadPRLabels(_ context.Context, _ domain.Repository, _ int) ([]domain.Label, error) {
+	return s.prLabels, nil
+}
+func (s *stubPRService) ApplyLabels(_ context.Context, _ domain.Repository, _ int, change domain.LabelChange) error {
+	s.applied = append(s.applied, change)
+	return s.applyErr
 }
 
 func (s *stubPRService) LoadDetail(ctx context.Context, repo domain.Repository, number int, force bool) (domain.PRPreviewSnapshot, bool, error) {

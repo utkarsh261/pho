@@ -424,3 +424,40 @@ func TestLoadPreviewForceRefreshUpdatesCache(t *testing.T) {
 		t.Fatalf("expected cache to contain fresh title %q, got %q", fresh.Title, fromCache.Title)
 	}
 }
+
+func TestInvalidatePRKeepsOtherEntries(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	coord := newTestCoordinator(t)
+	repo := testutil.Repo("acme/alpha")
+	svc := &Service{Cache: coord, Client: &fakeGitHubClient{}, Now: time.Now}
+
+	write := func(key string) {
+		t.Helper()
+		meta := domain.CacheMeta{Key: key, Version: 1, Host: repo.Host, Repo: repo.FullName, ExpiresAt: time.Now().Add(time.Hour)}
+		if err := coord.Write(ctx, key, "x", meta); err != nil {
+			t.Fatal(err)
+		}
+	}
+	dropped := []string{dashboardCacheKey(repo, "prs"), dashboardCacheKey(repo, "involving"), previewCacheKey(repo, 7)}
+	kept := []string{previewCacheKey(repo, 8), "draft_inline:v1:host=github.com:repo=acme/alpha:pr=7:sha=abc"}
+	for _, k := range append(append([]string{}, dropped...), kept...) {
+		write(k)
+	}
+
+	if err := svc.InvalidatePR(ctx, repo, 7); err != nil {
+		t.Fatal(err)
+	}
+	var v string
+	for _, k := range dropped {
+		if _, found, _ := coord.L2.Get(ctx, k, &v); found {
+			t.Errorf("%s should be dropped", k)
+		}
+	}
+	for _, k := range kept {
+		if _, found, _ := coord.L2.Get(ctx, k, &v); !found {
+			t.Errorf("%s should be kept", k)
+		}
+	}
+}

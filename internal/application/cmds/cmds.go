@@ -28,6 +28,7 @@ type DashboardService interface {
 	LoadAllPRsPage(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
 	LoadOpenPRsPage(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
 	InvalidateRepo(ctx context.Context, repo domain.Repository) error
+	InvalidatePR(ctx context.Context, repo domain.Repository, number int) error
 }
 
 type SearchService interface {
@@ -60,6 +61,9 @@ type PRService interface {
 	FetchRepoInfo(ctx context.Context, repo domain.Repository) (domain.RepoInfo, error)
 	// UpdateBranch merges base into the PR head branch via the REST update-branch endpoint.
 	UpdateBranch(ctx context.Context, repo domain.Repository, number int, expectedHeadSHA string) error
+	LoadRepoLabels(ctx context.Context, repo domain.Repository) (domain.RepoLabelList, error)
+	LoadPRLabels(ctx context.Context, repo domain.Repository, number int) ([]domain.Label, error)
+	ApplyLabels(ctx context.Context, repo domain.Repository, number int, change domain.LabelChange) error
 }
 
 type PRDetailLoaded struct {
@@ -505,6 +509,61 @@ func UpdateBranchCmd(svc PRService, repo domain.Repository, number int, expected
 			return UpdateBranchMsg{Host: repo.Host, Repo: repoKey(repo), Number: number, Err: err}
 		}
 		return UpdateBranchMsg{Host: repo.Host, Repo: repoKey(repo), Number: number}
+	}
+}
+
+// RepoLabelsLoaded carries a repository's labels for the label picker that
+// asked for them (matched by PR and RequestID).
+type RepoLabelsLoaded struct {
+	Host      string
+	Repo      string
+	Number    int
+	RequestID uint64
+	Labels    domain.RepoLabelList
+	Err       error
+}
+
+// PRLabelsLoaded carries every label on a PR, for pickers on PRs whose
+// preview holds only the first page of labels.
+type PRLabelsLoaded struct {
+	Host      string
+	Repo      string
+	Number    int
+	RequestID uint64
+	Labels    []domain.Label
+	Err       error
+}
+
+// LabelsApplied is emitted when a label change from the picker completes.
+type LabelsApplied struct {
+	Host      string
+	Repo      string
+	Number    int
+	RequestID uint64
+	Err       error
+}
+
+// LoadRepoLabelsCmd loads the repository's labels for the label picker.
+func LoadRepoLabelsCmd(svc PRService, repo domain.Repository, number int, requestID uint64) tea.Cmd {
+	return func() tea.Msg {
+		labels, err := svc.LoadRepoLabels(context.Background(), repo)
+		return RepoLabelsLoaded{Host: repo.Host, Repo: repoKey(repo), Number: number, RequestID: requestID, Labels: labels, Err: err}
+	}
+}
+
+// LoadPRLabelsCmd loads every label on a PR for the label picker.
+func LoadPRLabelsCmd(svc PRService, repo domain.Repository, number int, requestID uint64) tea.Cmd {
+	return func() tea.Msg {
+		labels, err := svc.LoadPRLabels(context.Background(), repo, number)
+		return PRLabelsLoaded{Host: repo.Host, Repo: repoKey(repo), Number: number, RequestID: requestID, Labels: labels, Err: err}
+	}
+}
+
+// ApplyLabelsCmd creates, adds and removes labels on a PR.
+func ApplyLabelsCmd(svc PRService, repo domain.Repository, number int, change domain.LabelChange, requestID uint64) tea.Cmd {
+	return func() tea.Msg {
+		err := svc.ApplyLabels(context.Background(), repo, number, change)
+		return LabelsApplied{Host: repo.Host, Repo: repoKey(repo), Number: number, RequestID: requestID, Err: err}
 	}
 }
 
