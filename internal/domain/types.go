@@ -237,6 +237,7 @@ type PRPreviewSnapshot struct {
 	TopFiles       []PreviewFileStat
 	LatestActivity *ActivitySnippet
 	Labels         []Label
+	LabelCount     int // total labels on the PR; Labels may hold only the first page
 	Assignees      []string
 	Mergeable      string
 	MergeState     string

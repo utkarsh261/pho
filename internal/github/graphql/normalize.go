@@ -144,6 +144,7 @@ func normalizePreviewNode(repo domain.Repository, number int, node model.PullReq
 		Additions:      node.Additions,
 		Deletions:      node.Deletions,
 		Labels:         previewLabels(node.Labels),
+		LabelCount:     node.Labels.TotalCount,
 		Assignees:      assigneeLogins(node.Assignees),
 		Mergeable:      node.Mergeable,
 		MergeState:     node.MergeState,

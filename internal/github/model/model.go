@@ -177,7 +177,8 @@ type PullRequestNode struct {
 }
 
 type LabelConnection struct {
-	Nodes []LabelNode `json:"nodes"`
+	TotalCount int         `json:"totalCount"`
+	Nodes      []LabelNode `json:"nodes"`
 }
 
 type LabelNode struct {

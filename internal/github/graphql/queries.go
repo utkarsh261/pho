@@ -259,7 +259,7 @@ func pullRequestPreviewSelection(profile githubpkg.GitHubHostProfile) string {
 		"reviewDecision",
 		"mergeable",
 		"mergeStateStatus",
-		"labels(first: 10) { nodes { name color } }",
+		"labels(first: 20) { totalCount nodes { name color } }",
 		"author { login }",
 		"assignees(first: 10) { nodes { login } }",
 		"reviews(first: 20) { nodes { author { login avatarUrl } state submittedAt body } }",

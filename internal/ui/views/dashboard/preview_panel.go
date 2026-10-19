@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/utkarsh261/pho/internal/domain"
+	"github.com/utkarsh261/pho/internal/ui/components/labels"
 	"github.com/utkarsh261/pho/internal/ui/markdown"
 	"github.com/utkarsh261/pho/internal/ui/theme"
 )
@@ -234,6 +235,9 @@ func (m *PreviewPanelModel) buildLines() []string {
 	// Metadata — split across two lines so narrow panels don't lose CI/Review info
 	lines = append(lines, m.authorStateLine(snap))
 	lines = append(lines, m.ciReviewLine(snap))
+	if strip := labels.Strip(m.theme, snap.Labels, snap.LabelCount, m.Width); strip != "" {
+		lines = append(lines, strip)
+	}
 
 	// Timestamps — one per line, separated from metadata by a blank line
 	lines = append(lines, "", m.createdLine(snap))

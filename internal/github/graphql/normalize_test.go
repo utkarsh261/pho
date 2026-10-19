@@ -615,3 +615,40 @@ func TestPreviewReviewThreads_GhostAuthorDoesNotDropThread(t *testing.T) {
 		t.Errorf("expected ghost login, got %q", threads[0].Comments[0].Login)
 	}
 }
+
+func TestNormalizePreviewResponse_LabelsKeepTotalCount(t *testing.T) {
+	raw := `{
+	  "data": {
+	    "repository": {
+	      "nameWithOwner": "myorg/myrepo",
+	      "pullRequest": {
+	        "id": "PR_1",
+	        "number": 42,
+	        "state": "OPEN",
+	        "createdAt": "2026-06-01T00:00:00Z",
+	        "updatedAt": "2026-06-02T00:00:00Z",
+	        "labels": {"totalCount": 23, "nodes": [
+	          {"name": "bug", "color": "d73a4a"},
+	          {"name": "area/diff", "color": "0e8a16"}
+	        ]}
+	      }
+	    }
+	  }
+	}`
+	var resp model.PreviewResponse
+	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	repo := domain.Repository{Host: "github.com", FullName: "myorg/myrepo"}
+	snapshot, err := normalizePreviewResponse(repo, 42, resp.Data)
+	if err != nil {
+		t.Fatalf("normalize: %v", err)
+	}
+	if snapshot.LabelCount != 23 {
+		t.Errorf("LabelCount = %d, want 23", snapshot.LabelCount)
+	}
+	want := []domain.Label{{Name: "bug", Color: "d73a4a"}, {Name: "area/diff", Color: "0e8a16"}}
+	if len(snapshot.Labels) != len(want) || snapshot.Labels[0] != want[0] || snapshot.Labels[1] != want[1] {
+		t.Errorf("Labels = %v, want %v", snapshot.Labels, want)
+	}
+}

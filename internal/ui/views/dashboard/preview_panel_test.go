@@ -586,3 +586,31 @@ func TestPreviewPanelReusesPendingFetchOnSamePR(t *testing.T) {
 		t.Fatalf("expected second SelectPRMsg to return nil when PendingFetch is true, got a command")
 	}
 }
+
+func TestPreviewPanelLabelsLine(t *testing.T) {
+	t.Parallel()
+	snap := domain.PRPreviewSnapshot{
+		Repo: "org/repo", Number: 42, Title: "Labels", Author: "alice", State: domain.PRStateOpen,
+		Labels:     []domain.Label{{Name: "bug", Color: "d73a4a"}, {Name: "area/diff", Color: "0e8a16"}},
+		LabelCount: 5,
+	}
+	for _, w := range []int{20, 40, 80} {
+		m := NewPreviewPanelModel()
+		m.SetTheme(theme.Default())
+		m.preview = &snap
+		m.SetRect(w, 30)
+		lines := m.buildLines()
+		var found string
+		for i, l := range lines {
+			if strings.HasPrefix(previewStripANSI(l), "CI:") && i+1 < len(lines) {
+				found = previewStripANSI(lines[i+1])
+				if lw := lipgloss.Width(lines[i+1]); lw > w {
+					t.Errorf("width %d: labels line %q overflows (%d)", w, found, lw)
+				}
+			}
+		}
+		if !strings.Contains(found, "● bug") && found != "5 labels" {
+			t.Errorf("width %d: line after CI = %q, want labels", w, found)
+		}
+	}
+}
