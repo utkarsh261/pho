@@ -644,6 +644,13 @@ func TestNormalizePreviewResponse_LabelsKeepTotalCount(t *testing.T) {
 	if err != nil {
 		t.Fatalf("normalize: %v", err)
 	}
+	summary, err := normalizePullRequestSummary(repo, *resp.Data.Repository.PullRequest)
+	if err != nil {
+		t.Fatalf("normalize summary: %v", err)
+	}
+	if summary.LabelCount != 23 || len(summary.Labels) != 2 {
+		t.Errorf("summary labels = %v (count %d), want 2 of 23", summary.Labels, summary.LabelCount)
+	}
 	if snapshot.LabelCount != 23 {
 		t.Errorf("LabelCount = %d, want 23", snapshot.LabelCount)
 	}

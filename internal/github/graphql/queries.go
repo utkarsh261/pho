@@ -226,6 +226,7 @@ func pullRequestSummarySelection(profile githubpkg.GitHubHostProfile) string {
 		"changedFiles",
 		"comments { totalCount }",
 		"reviewThreads { totalCount }",
+		labelsSelection,
 		"author { __typename login }",
 		"assignees(first: 10) { nodes { login } }",
 		"reviewRequests(first: 10) { nodes { requestedReviewer { __typename ... on User { login } ... on Team { slug organization { login } } } } }",
@@ -239,6 +240,10 @@ func pullRequestSummarySelection(profile githubpkg.GitHubHostProfile) string {
 	fields = append(fields, rollupSelection(profile, false))
 	return strings.Join(fields, "\n        ")
 }
+
+// labelsSelection fetches a PR's first page of labels plus the full count, so
+// the UI's "+N" includes labels beyond the page.
+const labelsSelection = "labels(first: 20) { totalCount nodes { name color } }"
 
 func pullRequestPreviewSelection(profile githubpkg.GitHubHostProfile) string {
 	var fields []string
@@ -259,7 +264,7 @@ func pullRequestPreviewSelection(profile githubpkg.GitHubHostProfile) string {
 		"reviewDecision",
 		"mergeable",
 		"mergeStateStatus",
-		"labels(first: 20) { totalCount nodes { name color } }",
+		labelsSelection,
 		"author { login }",
 		"assignees(first: 10) { nodes { login } }",
 		"reviews(first: 20) { nodes { author { login avatarUrl } state submittedAt body } }",

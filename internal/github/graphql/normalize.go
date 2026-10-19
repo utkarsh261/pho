@@ -105,6 +105,8 @@ func normalizePullRequestSummary(repo domain.Repository, node model.PullRequestN
 		Additions:         node.Additions,
 		Deletions:         node.Deletions,
 		FileCount:         node.ChangedFiles,
+		Labels:            previewLabels(node.Labels),
+		LabelCount:        node.Labels.TotalCount,
 	}
 
 	summary.RequestedReviewers = requestedReviewers(node.ReviewRequests)

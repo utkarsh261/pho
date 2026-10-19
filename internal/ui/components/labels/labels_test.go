@@ -43,6 +43,9 @@ func TestStrip(t *testing.T) {
 		{"only unfetched labels", nil, 4, 80, "4 labels"},
 		{"long name truncated", ls("needs-backport-to-release-branch-1.x", "bug"), 2, 80, "● needs-backport-to-relea…  ● bug"},
 		{"blank names skipped but counted", ls("bug", "  ", ""), 3, 80, "● bug  +2"},
+		{"bidi override dropped", ls("\u202ereversed"), 1, 80, "● reversed"},
+		{"zero-width-only name skipped", ls("bug", "\u200b\u200b", "\u200d"), 3, 80, "● bug  +2"},
+		{"emoji joiner kept", ls("👩\u200d💻 dev"), 1, 80, "● 👩\u200d💻 dev"},
 		{"control chars stripped", ls("evil\x1b[2Jname\n\tx"), 1, 80, "● evil [2Jname x"},
 	}
 	for _, tt := range tests {
@@ -89,6 +92,33 @@ func TestHexColor(t *testing.T) {
 	} {
 		if _, got := hexColor(in); got != ok {
 			t.Errorf("hexColor(%q) ok = %v, want %v", in, got, ok)
+		}
+	}
+}
+
+func TestDotColorMutesColoursThatVanishIntoBase(t *testing.T) {
+	t.Parallel()
+	light := *theme.Default()
+	light.Base = "#FFFFFF"
+	ansiBase := *theme.Default()
+	ansiBase.Base = "0"
+	tests := []struct {
+		name  string
+		th    *theme.Theme
+		color string
+		want  bool
+	}{
+		{"near-white on white", &light, "fefefe", false},
+		{"github default grey on white", &light, "ededed", false},
+		{"red on white", &light, "d73a4a", true},
+		{"black on dark default", theme.Default(), "000000", false},
+		{"red on dark default", theme.Default(), "d73a4a", true},
+		{"non-hex base skips the check", &ansiBase, "000000", true},
+		{"invalid colour", theme.Default(), "zzz", false},
+	}
+	for _, tt := range tests {
+		if _, got := dotColor(tt.th, tt.color); got != tt.want {
+			t.Errorf("%s: dotColor ok = %v, want %v", tt.name, got, tt.want)
 		}
 	}
 }

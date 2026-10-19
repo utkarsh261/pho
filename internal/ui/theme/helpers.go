@@ -254,3 +254,28 @@ func Backdrop(t *Theme, line string) string {
 	}
 	return lipgloss.NewStyle().Foreground(t.Faint).Render(plain)
 }
+
+// StandsOutFromBase reports whether the "#RRGGBB" colour c reaches at least
+// min WCAG contrast against the palette's Base. It returns true when either
+// colour isn't six-digit hex (such as an ANSI index on 16-colour themes),
+// since there is nothing to measure.
+func (t *Theme) StandsOutFromBase(c string, min float64) bool {
+	base := strings.ToUpper(string(t.Base))
+	c = strings.ToUpper(c)
+	if !isHexColour(base) || !isHexColour(c) {
+		return true
+	}
+	return contrast(c, base) >= min
+}
+
+func isHexColour(s string) bool {
+	if len(s) != 7 || s[0] != '#' {
+		return false
+	}
+	for _, r := range s[1:] {
+		if !strings.ContainsRune("0123456789abcdefABCDEF", r) {
+			return false
+		}
+	}
+	return true
+}

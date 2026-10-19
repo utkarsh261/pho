@@ -614,3 +614,39 @@ func TestPreviewPanelLabelsLine(t *testing.T) {
 		}
 	}
 }
+
+func TestPreviewPanelDerivedPreviewShowsLabels(t *testing.T) {
+	t.Parallel()
+	m := NewPreviewPanelModel()
+	m.SetTheme(theme.Default())
+	m.SetRect(60, 30)
+	summary := domain.PullRequestSummary{
+		Repo: "org/repo", Number: 7, Title: "t", Author: "a", State: domain.PRStateOpen,
+		Labels: []domain.Label{{Name: "bug", Color: "d73a4a"}}, LabelCount: 1,
+	}
+	m.summary = &summary
+	if view := previewStripANSI(m.View()); !strings.Contains(view, "● bug") {
+		t.Errorf("derived preview (before the full fetch) should show labels:\n%s", view)
+	}
+}
+
+func TestPreviewPanelBottomScrollMatchesView(t *testing.T) {
+	t.Parallel()
+	snap := domain.PRPreviewSnapshot{
+		Repo: "org/repo", Number: 42, Title: "Labels", Author: "alice", State: domain.PRStateOpen,
+		BodyExcerpt: strings.Repeat("word ", 200),
+		Labels:      []domain.Label{{Name: "bug"}, {Name: "area/diff"}, {Name: "needs-review"}},
+		LabelCount:  3,
+	}
+	for w := 12; w <= 60; w++ {
+		m := NewPreviewPanelModel()
+		m.SetTheme(theme.Default())
+		m.preview = &snap
+		m.SetRect(w, 10)
+		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("G")})
+		want := m.contentLines()
+		if got, max := m.Scroll, max(len(want)-m.Height, 1); got != max {
+			t.Fatalf("width %d: G scrolled to %d, want %d (%d lines)", w, got, max, len(want))
+		}
+	}
+}

@@ -20,6 +20,11 @@ const maxNameWidth = 24
 
 const chipGap = "  "
 
+// minDotContrast is the contrast a label's colour needs against the theme
+// background to be drawn as-is; below it (a white label on a light theme) the
+// dot falls back to the muted colour so it doesn't vanish.
+const minDotContrast = 1.5
+
 // Strip renders labels left to right within width columns. Labels that don't
 // fit are folded into a trailing "+N", where N also counts labels beyond the
 // fetched page (total is the PR's full label count; values below len(labels),
@@ -39,13 +44,28 @@ func Strip(th *theme.Theme, labels []domain.Label, total, width int) string {
 		}
 	}
 
-	// Try the most chips first; each step drops one more into the "+N".
-	for n := len(chips); n > 0; n-- {
-		s := strings.Join(chips[:n], chipGap)
-		if rest := total - n; rest > 0 {
-			s += chipGap + faint(th, fmt.Sprintf("+%d", rest))
+	// Keep the longest prefix of chips that fits along with the "+N" for the
+	// rest; prefix[n] is the width of the first n chips joined.
+	gapW := lipgloss.Width(chipGap)
+	prefix := make([]int, len(chips)+1)
+	for i, c := range chips {
+		prefix[i+1] = prefix[i] + lipgloss.Width(c)
+		if i > 0 {
+			prefix[i+1] += gapW
 		}
-		if lipgloss.Width(s) <= width {
+	}
+	for n := len(chips); n > 0; n-- {
+		w := prefix[n]
+		more := ""
+		if rest := total - n; rest > 0 {
+			more = fmt.Sprintf("+%d", rest)
+			w += gapW + lipgloss.Width(more)
+		}
+		if w <= width {
+			s := strings.Join(chips[:n], chipGap)
+			if more != "" {
+				s += chipGap + faint(th, more)
+			}
 			return s
 		}
 	}
@@ -64,17 +84,27 @@ func Strip(th *theme.Theme, labels []domain.Label, total, width int) string {
 // which is skipped but still counted in the "+N".
 func chip(th *theme.Theme, l domain.Label) (string, bool) {
 	name := ansi.Truncate(cleanName(l.Name), maxNameWidth, "…")
-	if name == "" {
+	if lipgloss.Width(name) == 0 {
 		return "", false
 	}
 	if th == nil {
 		return "● " + name, true
 	}
 	dot := th.MutedTxt.Render("●")
-	if c, ok := hexColor(l.Color); ok {
+	if c, ok := dotColor(th, l.Color); ok {
 		dot = lipgloss.NewStyle().Foreground(c).Render("●")
 	}
 	return dot + " " + th.MutedTxt.Render(name), true
+}
+
+// dotColor is the label's own colour when it's valid hex that stands out from
+// the theme background; otherwise ok is false and the dot stays muted.
+func dotColor(th *theme.Theme, color string) (lipgloss.Color, bool) {
+	c, ok := hexColor(color)
+	if !ok || !th.StandsOutFromBase(string(c), minDotContrast) {
+		return "", false
+	}
+	return c, true
 }
 
 func faint(th *theme.Theme, s string) string {
@@ -84,12 +114,19 @@ func faint(th *theme.Theme, s string) string {
 	return th.FaintTxt.Render(s)
 }
 
-// cleanName drops control characters (an escape sequence in a label name
-// would otherwise reach the terminal) and folds whitespace runs to one space.
+// cleanName makes a label name safe to draw inline. Control characters (an
+// escape sequence would otherwise reach the terminal) become spaces; format
+// characters such as bidi overrides (U+202E would mirror the border) and
+// zero-width spaces are dropped, except the zero-width joiner that emoji
+// sequences need. Whitespace runs fold to one space.
 func cleanName(s string) string {
+	const zwj = '\u200d'
 	s = strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
+		switch {
+		case unicode.IsControl(r):
 			return ' '
+		case unicode.Is(unicode.Cf, r) && r != zwj:
+			return -1
 		}
 		return r
 	}, s)

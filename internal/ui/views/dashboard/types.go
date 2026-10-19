@@ -205,6 +205,8 @@ func makeDerivedPreview(summary domain.PullRequestSummary) domain.PRPreviewSnaps
 		ReviewDecision: summary.ReviewDecision,
 		CreatedAt:      summary.CreatedAt,
 		UpdatedAt:      summary.UpdatedAt,
+		Labels:         summary.Labels,
+		LabelCount:     summary.LabelCount,
 	}
 }
 
