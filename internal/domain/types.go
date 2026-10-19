@@ -122,6 +122,8 @@ type PullRequestSummary struct {
 	Deletions         int
 	FileCount         int
 	LatestActivity    *ActivitySnippet
+	Labels            []Label
+	LabelCount        int // total labels on the PR; Labels may hold only the first page
 
 	// Fields used for tab classification.
 	RequestedReviewers []string // logins of directly requested reviewer users
@@ -237,6 +239,7 @@ type PRPreviewSnapshot struct {
 	TopFiles       []PreviewFileStat
 	LatestActivity *ActivitySnippet
 	Labels         []Label
+	LabelCount     int // total labels on the PR; Labels may hold only the first page
 	Assignees      []string
 	Mergeable      string
 	MergeState     string

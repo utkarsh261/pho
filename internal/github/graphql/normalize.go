@@ -105,6 +105,8 @@ func normalizePullRequestSummary(repo domain.Repository, node model.PullRequestN
 		Additions:         node.Additions,
 		Deletions:         node.Deletions,
 		FileCount:         node.ChangedFiles,
+		Labels:            previewLabels(node.Labels),
+		LabelCount:        node.Labels.TotalCount,
 	}
 
 	summary.RequestedReviewers = requestedReviewers(node.ReviewRequests)
@@ -144,6 +146,7 @@ func normalizePreviewNode(repo domain.Repository, number int, node model.PullReq
 		Additions:      node.Additions,
 		Deletions:      node.Deletions,
 		Labels:         previewLabels(node.Labels),
+		LabelCount:     node.Labels.TotalCount,
 		Assignees:      assigneeLogins(node.Assignees),
 		Mergeable:      node.Mergeable,
 		MergeState:     node.MergeState,

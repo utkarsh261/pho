@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/utkarsh261/pho/internal/ui/components/labels"
 	"github.com/utkarsh261/pho/internal/ui/theme"
 )
 
@@ -108,10 +109,31 @@ func (m *PRDetailModel) renderHeader() string {
 	}
 
 	content := lipgloss.NewStyle().Padding(0, 1).Width(innerW).Render(line1 + "\n" + line2)
-	return lipgloss.NewStyle().
+	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
+		BorderBottom(false).
 		BorderForeground(th.Border).
 		Render(content)
+	return box + "\n" + m.headerBottomBorder(th, innerW)
+}
+
+// headerBottomBorder closes the header box with the PR's labels set into the
+// right of the rule: "╰──────── ● bug  ● area/diff ─╯". Labels live here so
+// the header keeps the same height with or without them.
+func (m *PRDetailModel) headerBottomBorder(th *theme.Theme, innerW int) string {
+	border := lipgloss.NewStyle().Foreground(th.Border)
+	b := lipgloss.RoundedBorder()
+	strip := ""
+	if m.Detail != nil {
+		// innerW less "─" on the left, " " either side, "─" on the right, and
+		// at least a couple of columns of rule before the strip.
+		strip = labels.Strip(th, m.Detail.Labels, m.Detail.LabelCount, innerW-6)
+	}
+	if strip == "" {
+		return border.Render(b.BottomLeft + strings.Repeat(b.Bottom, innerW) + b.BottomRight)
+	}
+	fill := max(innerW-lipgloss.Width(strip)-3, 0)
+	return border.Render(b.BottomLeft+strings.Repeat(b.Bottom, fill)) + " " + strip + " " + border.Render(b.Bottom+b.BottomRight)
 }
 
 func (m *PRDetailModel) renderCommitHeader() string {

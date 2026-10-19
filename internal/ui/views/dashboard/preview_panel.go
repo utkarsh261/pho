@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/utkarsh261/pho/internal/domain"
+	"github.com/utkarsh261/pho/internal/ui/components/labels"
 	"github.com/utkarsh261/pho/internal/ui/markdown"
 	"github.com/utkarsh261/pho/internal/ui/theme"
 )
@@ -88,7 +90,7 @@ func (m *PreviewPanelModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.lastKey = "g"
 			}
 		case "G":
-			m.Scroll = len(m.buildLines())
+			m.Scroll = len(m.contentLines())
 			m.clampScroll()
 		case "ctrl+d":
 			m.Scroll += m.Height / 2
@@ -110,7 +112,9 @@ func (m *PreviewPanelModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				msg.Summary.CIStatus != m.summary.CIStatus ||
 				msg.Summary.ReviewDecision != m.summary.ReviewDecision ||
 				msg.Summary.HeadRefOID != m.summary.HeadRefOID ||
-				msg.Summary.Title != m.summary.Title {
+				msg.Summary.Title != m.summary.Title ||
+				msg.Summary.LabelCount != m.summary.LabelCount ||
+				!slices.Equal(msg.Summary.Labels, m.summary.Labels) {
 				summaryChanged = true
 			}
 		}
@@ -158,18 +162,10 @@ func (m *PreviewPanelModel) View() string {
 		return ""
 	}
 
-	innerW := m.Width - 2
-	if innerW < 1 {
-		innerW = 1
-	}
-
-	oldW := m.Width
-	m.Width = innerW
-	defer func() { m.Width = oldW }()
-
+	innerW := m.innerWidth()
 	padStyle := lipgloss.NewStyle().Padding(0, 1)
 
-	lines := m.buildLines()
+	lines := m.contentLines()
 	if len(lines) == 0 {
 		// No PR selected — show "PREVIEW" header + underline + empty message
 		if m.Loading {
@@ -200,6 +196,19 @@ func (m *PreviewPanelModel) View() string {
 	end := min(m.Scroll+m.Height, len(lines))
 	visible := append([]string(nil), lines[m.Scroll:end]...)
 	return padStyle.Render(renderBlock(visible, innerW, m.Height))
+}
+
+func (m *PreviewPanelModel) innerWidth() int {
+	return max(m.Width-2, 1)
+}
+
+// contentLines builds the preview at the padded inner width View draws it at,
+// so scroll limits are computed from the same lines that are shown.
+func (m *PreviewPanelModel) contentLines() []string {
+	oldW := m.Width
+	m.Width = m.innerWidth()
+	defer func() { m.Width = oldW }()
+	return m.buildLines()
 }
 
 func (m *PreviewPanelModel) buildLines() []string {
@@ -234,6 +243,9 @@ func (m *PreviewPanelModel) buildLines() []string {
 	// Metadata — split across two lines so narrow panels don't lose CI/Review info
 	lines = append(lines, m.authorStateLine(snap))
 	lines = append(lines, m.ciReviewLine(snap))
+	if strip := labels.Strip(m.theme, snap.Labels, snap.LabelCount, m.Width); strip != "" {
+		lines = append(lines, strip)
+	}
 
 	// Timestamps — one per line, separated from metadata by a blank line
 	lines = append(lines, "", m.createdLine(snap))
@@ -428,7 +440,7 @@ func checkIcon(state string) string {
 }
 
 func (m *PreviewPanelModel) clampScroll() {
-	lines := m.buildLines()
+	lines := m.contentLines()
 	if len(lines) == 0 {
 		m.Scroll = 0
 		return
