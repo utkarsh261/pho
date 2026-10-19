@@ -227,17 +227,17 @@ func TestLabelPickRepoListDedupesByCase(t *testing.T) {
 func TestLabelPickFullPRListKeepsToggles(t *testing.T) {
 	t.Parallel()
 	m := newLabelPick(t)
-	m.HoldLabelApply()
-	if !m.ApplyHeld() {
-		t.Fatal("apply should be held")
+	m.SetPRLabelsLoading()
+	if !m.LoadingPRLabels() {
+		t.Fatal("should be loading the PR's labels")
 	}
 	selectTitle(t, &m, "build")
 	m, _ = m.Update(keyTab) // add build
 
 	// The full list shows the PR also has needs-review (beyond the first page).
 	m.SetPRLabels([]domain.Label{{Name: "zeta"}, {Name: "bug"}, {Name: "needs-review"}})
-	if m.ApplyHeld() {
-		t.Error("full list should release the hold")
+	if m.LoadingPRLabels() {
+		t.Error("full list should end the loading state")
 	}
 	c := m.LabelChange()
 	if strings.Join(c.Add, ",") != "build" || len(c.Remove) != 0 {

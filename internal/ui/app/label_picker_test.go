@@ -60,14 +60,24 @@ func TestLabelPickerOpensOverDetail(t *testing.T) {
 	}
 }
 
-func TestLabelPickerEnterTogglesHighlightedAndApplies(t *testing.T) {
+func TestLabelPickerEnterTogglesAndStaysOpen(t *testing.T) {
 	m, prSvc := labelPickerModel(t)
 	drainCmds(m, key(m, keyL))
 	typeKeys(m, "docs")
 	drainCmds(m, key(m, keyEnter))
 
+	if !m.labelPicking() {
+		t.Fatal("Enter should toggle and keep the picker open")
+	}
+	if len(prSvc.applied) != 0 {
+		t.Fatalf("nothing should be sent before Esc, got %+v", prSvc.applied)
+	}
+	if !strings.Contains(ansi.Strip(m.View()), "1 pending") {
+		t.Errorf("pending note missing:\n%s", ansi.Strip(m.View()))
+	}
+	drainCmds(m, key(m, keyEsc))
 	if m.labelPicking() {
-		t.Error("Enter should close the picker")
+		t.Error("Esc should close the picker")
 	}
 	if len(prSvc.applied) != 1 || strings.Join(prSvc.applied[0].Add, ",") != "docs" || len(prSvc.applied[0].Remove) != 0 {
 		t.Fatalf("applied = %+v", prSvc.applied)
@@ -80,20 +90,23 @@ func TestLabelPickerEnterTogglesHighlightedAndApplies(t *testing.T) {
 	}
 }
 
-func TestLabelPickerTabMarksThenEnterAppliesAll(t *testing.T) {
+func TestLabelPickerBulkChangesSaveTogether(t *testing.T) {
 	m, prSvc := labelPickerModel(t)
 	drainCmds(m, key(m, keyL))
-	key(m, keyTab) // unmark bug, move to build
-	key(m, keyTab) // mark build
-	if !strings.Contains(ansi.Strip(m.View()), "2 pending") {
-		t.Errorf("pending note missing:\n%s", ansi.Strip(m.View()))
+	key(m, keyEnter) // unmark bug
+	key(m, keyDown)
+	key(m, keyEnter) // mark build
+	key(m, keyDown)
+	key(m, keyTab) // mark docs, via Tab
+	if !m.labelPicking() || !strings.Contains(ansi.Strip(m.View()), "3 pending") {
+		t.Errorf("picking %v:\n%s", m.labelPicking(), ansi.Strip(m.View()))
 	}
-	drainCmds(m, key(m, keyEnter))
+	drainCmds(m, key(m, keyEsc))
 	if len(prSvc.applied) != 1 {
 		t.Fatalf("applied = %+v", prSvc.applied)
 	}
 	c := prSvc.applied[0]
-	if strings.Join(c.Add, ",") != "build" || strings.Join(c.Remove, ",") != "bug" {
+	if strings.Join(c.Add, ",") != "build,docs" || strings.Join(c.Remove, ",") != "bug" {
 		t.Errorf("change = %+v", c)
 	}
 }
@@ -105,7 +118,11 @@ func TestLabelPickerCreatesLabel(t *testing.T) {
 	if !strings.Contains(ansi.Strip(m.View()), "Create label") {
 		t.Fatalf("create row missing:\n%s", ansi.Strip(m.View()))
 	}
-	drainCmds(m, key(m, keyEnter))
+	key(m, keyEnter)
+	if !m.labelPicking() || !strings.Contains(ansi.Strip(m.View()), "[x] ● needs-qa") {
+		t.Fatalf("new label should be listed, marked, picker open:\n%s", ansi.Strip(m.View()))
+	}
+	drainCmds(m, key(m, keyEsc))
 	if len(prSvc.applied) != 1 {
 		t.Fatalf("applied = %+v", prSvc.applied)
 	}
@@ -115,11 +132,12 @@ func TestLabelPickerCreatesLabel(t *testing.T) {
 	}
 }
 
-func TestLabelPickerEscAppliesNothing(t *testing.T) {
+func TestLabelPickerEscWithNothingChangedSendsNothing(t *testing.T) {
 	m, prSvc := labelPickerModel(t)
 	drainCmds(m, key(m, keyL))
-	key(m, keyTab)
-	key(m, keyEsc)
+	key(m, keyEnter)
+	key(m, keyEnter) // toggled back
+	drainCmds(m, key(m, keyEsc))
 	if m.labelPicking() || len(prSvc.applied) != 0 {
 		t.Errorf("picking %v, applied %+v", m.labelPicking(), prSvc.applied)
 	}
@@ -130,7 +148,8 @@ func TestLabelPickerFailureShowsError(t *testing.T) {
 	prSvc.applyErr = permissionErr{}
 	drainCmds(m, key(m, keyL))
 	typeKeys(m, "docs")
-	drainCmds(m, key(m, keyEnter))
+	key(m, keyEnter)
+	drainCmds(m, key(m, keyEsc))
 	if got := m.status.HintOverride; got != "No permission to edit labels in acme/alpha" {
 		t.Errorf("hint = %q", got)
 	}
@@ -173,7 +192,7 @@ func TestLabelPickerRepoLabelsError(t *testing.T) {
 	}
 }
 
-func TestLabelPickerHoldsApplyUntilFullListLoads(t *testing.T) {
+func TestLabelPickerLoadsFullListForLongLabelLists(t *testing.T) {
 	m, prSvc := labelPickerModel(t)
 	m.prDetail.Detail.LabelCount = 30 // more than the preview's first page
 	prSvc.prLabels = []domain.Label{{Name: "bug"}, {Name: "docs"}}
@@ -183,15 +202,11 @@ func TestLabelPickerHoldsApplyUntilFullListLoads(t *testing.T) {
 	for _, msg := range runMsgs(key(m, keyL)) {
 		_, cmd = m.Update(msg)
 	}
-	if !m.palette.ApplyHeld() {
-		t.Fatal("apply should be held until the PR's full list loads")
-	}
-	key(m, keyEnter)
-	if len(prSvc.applied) != 0 || !m.labelPicking() {
-		t.Fatal("Enter must wait for the full list")
+	if !m.palette.LoadingPRLabels() {
+		t.Fatal("the PR's full label list should be loading")
 	}
 	drainCmds(m, cmd)
-	if m.palette.ApplyHeld() {
+	if m.palette.LoadingPRLabels() {
 		t.Fatal("full list should release the hold")
 	}
 	if got := len(m.palette.MarkedLabels()); got != 2 {

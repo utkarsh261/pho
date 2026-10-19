@@ -44,8 +44,8 @@ type labelPick struct {
 
 	loading   bool   // repo labels not in yet
 	loaded    bool   // repo labels in, so "doesn't exist" is known
-	hold      bool   // full PR label list not in yet; apply must wait
-	holdErr   string // the full PR label list failed; apply stays held
+	hold      bool   // full PR label list not in yet
+	holdErr   string // the full PR label list failed to load
 	truncated bool   // repo has more labels than were listed
 	err       string
 }
@@ -109,19 +109,19 @@ func (m *Model) SetLabelsErr(msg string) {
 	m.refreshResults()
 }
 
-// HoldLabelApply marks the picker as waiting for the PR's full label list
-// (its preview holds only the first page); ApplyHeld reports it.
-func (m *Model) HoldLabelApply() {
+// SetPRLabelsLoading marks the picker as waiting for the PR's full label
+// list (its preview holds only the first page); the border says it's loading.
+func (m *Model) SetPRLabelsLoading() {
 	m.labels.hold = true
 }
 
-// ApplyHeld reports whether Enter must wait for the PR's full label list.
-func (m Model) ApplyHeld() bool {
+// LoadingPRLabels reports whether the PR's full label list is still loading.
+func (m Model) LoadingPRLabels() bool {
 	return m.pickKind == pickLabel && m.labels.hold
 }
 
-// SetPRLabelsErr records that the PR's full label list failed to load. Apply
-// stays held, since a change computed from the first page alone could be wrong.
+// SetPRLabelsErr records that the PR's full label list failed to load, so
+// labels past the first page may show unmarked.
 func (m *Model) SetPRLabelsErr(msg string) {
 	if m.pickKind == pickLabel {
 		m.labels.holdErr = msg
@@ -129,7 +129,7 @@ func (m *Model) SetPRLabelsErr(msg string) {
 }
 
 // SetPRLabels replaces the baseline with the PR's full label list, keeping
-// any toggles the user already made, and releases a held apply.
+// any toggles the user already made.
 func (m *Model) SetPRLabels(full []domain.Label) {
 	if m.pickKind != pickLabel {
 		return
@@ -271,7 +271,7 @@ func (m *Model) addNewLabel(name string) bool {
 	return true
 }
 
-// LabelChange is what Enter applies: labels to create, then add and remove,
+// LabelChange is what closing the picker saves: labels to create, then add and remove,
 // each in row order.
 func (m Model) LabelChange() domain.LabelChange {
 	var c domain.LabelChange
@@ -306,7 +306,7 @@ func (m Model) MarkedLabels() []domain.Label {
 	return out
 }
 
-// PendingLabelCount is how many labels Enter would add or remove.
+// PendingLabelCount is how many labels saving would add or remove.
 func (m Model) PendingLabelCount() int {
 	c := m.LabelChange()
 	return len(c.Add) + len(c.Remove)

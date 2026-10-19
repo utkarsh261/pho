@@ -11,7 +11,7 @@ import (
 	"github.com/utkarsh261/pho/internal/ui/components/overlay"
 )
 
-const labelPickHint = "Tab: Toggle | Enter: Apply | Esc: Cancel"
+const labelPickHint = "Enter: Toggle | Tab: Toggle & next | Esc: Save & close"
 
 // labelPickTarget is the PR a label picker was opened for. Label lists that
 // arrive for any other PR, or for an earlier opening, are dropped.
@@ -57,45 +57,43 @@ func (m *Model) openLabelPicker() tea.Cmd {
 
 	loads := []tea.Cmd{cmds.LoadRepoLabelsCmd(d.PRService, d.Repo, d.Summary.Number, m.labelPickSeq)}
 	if total > len(current) {
-		// The preview holds only the first page of the PR's labels; wait for
-		// the rest before applying, so the baseline is right.
-		m.palette.HoldLabelApply()
+		// The preview holds only the first page of the PR's labels; load the
+		// rest so their rows show as applied.
+		m.palette.SetPRLabelsLoading()
 		loads = append(loads, cmds.LoadPRLabelsCmd(d.PRService, d.Repo, d.Summary.Number, m.labelPickSeq))
 	}
 	m.syncStatus()
 	return tea.Batch(loads...)
 }
 
-// handleLabelPickKey runs the picker: Tab toggles, Enter applies (toggling
-// the highlighted row first when nothing is pending), Esc cancels, and other
-// keys edit the filter or move the selection.
+// handleLabelPickKey runs the picker, which stays open for any number of
+// changes, like GitHub's label menu: Enter toggles the highlighted label, Tab
+// toggles it and moves down, Esc saves everything and closes, and other keys
+// edit the filter or move the selection.
 func (m *Model) handleLabelPickKey(msg tea.KeyMsg) tea.Cmd {
 	switch {
 	case msg.Type == tea.KeyEsc:
-		m.closeOverlay()
-		return nil
+		return m.saveLabelPick()
 	case msg.String() == "ctrl+p":
 		return nil
 	case msg.Type == tea.KeyEnter:
-		return m.applyLabelPick()
+		m.palette.ToggleMark(false)
+		return nil
 	}
 	m.palette, _ = m.palette.Update(msg)
 	return nil
 }
 
-func (m *Model) applyLabelPick() tea.Cmd {
-	if m.palette.ApplyHeld() {
-		return nil // still loading the PR's full label list
-	}
-	if m.palette.PendingLabelCount() == 0 && !m.palette.ToggleMark(false) {
-		return nil
-	}
+// saveLabelPick closes the picker and applies what changed. Only toggled
+// labels are sent, so this is safe even before a PR's full label list (past
+// the first page) has loaded: re-adding a label the PR has is a no-op.
+func (m *Model) saveLabelPick() tea.Cmd {
 	change := m.palette.LabelChange()
-	if change.Empty() {
-		return nil // e.g. toggled a row back to where it started
-	}
 	target := m.palette.MarkedLabels()
 	m.closeOverlay()
+	if change.Empty() {
+		return nil // nothing toggled, or toggled back to where it started
+	}
 
 	d := m.prDetail
 	if m.currentView() != domain.PrimaryViewPRDetail || d == nil ||
@@ -124,8 +122,8 @@ func (m *Model) handleLabelLists(msg tea.Msg) {
 			return
 		}
 		if msg.Err != nil {
-			// Without the full list a change could be computed against the
-			// wrong baseline, so apply stays held; Esc still closes.
+			// Saving stays safe (only toggled labels are sent); the border
+			// says the rows past the first page may be unmarked.
 			m.palette.SetPRLabelsErr(msg.Err.Error())
 			return
 		}
