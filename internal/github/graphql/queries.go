@@ -275,7 +275,7 @@ func pullRequestPreviewSelection(profile githubpkg.GitHubHostProfile) string {
 		labelsSelection,
 		"author { login }",
 		"assignees(first: 10) { nodes { login } }",
-		"reviews(first: 20) { nodes { author { login avatarUrl } state submittedAt body } }",
+		"reviews(last: 30) { nodes { author { login avatarUrl } state submittedAt body commit { oid } } }",
 		"reviewThreads(first: 50) { nodes { id path line originalLine isResolved resolvedBy { login } comments(first: 50) { nodes { id author { login } body createdAt } } } }",
 		"comments(first: 20) { nodes { id author { login } body createdAt } }",
 		"files(first: 20) { nodes { path additions deletions } }",

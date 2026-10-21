@@ -727,7 +727,7 @@ func repoFullName(repo domain.Repository) string {
 }
 
 func previewCacheKey(host, repo string, number int) string {
-	return fmt.Sprintf("preview:v4:host=%s:repo=%s:pr=%d", host, repo, number)
+	return fmt.Sprintf("preview:v5:host=%s:repo=%s:pr=%d", host, repo, number)
 }
 
 func diffCacheKey(host, repo string, number int, sha string) string {

@@ -330,6 +330,7 @@ type ReviewNode struct {
 	State       string                  `json:"state"`
 	SubmittedAt *string                 `json:"submittedAt"`
 	Body        string                  `json:"body,omitempty"`
+	Commit      *CommitRef              `json:"commit"`
 	Comments    ReviewCommentConnection `json:"comments"`
 }
 

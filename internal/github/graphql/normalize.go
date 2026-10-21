@@ -296,9 +296,17 @@ func previewReviewers(conn model.ReviewConnection) []domain.PreviewReviewer {
 			Avatar:      avatar,
 			Body:        strings.TrimSpace(node.Body),
 			SubmittedAt: submittedAt,
+			CommitSHA:   commitOID(node.Commit),
 		})
 	}
 	return out
+}
+
+func commitOID(c *model.CommitRef) string {
+	if c == nil {
+		return ""
+	}
+	return c.OID
 }
 
 func previewReviewThreads(conn model.ReviewThreadConnection) []domain.PreviewReviewThread {
