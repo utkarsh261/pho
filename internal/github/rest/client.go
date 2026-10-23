@@ -82,46 +82,7 @@ type PullRequestResponse struct {
 //
 // Auth header: Authorization: token <token>
 func (c *Client) FetchRawDiff(ctx context.Context, owner, repo string, number int) (string, error) {
-	var statusCode int
-	defer c.logRequest("rest diff fetch", time.Now(), &statusCode)
-
-	url := buildDiffURL(c.BaseURL, owner, repo, number)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return "", fmt.Errorf("rest: create request: %w", err)
-	}
-
-	req.Header.Set("Accept", acceptDiffHeader)
-	req.Header.Set("User-Agent", userAgentHeader)
-	req.Header.Set("Authorization", "token "+c.Token)
-
-	client := c.HTTPClient
-	if client == nil {
-		client = http.DefaultClient
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("rest: request failed: %w", err)
-	}
-	defer resp.Body.Close()
-	statusCode = resp.StatusCode
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		if isDiffTooLarge(resp.StatusCode, body) {
-			return "", fmt.Errorf("%w (status %d): %s", ErrDiffTooLarge, resp.StatusCode, string(body))
-		}
-		return "", fmt.Errorf("rest: unexpected status %d: %s", resp.StatusCode, string(body))
-	}
-
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("rest: read body: %w", err)
-	}
-
-	return string(raw), nil
+	return c.fetchDiff(ctx, buildDiffURL(c.BaseURL, owner, repo, number))
 }
 
 // FetchCommitDiff retrieves the raw unified diff for a single commit.
@@ -133,10 +94,14 @@ func (c *Client) FetchRawDiff(ctx context.Context, owner, repo string, number in
 //
 // Auth header: Authorization: token <token>
 func (c *Client) FetchCommitDiff(ctx context.Context, owner, repo, sha string) (string, error) {
+	return c.fetchDiff(ctx, buildCommitDiffURL(c.BaseURL, owner, repo, sha))
+}
+
+// fetchDiff GETs url as a raw unified diff. A diff GitHub refuses to render
+// comes back as ErrDiffTooLarge.
+func (c *Client) fetchDiff(ctx context.Context, url string) (string, error) {
 	var statusCode int
 	defer c.logRequest("rest diff fetch", time.Now(), &statusCode)
-
-	url := buildCommitDiffURL(c.BaseURL, owner, repo, sha)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -164,7 +129,7 @@ func (c *Client) FetchCommitDiff(ctx context.Context, owner, repo, sha string) (
 		if isDiffTooLarge(resp.StatusCode, body) {
 			return "", fmt.Errorf("%w (status %d): %s", ErrDiffTooLarge, resp.StatusCode, string(body))
 		}
-		return "", fmt.Errorf("rest: unexpected status %d: %s", resp.StatusCode, string(body))
+		return "", &StatusError{Code: resp.StatusCode, Body: string(body)}
 	}
 
 	raw, err := io.ReadAll(resp.Body)

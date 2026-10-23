@@ -23,6 +23,25 @@ import (
 // to the per-file endpoints.
 var ErrDiffTooLarge = errors.New("rest: diff too large")
 
+// ErrNotFound matches a StatusError for a 404, e.g. a commit that no longer
+// exists on GitHub.
+var ErrNotFound = errors.New("rest: not found")
+
+// StatusError is a non-200 response from GitHub.
+type StatusError struct {
+	Code int
+	Body string
+}
+
+func (e *StatusError) Error() string {
+	return fmt.Sprintf("rest: unexpected status %d: %s", e.Code, e.Body)
+}
+
+// Is lets errors.Is(err, ErrNotFound) match a 404.
+func (e *StatusError) Is(target error) bool {
+	return target == ErrNotFound && e.Code == http.StatusNotFound
+}
+
 // isDiffTooLarge reports whether a failed diff request was GitHub declining
 // to render the diff. Any 406 counts: GitHub Enterprise admins can set their
 // own limits and the error body differs between versions.
@@ -195,7 +214,7 @@ func (c *Client) getJSON(ctx context.Context, logMsg, u string) ([]byte, string,
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodySize))
-		return nil, "", fmt.Errorf("rest: unexpected status %d: %s", resp.StatusCode, string(body))
+		return nil, "", &StatusError{Code: resp.StatusCode, Body: string(body)}
 	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
