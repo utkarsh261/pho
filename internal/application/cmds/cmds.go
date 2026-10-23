@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -61,6 +62,8 @@ type PRService interface {
 	FetchRepoInfo(ctx context.Context, repo domain.Repository) (domain.RepoInfo, error)
 	// UpdateBranch merges base into the PR head branch via the REST update-branch endpoint.
 	UpdateBranch(ctx context.Context, repo domain.Repository, number int, expectedHeadSHA string) error
+	LoadJobLog(ctx context.Context, repo domain.Repository, jobID int64) (domain.JobLog, error)
+	RerunJob(ctx context.Context, repo domain.Repository, number int, jobID int64) error
 	LoadRepoLabels(ctx context.Context, repo domain.Repository) (domain.RepoLabelList, error)
 	LoadPRLabels(ctx context.Context, repo domain.Repository, number int) ([]domain.Label, error)
 	ApplyLabels(ctx context.Context, repo domain.Repository, number int, change domain.LabelChange) error
@@ -509,6 +512,49 @@ func UpdateBranchCmd(svc PRService, repo domain.Repository, number int, expected
 			return UpdateBranchMsg{Host: repo.Host, Repo: repoKey(repo), Number: number, Err: err}
 		}
 		return UpdateBranchMsg{Host: repo.Host, Repo: repoKey(repo), Number: number}
+	}
+}
+
+// CILogLoaded carries the tail of a GitHub Actions job's log for the log
+// view that asked for it (matched by RequestID).
+type CILogLoaded struct {
+	Host      string
+	Repo      string
+	Number    int
+	JobID     int64
+	RequestID uint64
+	Log       domain.JobLog
+	Err       error
+}
+
+// ciLogTimeout bounds a job log download, body included: the HTTP client's
+// own timeout is lifted for it because large logs take a while to stream.
+const ciLogTimeout = 3 * time.Minute
+
+// LoadCILogCmd fetches the tail of a GitHub Actions job's log.
+func LoadCILogCmd(svc PRService, repo domain.Repository, number int, jobID int64, requestID uint64) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), ciLogTimeout)
+		defer cancel()
+		log, err := svc.LoadJobLog(ctx, repo, jobID)
+		return CILogLoaded{Host: repo.Host, Repo: repoKey(repo), Number: number, JobID: jobID, RequestID: requestID, Log: log, Err: err}
+	}
+}
+
+// CIRerunMsg is emitted when a GitHub Actions job re-run request completes.
+type CIRerunMsg struct {
+	Host   string
+	Repo   string
+	Number int
+	JobID  int64
+	Err    error
+}
+
+// RerunCIJobCmd asks GitHub to re-run a GitHub Actions job.
+func RerunCIJobCmd(svc PRService, repo domain.Repository, number int, jobID int64) tea.Cmd {
+	return func() tea.Msg {
+		err := svc.RerunJob(context.Background(), repo, number, jobID)
+		return CIRerunMsg{Host: repo.Host, Repo: repoKey(repo), Number: number, JobID: jobID, Err: err}
 	}
 }
 

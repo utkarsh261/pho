@@ -2113,3 +2113,11 @@ func TestConfigProblemSurvivesLoads(t *testing.T) {
 		t.Errorf("errors after a successful load = %+v, want the config problem", errs)
 	}
 }
+
+func (s *stubPRService) LoadJobLog(_ context.Context, _ domain.Repository, _ int64) (domain.JobLog, error) {
+	return domain.JobLog{}, nil
+}
+
+func (s *stubPRService) RerunJob(_ context.Context, _ domain.Repository, _ int, _ int64) error {
+	return nil
+}

@@ -290,3 +290,11 @@ func (s *mergePRService) LoadPRLabels(_ context.Context, _ domain.Repository, _ 
 func (s *mergePRService) ApplyLabels(_ context.Context, _ domain.Repository, _ int, _ domain.LabelChange) error {
 	return nil
 }
+
+func (s *mergePRService) LoadJobLog(_ context.Context, _ domain.Repository, _ int64) (domain.JobLog, error) {
+	return domain.JobLog{}, nil
+}
+
+func (s *mergePRService) RerunJob(_ context.Context, _ domain.Repository, _ int, _ int64) error {
+	return nil
+}
