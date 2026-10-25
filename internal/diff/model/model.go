@@ -97,3 +97,20 @@ func (f *DiffFile) LineDisplayRow(flatLineIndex int) int {
 	}
 	return displayRow
 }
+
+// RangeDiff is the diff between two commits on a PR's head branch, such as
+// the commit a reviewer last reviewed and the current head.
+type RangeDiff struct {
+	Diff    DiffModel
+	FromSHA string
+	ToSHA   string
+	// Commits is the number of commits after FromSHA up to ToSHA.
+	Commits int
+	// BaseMerged is set when a merge commit in the range may have brought in
+	// changes from the base branch.
+	BaseMerged bool
+	// Rewritten is set when FromSHA is no longer an ancestor of ToSHA (the
+	// branch was rebased or force-pushed). Diff is empty then: a diff from
+	// the merge base would mix the whole PR with upstream changes.
+	Rewritten bool
+}

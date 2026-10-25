@@ -30,6 +30,10 @@ func (s *resolvePRService) LoadPRCommits(_ context.Context, _ domain.Repository,
 func (s *resolvePRService) LoadCommitDiff(_ context.Context, _ domain.Repository, _ string, _ bool) (diffmodel.DiffModel, error) {
 	return diffmodel.DiffModel{}, nil
 }
+
+func (s *resolvePRService) LoadRangeDiff(_ context.Context, _ domain.Repository, _ int, _, _ string, _ bool) (diffmodel.RangeDiff, error) {
+	return diffmodel.RangeDiff{}, nil
+}
 func (s *resolvePRService) PostComment(_ context.Context, _ domain.Repository, _, _ string) error {
 	return nil
 }

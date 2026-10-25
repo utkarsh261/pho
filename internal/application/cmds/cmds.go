@@ -42,6 +42,7 @@ type PRService interface {
 	LoadDiff(ctx context.Context, repo domain.Repository, number int, headSHA string, force bool) (model.DiffModel, bool, error)
 	LoadPRCommits(ctx context.Context, repo domain.Repository, number int, force bool) ([]domain.Commit, error)
 	LoadCommitDiff(ctx context.Context, repo domain.Repository, sha string, force bool) (model.DiffModel, error)
+	LoadRangeDiff(ctx context.Context, repo domain.Repository, number int, fromSHA, toSHA string, force bool) (model.RangeDiff, error)
 	PostComment(ctx context.Context, repo domain.Repository, prID string, body string) error
 	PostCommentReply(ctx context.Context, repo domain.Repository, prID, commentID, body string) error
 	PostReviewComment(ctx context.Context, repo domain.Repository, prID string, body string) error
@@ -102,6 +103,18 @@ type CommitDiffLoaded struct {
 	SHA  string
 	Diff model.DiffModel
 	Err  error
+}
+
+// RangeDiffLoaded carries the diff between two commits of a PR's head
+// branch, as asked for by LoadRangeDiffCmd.
+type RangeDiffLoaded struct {
+	Host    string
+	Repo    string
+	Number  int
+	FromSHA string
+	ToSHA   string
+	Range   model.RangeDiff
+	Err     error
 }
 
 type ViewerResolved struct {
@@ -480,6 +493,21 @@ func LoadCommitDiffCmd(svc PRService, repo domain.Repository, sha string, force 
 			SHA:  sha,
 			Diff: diff,
 			Err:  err,
+		}
+	}
+}
+
+func LoadRangeDiffCmd(svc PRService, repo domain.Repository, number int, fromSHA, toSHA string, force bool) tea.Cmd {
+	return func() tea.Msg {
+		rd, err := svc.LoadRangeDiff(context.Background(), repo, number, fromSHA, toSHA, force)
+		return RangeDiffLoaded{
+			Host:    repo.Host,
+			Repo:    repoKey(repo),
+			Number:  number,
+			FromSHA: fromSHA,
+			ToSHA:   toSHA,
+			Range:   rd,
+			Err:     err,
 		}
 	}
 }

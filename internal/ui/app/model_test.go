@@ -181,6 +181,7 @@ type stubPRService struct {
 	loadDiffCalls   int
 	commits         []domain.Commit
 	commitDiff      model.DiffModel
+	rangeDiff       model.RangeDiff
 
 	repoLabels    domain.RepoLabelList
 	repoLabelsErr error
@@ -261,6 +262,10 @@ func (s *stubPRService) LoadPRCommits(_ context.Context, _ domain.Repository, _ 
 }
 func (s *stubPRService) LoadCommitDiff(_ context.Context, _ domain.Repository, _ string, _ bool) (model.DiffModel, error) {
 	return s.commitDiff, nil
+}
+
+func (s *stubPRService) LoadRangeDiff(_ context.Context, _ domain.Repository, _ int, _, _ string, _ bool) (model.RangeDiff, error) {
+	return s.rangeDiff, nil
 }
 func (s *stubPRService) CreatePR(_ context.Context, _ domain.CreatePRParams) (domain.PullRequestSummary, error) {
 	return domain.PullRequestSummary{}, nil

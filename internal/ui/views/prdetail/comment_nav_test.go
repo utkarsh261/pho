@@ -433,6 +433,10 @@ func (s *prServiceStub) LoadPRCommits(_ context.Context, _ domain.Repository, _ 
 func (s *prServiceStub) LoadCommitDiff(_ context.Context, _ domain.Repository, _ string, _ bool) (diffmodel.DiffModel, error) {
 	return diffmodel.DiffModel{}, nil
 }
+
+func (s *prServiceStub) LoadRangeDiff(_ context.Context, _ domain.Repository, _ int, _, _ string, _ bool) (diffmodel.RangeDiff, error) {
+	return diffmodel.RangeDiff{}, nil
+}
 func (s *prServiceStub) PostComment(_ context.Context, _ domain.Repository, _, _ string) error {
 	return nil
 }
