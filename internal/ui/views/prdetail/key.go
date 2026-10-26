@@ -59,6 +59,20 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		return m, nil
 	}
 
+	// Confirm a CI job re-run.
+	if m.ciRerun.confirm {
+		cmd := m.handleRerunConfirmKey(msg)
+		m.LastKey = ""
+		return m, cmd
+	}
+
+	// The CI log view takes its own keys; the rest fall through.
+	if m.ciLog.active {
+		if cmd, handled := m.handleCILogKey(msg); handled {
+			return m, cmd
+		}
+	}
+
 	// Confirm discard state.
 	if m.confirmDiscardAll {
 		switch msg.String() {
@@ -209,6 +223,12 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		if m.CommitMode {
 			return m, nil
 		}
+		if m.leftPanel.Focus == FocusCI {
+			if check, jobID, ok := m.selectedActionsCheck(); ok {
+				m.startRerun(check, jobID)
+			}
+			return m, nil
+		}
 		if m.PRService != nil && m.commentCursor >= 0 {
 			entries := m.commentEntries()
 			if m.commentCursor < len(entries) {
@@ -340,7 +360,7 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		if m.leftPanel.Focus == FocusFiles {
 			m.jumpToFile(m.leftPanel.Cursor)
 		} else if m.leftPanel.Focus == FocusCI {
-			return m, m.emitOpenBrowserCI()
+			return m, m.handleCIEnter()
 		} else if m.leftPanel.Focus == FocusContent && m.activeTab == TabComments && m.commentCursor >= 0 {
 			// Enter on a collapsed resolved summary expands it; otherwise jump to code.
 			entries := m.commentEntries()

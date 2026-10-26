@@ -35,6 +35,9 @@ func (m *PRDetailModel) StatusHint() string {
 	if m.confirmDiscardAll {
 		return fmt.Sprintf("Discard all %d drafts? (y/n)", len(m.drafts))
 	}
+	if hint := m.ciRerunPrompt(); hint != "" {
+		return hint
+	}
 	switch m.mergeStep {
 	case mergeStepSelectMethod:
 		return fmt.Sprintf("Merge #%d: [s]quash [r]ebase [M]erge [esc]cancel", m.Summary.Number)
@@ -100,8 +103,16 @@ func (m *PRDetailModel) StatusHint() string {
 	if m.editErr != "" {
 		return m.editErr
 	}
+	// Below the other flows: a lingering re-run notice must not hide a
+	// merge, update, close or edit prompt started after it.
+	// diffNotice answers the key just pressed (it is cleared on the next),
+	// so it outranks the log's standing key hints, e.g. ctrl+p's "Diff still
+	// loading" while the log is open.
 	if m.diffNotice != "" {
 		return m.diffNotice
+	}
+	if hint := m.ciStatusHint(); hint != "" {
+		return hint
 	}
 	if m.draftsStale && len(m.drafts) > 0 {
 		return fmt.Sprintf("%d inline drafts belong to the previous head | D: Discard drafts", len(m.drafts))
@@ -266,6 +277,7 @@ func (m *PRDetailModel) isAnyActionInProgress() bool {
 		m.editPosting ||
 		m.editPrompt != "" ||
 		m.confirmDiscardAll ||
+		m.ciRerun.confirm ||
 		m.pendingToggle.active() ||
 		m.labelApply.executing
 }

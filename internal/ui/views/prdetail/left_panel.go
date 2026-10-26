@@ -41,6 +41,8 @@ type LeftPanelModel struct {
 	// Navigation state — mutated by PRDetailModel.Update
 	CIScroll int // index of first visible CI row
 	CICursor int // index of the highlighted (cursor) CI check
+	// CILogOpen keeps the cursor check highlighted while its log is shown.
+	CILogOpen bool
 
 	// HideCI suppresses the CI section entirely (used in commit mode).
 	HideCI bool
@@ -351,7 +353,7 @@ func (m *LeftPanelModel) renderCIArea(outerHeight int) string {
 }
 
 func (m *LeftPanelModel) renderCIRow(check domain.PreviewCheckRow, idx int) string {
-	isSelected := idx == m.CICursor && m.Focus == FocusCI
+	isSelected := idx == m.CICursor && (m.Focus == FocusCI || m.CILogOpen)
 
 	// FillBg (used for the selected row) re-applies the background after each
 	// reset, so the coloured icon is safe on the highlighted row too.

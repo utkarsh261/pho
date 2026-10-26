@@ -1036,6 +1036,30 @@ func TestSelectSamePRReusesModel(t *testing.T) {
 	}
 }
 
+// TestCIRefreshReachesPRDetailOffView verifies a re-run's delayed refresh is
+// delivered after the user has gone back to the dashboard, so a reopened
+// (reused) PR model doesn't keep stale checks.
+func TestCIRefreshReachesPRDetailOffView(t *testing.T) {
+	t.Parallel()
+
+	repo := testutil.Repo("acme/alpha")
+	prs := []domain.PullRequestSummary{pr(repo.FullName, 1, "Test PR")}
+	m := setupModelWithPRs(t, []domain.Repository{repo}, prs)
+	_, _ = m.Update(dashboard.SelectPRMsg{
+		Tab: domain.TabMyPRs, Index: 0, Repo: repo.FullName, Number: 1, Summary: prs[0],
+	})
+	m.openPRDetail()
+	m.handleBackToDashboard()
+
+	_, cmd := m.Update(prdetail.CIRefreshMsg{})
+	if cmd == nil {
+		t.Fatal("the refresh was dropped while the dashboard was active")
+	}
+	if _, ok := cmd().(cmds.PRDetailLoaded); !ok {
+		t.Error("the refresh should reload the PR detail")
+	}
+}
+
 // TestSelectDifferentPRConstructsNew verifies opening a different PR creates a new model.
 func TestSelectDifferentPRConstructsNew(t *testing.T) {
 	t.Parallel()

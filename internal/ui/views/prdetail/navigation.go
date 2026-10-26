@@ -183,6 +183,7 @@ func (m *PRDetailModel) GoToFile(path string) bool {
 	}
 	for i := range m.Diff.Files {
 		if FilePath(&m.Diff.Files[i]) == path {
+			m.closeCILog(false)
 			m.jumpToFile(i)
 			m.leftPanel.Cursor = i
 			m.ensureFileVisible()

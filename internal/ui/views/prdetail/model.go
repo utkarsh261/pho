@@ -259,6 +259,11 @@ type PRDetailModel struct {
 	labelApply labelApplyState
 	labelErr   string
 
+	// GitHub Actions job log shown in the right pane, and re-runs (cilog.go)
+	ciLog   ciLogState
+	ciRerun ciRerunState
+	ciSeq   uint64 // last ID given to a log request or a re-run notice
+
 	// ViewerLogin is the authenticated user's login, used for optimistic
 	// resolver display. May be empty if viewer resolution hasn't completed.
 	ViewerLogin string
@@ -303,7 +308,7 @@ const (
 type hunkLineKey struct{ fileIdx, hunkIdx, lineIdx int }
 
 func (m *PRDetailModel) isLoading() bool {
-	return m.DetailLoading || m.DiffLoading || m.commitsLoading || m.leftPanel.Loading
+	return m.DetailLoading || m.DiffLoading || m.commitsLoading || m.leftPanel.Loading || m.ciLog.loading
 }
 
 func (m *PRDetailModel) matchesPR(host, repo string, number int) bool {
@@ -545,6 +550,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		m.resetCommentCursor()
 		// Sync checks into left panel.
 		m.leftPanel.Checks = msg.Detail.Checks
+		m.reanchorCILog()
 		// Files with review threads must not stay auto-collapsed.
 		if m.Diff != nil && !m.collapseTouched {
 			m.applyAutoCollapse()
@@ -924,6 +930,25 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 			refreshCmd = m.loadPRDetailCmd(true)
 		}
 		return m, tea.Batch(spinCmd, composeCmd, refreshCmd)
+
+	case cmds.CILogLoaded:
+		m.handleCILogLoaded(msg)
+		return m, tea.Batch(spinCmd, composeCmd)
+
+	case cmds.CIRerunMsg:
+		return m, tea.Batch(spinCmd, composeCmd, m.handleCIRerun(msg))
+
+	case CINoticeClearMsg:
+		if m.isCIPR(msg.pr) && msg.id == m.ciRerun.noticeID {
+			m.ciRerun.notice = ""
+		}
+		return m, tea.Batch(spinCmd, composeCmd)
+
+	case CIRefreshMsg:
+		if !m.isCIPR(msg.pr) {
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		return m, tea.Batch(spinCmd, composeCmd, m.loadPRDetailCmd(true))
 
 	case cmds.UpdateBranchMsg:
 		if !m.matchesPR(msg.Host, msg.Repo, msg.Number) {
