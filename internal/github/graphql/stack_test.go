@@ -51,9 +51,34 @@ func TestNormalizeNativeStack(t *testing.T) {
 		t.Fatalf("layers not ordered by position: %+v", ns.Layers)
 	}
 
+	// A PR beyond the fetched page of layers still appears in its stack.
+	node.Number, node.StackEntry.Position = 40, 40
+	s, _ = normalizePullRequestSummary(testRepo(), node)
+	if l := s.NativeStack.Layers; len(l) != 4 || l[3].Number != 40 || l[3].Position != 40 {
+		t.Fatalf("layers = %+v, want #40 added on top", l)
+	}
+
 	node.Stack, node.StackEntry = nil, nil
 	if s, _ := normalizePullRequestSummary(testRepo(), node); s.NativeStack != nil {
 		t.Fatalf("expected no stack, got %+v", s.NativeStack)
+	}
+}
+
+func TestAllPRsQuerySkipsStacks(t *testing.T) {
+	q := buildAllPRsQuery(githubpkg.GitHubHostProfile{SupportsPRStack: true}, "o", "r", "")
+	if strings.Contains(q, "stack") {
+		t.Fatalf("palette query should not ask for stacks:\n%s", q)
+	}
+}
+
+func TestStackFieldErrorsDropStacks(t *testing.T) {
+	c := NewClient([]githubpkg.GitHubHostProfile{{Host: "h", SupportsPRStack: true}}, nil, nil)
+	errs := []graphQLError{{Message: "Resource not accessible by integration", Path: []any{"repository", "pullRequests", "nodes", 0.0, "stack"}}}
+	if !c.applyCapabilityFallback("h", errs) || c.profileForHost("h").SupportsPRStack {
+		t.Fatal("an error under the stack field should turn stacks off")
+	}
+	if c.applyCapabilityFallback("h", []graphQLError{{Message: "Something else", Path: []any{"repository"}}}) {
+		t.Fatal("unrelated errors should not trigger a fallback")
 	}
 }
 

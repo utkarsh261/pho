@@ -136,35 +136,65 @@ func landingTag(th *theme.Theme, st *domain.Stack) string {
 	return th.CIPending.Render(fmt.Sprintf("#%d blocks %d above", mem.Number, above))
 }
 
-// CIIcon is a PR's CI state as a coloured glyph.
-func CIIcon(th *theme.Theme, status domain.CIStatus) string {
+// CIGlyph is a PR's CI state as a single character.
+func CIGlyph(status domain.CIStatus) string {
 	switch status {
 	case domain.CIStatusSuccess:
-		return th.CISuccess.Render("✓")
+		return "✓"
 	case domain.CIStatusFailure, domain.CIStatusError:
-		return th.CIFailure.Render("!")
+		return "!"
 	case domain.CIStatusPending:
-		return th.CIPending.Render("…")
+		return "…"
 	default:
-		return th.CIMuted.Render("·")
+		return "·"
 	}
 }
 
-// ReviewIcon is a PR's review decision as a coloured glyph; D for drafts.
-func ReviewIcon(th *theme.Theme, decision domain.ReviewDecision, isDraft bool) string {
+// ReviewGlyph is a PR's review decision as a single character; D for drafts.
+func ReviewGlyph(decision domain.ReviewDecision, isDraft bool) string {
 	if isDraft {
-		return th.ReviewDraft.Render("D")
+		return "D"
 	}
 	switch decision {
 	case domain.ReviewDecisionApproved:
-		return th.ReviewApproved.Render("✓")
+		return "✓"
 	case domain.ReviewDecisionChangesRequested:
-		return th.ReviewChanges.Render("!")
+		return "!"
 	case domain.ReviewDecisionReviewRequired:
-		return th.ReviewRequired.Render("?")
+		return "?"
 	default:
-		return th.ReviewMuted.Render("·")
+		return "·"
 	}
+}
+
+// CIIcon is CIGlyph coloured for the state.
+func CIIcon(th *theme.Theme, status domain.CIStatus) string {
+	style := th.CIMuted
+	switch status {
+	case domain.CIStatusSuccess:
+		style = th.CISuccess
+	case domain.CIStatusFailure, domain.CIStatusError:
+		style = th.CIFailure
+	case domain.CIStatusPending:
+		style = th.CIPending
+	}
+	return style.Render(CIGlyph(status))
+}
+
+// ReviewIcon is ReviewGlyph coloured for the decision.
+func ReviewIcon(th *theme.Theme, decision domain.ReviewDecision, isDraft bool) string {
+	style := th.ReviewMuted
+	switch {
+	case isDraft:
+		style = th.ReviewDraft
+	case decision == domain.ReviewDecisionApproved:
+		style = th.ReviewApproved
+	case decision == domain.ReviewDecisionChangesRequested:
+		style = th.ReviewChanges
+	case decision == domain.ReviewDecisionReviewRequired:
+		style = th.ReviewRequired
+	}
+	return style.Render(ReviewGlyph(decision, isDraft))
 }
 
 func truncate(s string, width int) string {

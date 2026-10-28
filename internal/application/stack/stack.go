@@ -86,7 +86,7 @@ func buildInferred(prs []domain.PullRequestSummary, idx domain.StackIndex) {
 	heads := map[string]*domain.PullRequestSummary{}
 	for i := range prs {
 		pr := &prs[i]
-		if !eligible(pr, idx) || pr.IsCrossRepository || pr.HeadRefName == "" {
+		if !eligible(pr, idx) || pr.IsCrossRepository || pr.HeadRefName == "" || longLived(pr.HeadRefName) {
 			continue
 		}
 		k := branchKey(pr.Repo, pr.HeadRefName)
@@ -109,7 +109,15 @@ func buildInferred(prs []domain.PullRequestSummary, idx domain.StackIndex) {
 		parent[pr] = p
 		children[p] = append(children[p], pr)
 	}
-	for _, kids := range children {
+	for p, kids := range children {
+		if len(kids) > maxChildren {
+			// So many PRs on one branch make it a shared trunk, not a stack.
+			for _, kid := range kids {
+				delete(parent, kid)
+			}
+			delete(children, p)
+			continue
+		}
 		sort.Slice(kids, func(i, j int) bool { return kids[i].Number > kids[j].Number })
 	}
 
@@ -161,6 +169,20 @@ func eligible(pr *domain.PullRequestSummary, idx domain.StackIndex) bool {
 		return false
 	}
 	return idx.Lookup(pr.Repo, pr.Number) == nil
+}
+
+// maxChildren is the most PRs one PR can carry before its branch counts as
+// a shared trunk rather than the base of a stack.
+const maxChildren = 5
+
+// longLived reports whether branch is one teams merge into rather than
+// stack on, as in git-flow: a PR from develop is a release, not a stack.
+func longLived(branch string) bool {
+	switch strings.ToLower(branch) {
+	case "main", "master", "trunk", "develop", "development", "dev", "next", "staging", "production":
+		return true
+	}
+	return strings.HasPrefix(branch, "release/") || strings.HasPrefix(branch, "releases/")
 }
 
 func branchKey(repo, branch string) string {

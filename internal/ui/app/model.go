@@ -1037,13 +1037,19 @@ func (m *Model) handleInvolvingLoaded(msg cmds.InvolvingLoaded) tea.Cmd {
 	prev, hadPrev := m.currentSelectedPR()
 	m.currentInvolving = msg.Snapshot
 	m.hydratedRepos[msg.Repo] = struct{}{}
-	m.rebuildStacks()
-	m.state.Dashboard.PRsByTab[domain.TabInvolving] = m.groupStacks(msg.Snapshot.PRs)
 	m.state.Dashboard.LastRefreshAt[domain.TabInvolving] = msg.Snapshot.FetchedAt
 	m.state.Dashboard.FreshnessByTab[domain.TabInvolving] = freshnessFor(msg.Err)
-	m.prList.SetTabSnapshot(domain.TabInvolving, m.state.Dashboard.PRsByTab[domain.TabInvolving], msg.Snapshot.TotalCount, msg.Snapshot.Truncated)
-	m.prList.Active = m.state.Dashboard.ActiveTab
-	m.restoreSelection(prev, hadPrev)
+	if isZeroDashboardSnapshot(m.currentDashboard) {
+		m.rebuildStacks(m.allOpenPRs())
+		m.state.Dashboard.PRsByTab[domain.TabInvolving] = m.groupStacks(msg.Snapshot.PRs)
+		m.prList.SetTabSnapshot(domain.TabInvolving, m.state.Dashboard.PRsByTab[domain.TabInvolving], msg.Snapshot.TotalCount, msg.Snapshot.Truncated)
+		m.prList.Active = m.state.Dashboard.ActiveTab
+		m.restoreSelection(prev, hadPrev)
+	} else {
+		// Involving PRs can join or complete stacks, so every tab is
+		// regrouped against the new stacks, Involving included.
+		m.rebuildDashboardTabs()
+	}
 	m.syncPaletteStats()
 
 	delete(m.state.Jobs.InFlight, jobKey(msg.Repo, "involving"))
@@ -1615,11 +1621,11 @@ func (m *Model) rebuildDashboardTabs() {
 	_, hasMore := m.nextOpenPRsPage()
 	total := m.currentDashboard.TotalCount
 	classified := m.classifier.Classify(viewer, open)
-	m.rebuildStacks()
+	m.rebuildStacks(open)
 	m.state.Dashboard.PRsByTab[domain.TabMyPRs] = m.groupStacks(classified[domain.TabMyPRs])
 	m.state.Dashboard.PRsByTab[domain.TabNeedsReview] = m.groupStacks(classified[domain.TabNeedsReview])
 	m.state.Dashboard.PRsByTab[domain.TabAll] = m.groupStacks(open)
-	if inv := m.currentInvolving; !isZeroInvolvingSnapshot(inv) && sameRepo(inv.Repo.FullName, m.selectedRepoName()) {
+	if inv, ok := m.selectedInvolving(); ok {
 		// New pages can complete a stack that Involving shows part of.
 		m.state.Dashboard.PRsByTab[domain.TabInvolving] = m.groupStacks(inv.PRs)
 		m.prList.SetTabSnapshot(domain.TabInvolving, m.state.Dashboard.PRsByTab[domain.TabInvolving], inv.TotalCount, inv.Truncated)

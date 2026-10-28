@@ -83,6 +83,24 @@ func TestPRListLoneStackMemberShowsPosition(t *testing.T) {
 	}
 }
 
+func TestPRListRailOnlyReadsTopFirst(t *testing.T) {
+	t.Parallel()
+	prs := stackedPRs()
+	idx := stack.Build(prs)
+	// Ungrouped recency order can list a stack's PRs bottom first.
+	upsideDown := strings.Join(listLines(t, []domain.PullRequestSummary{prs[2], prs[1]}, idx, 0), "\n")
+	if strings.Contains(upsideDown, "│") || strings.Contains(upsideDown, "╰─") {
+		t.Errorf("bottom-first rows should not be joined:\n%s", upsideDown)
+	}
+	if !strings.Contains(upsideDown, "· stack 1/3") || !strings.Contains(upsideDown, "· stack 2/3") {
+		t.Errorf("unjoined members should show their place:\n%s", upsideDown)
+	}
+	topFirst := strings.Join(listLines(t, []domain.PullRequestSummary{prs[1], prs[2]}, idx, 0), "\n")
+	if !strings.Contains(topFirst, "╰─ a") {
+		t.Errorf("top-first rows should be joined:\n%s", topFirst)
+	}
+}
+
 func TestPRListWithoutStacksUnchanged(t *testing.T) {
 	t.Parallel()
 	prs := []domain.PullRequestSummary{makePR(1, "One", "a"), makePR(2, "Two", "b")}

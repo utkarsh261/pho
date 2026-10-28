@@ -327,7 +327,7 @@ func (m *PRListPanelModel) visibleRows() []prRow {
 func (m *PRListPanelModel) renderRow(pr domain.PullRequestSummary, index int) prRow {
 	selected := index == m.Cursor
 	if m.theme == nil {
-		return m.renderRowPlain(pr, selected)
+		return m.renderRowPlain(pr, index, selected)
 	}
 	th := m.theme
 
@@ -413,10 +413,18 @@ func (m *PRListPanelModel) railAt(index int) stackRail {
 	if st == nil {
 		return stackRail{}
 	}
-	in := func(i int) bool {
-		return i >= 0 && i < len(prs) && m.stacks.Lookup(prs[i].Repo, prs[i].Number) == st
+	// A rail joins two rows only when they read top-first, as grouping lists
+	// them; in recency order a stack's PRs can sit the other way up.
+	joined := func(upper, lower int) bool {
+		if upper < 0 || lower >= len(prs) {
+			return false
+		}
+		a, b := prs[upper], prs[lower]
+		return m.stacks.Lookup(a.Repo, a.Number) == st && m.stacks.Lookup(b.Repo, b.Number) == st &&
+			st.IndexOf(a.Number) < st.IndexOf(b.Number)
 	}
-	r := stackRail{stack: st, grouped: in(index-1) || in(index+1), continues: in(index + 1)}
+	r := stackRail{stack: st, continues: joined(index, index+1)}
+	r.grouped = r.continues || joined(index-1, index)
 	r.member, _ = st.Member(pr.Number)
 	if sel, ok := m.currentSelected(); ok {
 		r.active = m.stacks.Lookup(sel.Repo, sel.Number) == st
@@ -439,7 +447,7 @@ func parentMerged(st *domain.Stack, mem domain.StackMember) bool {
 	return ok && p.State == domain.PRStateMerged
 }
 
-func (m *PRListPanelModel) renderRowPlain(pr domain.PullRequestSummary, selected bool) prRow {
+func (m *PRListPanelModel) renderRowPlain(pr domain.PullRequestSummary, index int, selected bool) prRow {
 	bar := " "
 	if selected {
 		bar = "▌"
@@ -452,22 +460,13 @@ func (m *PRListPanelModel) renderRowPlain(pr domain.PullRequestSummary, selected
 	if branch == "" {
 		branch = pr.BaseRefName
 	}
-	if rail := m.railAt(m.indexOf(pr)); rail.grouped {
+	if rail := m.railAt(index); rail.grouped {
 		if rail.continues {
 			return prRow{line1: line1, line2: bar + "| " + branch + rail.forkNote, sep: " |"}
 		}
 		return prRow{line1: line1, line2: bar + "`-" + branch + rail.baseNote}
 	}
 	return prRow{line1: line1, line2: strings.TrimRight(bar+" "+branch, " ")}
-}
-
-func (m *PRListPanelModel) indexOf(pr domain.PullRequestSummary) int {
-	for i, p := range m.currentPRs() {
-		if p.Number == pr.Number && p.Repo == pr.Repo {
-			return i
-		}
-	}
-	return -1
 }
 
 // stateGlyph renders a coloured dot for the PR's state.

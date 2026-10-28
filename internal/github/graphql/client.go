@@ -465,8 +465,10 @@ func (c *Client) applyCapabilityFallback(host string, errs []graphQLError) bool 
 		if strings.Contains(msg, "headrefoid") {
 			needsHeadRefOIDFallback = true
 		}
-		// "Field 'stack' doesn't exist on type 'PullRequest'", likewise 'stackEntry'.
-		if strings.Contains(msg, "'stack") || strings.Contains(msg, "pullrequeststack") {
+		// "Field 'stack' doesn't exist on type 'PullRequest'", likewise
+		// 'stackEntry', or any other error raised under those fields (no
+		// access, preview not enabled): stacks are optional, the PRs aren't.
+		if strings.Contains(msg, "'stack") || strings.Contains(msg, "pullrequeststack") || underStackField(err.Path) {
 			needsStackFallback = true
 		}
 	}
@@ -495,6 +497,17 @@ func (c *Client) applyCapabilityFallback(host string, errs []graphQLError) bool 
 		changed = true
 	}
 	return changed
+}
+
+// underStackField reports whether an error's path runs through a PR's
+// stack or stackEntry field.
+func underStackField(path []any) bool {
+	for _, p := range path {
+		if s, ok := p.(string); ok && (s == "stack" || s == "stackEntry") {
+			return true
+		}
+	}
+	return false
 }
 
 type graphQLErrorList []graphQLError

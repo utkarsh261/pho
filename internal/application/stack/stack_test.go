@@ -1,6 +1,7 @@
 package stack
 
 import (
+	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -85,6 +86,23 @@ func TestBuildIgnoresCyclesForksAndClosed(t *testing.T) {
 	}
 	if idx := Build(prs); len(idx) != 0 {
 		t.Fatalf("expected no stacks, got %d entries", len(idx))
+	}
+}
+
+func TestBuildSkipsSharedBranches(t *testing.T) {
+	// git-flow: a release PR from develop, and feature PRs into develop.
+	prs := []domain.PullRequestSummary{pr(1, "develop", "main", 1), pr(2, "f1", "develop", 1), pr(3, "f2", "develop", 1)}
+	if idx := Build(prs); len(idx) != 0 {
+		t.Fatalf("develop is not a stack base, got %d entries", len(idx))
+	}
+
+	// A feature branch with more PRs on it than any stack would have.
+	prs = []domain.PullRequestSummary{pr(1, "platform", "main", 1)}
+	for n := 2; n <= maxChildren+2; n++ {
+		prs = append(prs, pr(n, fmt.Sprintf("f%d", n), "platform", 1))
+	}
+	if idx := Build(prs); len(idx) != 0 {
+		t.Fatalf("a branch with %d PRs on it is a trunk, got %d entries", maxChildren+1, len(idx))
 	}
 }
 

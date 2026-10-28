@@ -4,6 +4,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/utkarsh261/pho/internal/application/cmds"
 	"github.com/utkarsh261/pho/internal/domain"
 	"github.com/utkarsh261/pho/internal/testutil"
 )
@@ -45,5 +46,29 @@ func TestDashboardGroupsStacks(t *testing.T) {
 	plain.rebuildDashboardTabs()
 	if got := tabNumbers(plain, domain.TabAll); !slices.Equal(got, []int{2, 9, 1, 3}) {
 		t.Errorf("ungrouped = %v", got)
+	}
+}
+
+func TestInvolvingRegroupsEveryTab(t *testing.T) {
+	t.Parallel()
+	repo := testutil.Repo("acme/stack")
+	mk := func(n int, head, base string) domain.PullRequestSummary {
+		p := pr(repo.FullName, n, "layer "+head)
+		p.HeadRefName, p.BaseRefName = head, base
+		return p
+	}
+	// #2, the middle of 1 <- 2 <- 3, is only known to the Involving search.
+	m := setupModelWithPRs(t, []domain.Repository{repo}, []domain.PullRequestSummary{mk(3, "c", "b"), mk(9, "x", "main"), mk(1, "a", "main")})
+	if got := tabNumbers(m, domain.TabAll); !slices.Equal(got, []int{3, 9, 1}) {
+		t.Fatalf("before Involving: %v", got)
+	}
+	_, _ = m.Update(cmds.InvolvingLoaded{Repo: repo.FullName, Snapshot: domain.InvolvingSnapshot{
+		Repo: repo, PRs: []domain.PullRequestSummary{mk(2, "b", "a")}, TotalCount: 1, FetchedAt: fixedNow(),
+	}})
+	if got := tabNumbers(m, domain.TabAll); !slices.Equal(got, []int{3, 1, 9}) {
+		t.Errorf("All after Involving = %v, want the completed stack together: [3 1 9]", got)
+	}
+	if got := tabNumbers(m, domain.TabInvolving); !slices.Equal(got, []int{2}) {
+		t.Errorf("Involving = %v", got)
 	}
 }

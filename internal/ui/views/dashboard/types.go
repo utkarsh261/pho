@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/utkarsh261/pho/internal/domain"
+	"github.com/utkarsh261/pho/internal/ui/components/stackmap"
 )
 
 const timeLayout = "2006-01-02 15:04 MST"
@@ -211,32 +212,11 @@ func makeDerivedPreview(summary domain.PullRequestSummary) domain.PRPreviewSnaps
 }
 
 func ciIcon(status domain.CIStatus) string {
-	switch status {
-	case domain.CIStatusSuccess:
-		return "✓"
-	case domain.CIStatusFailure, domain.CIStatusError:
-		return "!"
-	case domain.CIStatusPending:
-		return "…"
-	default:
-		return "·"
-	}
+	return stackmap.CIGlyph(status)
 }
 
 func reviewIcon(decision domain.ReviewDecision, isDraft bool) string {
-	if isDraft {
-		return "D"
-	}
-	switch decision {
-	case domain.ReviewDecisionApproved:
-		return "✓"
-	case domain.ReviewDecisionChangesRequested:
-		return "!"
-	case domain.ReviewDecisionReviewRequired:
-		return "?"
-	default:
-		return "·"
-	}
+	return stackmap.ReviewGlyph(decision, isDraft)
 }
 
 func reviewLabel(decision domain.ReviewDecision, isDraft bool) string {

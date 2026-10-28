@@ -183,6 +183,7 @@ func buildPreviewQuery(profile githubpkg.GitHubHostProfile) string {
 }
 
 func buildAllPRsQuery(profile githubpkg.GitHubHostProfile, owner, name, after string) string {
+	profile.SupportsPRStack = false // the jump palette never shows stacks
 	afterClause := ""
 	if after != "" {
 		afterClause = fmt.Sprintf(`, after: "%s"`, after)
