@@ -1167,11 +1167,7 @@ func (m *Model) handleChangeTabMsg(msg dashboard.ChangeTabMsg) tea.Cmd {
 	m.prList.Cursor = 0
 	m.prList.Scroll = 0
 	m.state.Dashboard.SelectedIndex = 0
-	m.state.Dashboard.Preview = nil
-	m.state.Dashboard.PreviewLoading = false
-	m.preview = dashboard.NewPreviewPanelModel()
-	m.preview.SetTheme(m.theme)
-	m.preview.SetRect(m.layout.Current.Preview, m.bodyHeight()-2)
+	m.resetPreviewState()
 	m.syncStatus()
 	return batch(m.syncCurrentSelection(), m.maybeLoadMoreOpenPRs())
 }
