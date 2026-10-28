@@ -703,3 +703,26 @@ func (s *prService) LoadJobLog(_ context.Context, _ domain.Repository, _ int64) 
 func (s *prService) RerunJob(_ context.Context, _ domain.Repository, _ int, _ int64) error {
 	return nil
 }
+
+// stackedPRService records which merge MergePRCmd chose.
+type stackedPRService struct {
+	prService
+	stacked bool
+}
+
+func (s *stackedPRService) MergeStackedPR(_ context.Context, _ domain.Repository, _ int, _, _ string) error {
+	s.stacked = true
+	return nil
+}
+
+func TestMergePRCmdRoutesStackedPRs(t *testing.T) {
+	for _, inStack := range []bool{false, true} {
+		svc := &stackedPRService{}
+		if msg := cmds.MergePRCmd(svc, domain.Repository{}, 1, "id", "sha", "MERGE", inStack)().(cmds.MergePRMsg); msg.Err != nil {
+			t.Fatalf("merge: %v", msg.Err)
+		}
+		if svc.stacked != inStack {
+			t.Errorf("inStack=%v: used the stacked merge = %v", inStack, svc.stacked)
+		}
+	}
+}

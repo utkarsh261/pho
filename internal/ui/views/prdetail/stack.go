@@ -41,14 +41,12 @@ func (m *PRDetailModel) StartOn(tab ContentTab, focus PRDetailFocus) tea.Cmd {
 	if m.CommitMode {
 		return nil
 	}
+	needLoad := tab == TabCommits && !m.commitsLoaded && !m.commitsLoading && m.PRService != nil
+	m.switchTab(tab)
+	// After switchTab, which focuses the content pane.
 	if focus != FocusCI {
 		m.leftPanel.Focus = focus
 	}
-	if tab == m.activeTab {
-		return nil
-	}
-	needLoad := tab == TabCommits && !m.commitsLoaded && !m.commitsLoading && m.PRService != nil
-	m.switchTab(tab)
 	if needLoad {
 		return cmds.LoadPRCommitsCmd(m.PRService, m.Repo, m.Summary.Number, m.Summary.HeadRefOID, false)
 	}
@@ -100,7 +98,7 @@ func (m *PRDetailModel) stackPath() (path []int, current int) {
 	if !ok {
 		return nil, 0
 	}
-	for p := mem.Parent; p != 0; {
+	for p := mem.Parent; p != 0 && len(path) < len(st.Members); {
 		path = append([]int{p}, path...)
 		pm, ok := st.Member(p)
 		if !ok {

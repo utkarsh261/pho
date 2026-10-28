@@ -197,19 +197,24 @@ func (s *PRService) MergePR(ctx context.Context, repo domain.Repository, number 
 	s.logDebug("merge pr", "repo", repo.FullName, "number", number, "method", method)
 	err := s.Client.MergePullRequest(ctx, repo.Host, prID, headRefOID, method)
 	if err != nil && strings.Contains(err.Error(), "asynchronous merge") {
-		// GitHub only merges PRs in a native stack through its async REST API.
+		// A native stack pho didn't know about: GitHub only merges those
+		// through its async REST API.
 		err = s.mergeAsync(ctx, repo, number, headRefOID, method)
 	}
 	if err != nil {
 		s.logWarn("merge pr failed", "repo", repo.FullName, "number", number, "err", err)
 		return err
 	}
-	// Invalidate preview cache for this PR so the merged state is visible.
-	previewKey := previewCacheKey(repo.Host, repoFullName(repo), number)
-	if delErr := s.Cache.Delete(ctx, previewKey); delErr != nil {
-		s.logWarn("merge pr cache delete failed", "key", previewKey, "err", delErr)
-	}
+	s.dropPreview(ctx, repo, number)
 	return nil
+}
+
+// dropPreview invalidates a PR's preview cache so its new state is visible.
+func (s *PRService) dropPreview(ctx context.Context, repo domain.Repository, number int) {
+	previewKey := previewCacheKey(repo.Host, repoFullName(repo), number)
+	if err := s.Cache.Delete(ctx, previewKey); err != nil {
+		s.logWarn("preview cache delete failed", "key", previewKey, "err", err)
+	}
 }
 
 // UpdateBranch merges base into the PR head branch and invalidates the preview cache.

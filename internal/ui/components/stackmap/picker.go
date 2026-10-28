@@ -49,6 +49,11 @@ func (p *Picker) Move(delta int) {
 	p.cursor = min(max(p.cursor+delta, 0), len(p.stack.Members)-1)
 }
 
+// Stack is the stack on show, nil when closed.
+func (p Picker) Stack() *domain.Stack {
+	return p.stack
+}
+
 // Selected is the PR under the selection.
 func (p Picker) Selected() (domain.StackMember, bool) {
 	if p.stack == nil || p.cursor < 0 || p.cursor >= len(p.stack.Members) {

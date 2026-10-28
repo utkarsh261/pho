@@ -135,6 +135,7 @@ type Model struct {
 	currentInvolving domain.InvolvingSnapshot
 	involvingRepo    string // the repo currentInvolving was loaded for
 	stackPicker      stackmap.Picker
+	previewBehind    bool // the cursor moved while PR detail hid the preview
 	// stacks indexes the selected repo's stacked PRs.
 	stacks    domain.StackIndex
 	openPages openPRPages
@@ -1713,7 +1714,7 @@ func (m *Model) recentTabPRs() ([]domain.PullRequestSummary, time.Time) {
 }
 
 func (m *Model) currentSelectedPR() (domain.PullRequestSummary, bool) {
-	prs := m.currentPRsForTab(m.prList.Active)
+	prs := m.state.Dashboard.PRsByTab[m.prList.Active]
 	if len(prs) == 0 {
 		return domain.PullRequestSummary{}, false
 	}
@@ -2161,6 +2162,11 @@ func (m *Model) handleBackToDashboard() tea.Cmd {
 	m.previousFocus = domain.FocusPreviewPanel
 	m.rebuildDashboardTabs()
 	m.syncStatus()
+	if m.previewBehind {
+		// The cursor moved while hopping along a stack.
+		m.previewBehind = false
+		return m.syncCurrentSelection()
+	}
 	return nil
 }
 

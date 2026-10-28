@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/utkarsh261/pho/internal/domain"
 	"github.com/utkarsh261/pho/internal/github/rest"
 	pholog "github.com/utkarsh261/pho/internal/log"
 )
@@ -81,5 +82,70 @@ func TestMergePRKeepsGraphQLForUnstackedPRs(t *testing.T) {
 	svc := &PRService{Cache: newTestCoordinator(t), Client: &fakeGitHubClient{}, Log: pholog.NewNop()}
 	if err := svc.MergePR(context.Background(), testRepo(), 42, "pr_1", "head1", "MERGE"); err != nil {
 		t.Fatalf("merge: %v", err)
+	}
+}
+
+func TestMergeStackedPRGoesStraightToAsync(t *testing.T) {
+	t.Parallel()
+	puts := 0
+	svc := asyncMergeService(t, func(w http.ResponseWriter, r *http.Request) {
+		puts++
+		_, _ = w.Write([]byte(`{"status":"merged","details":{}}`))
+	})
+	svc.Client = &fakeGitHubClient{} // a GraphQL merge would succeed: it must not be tried
+	if err := svc.MergeStackedPR(context.Background(), testRepo(), 42, "head1", "MERGE"); err != nil {
+		t.Fatalf("merge: %v", err)
+	}
+	if puts != 1 {
+		t.Errorf("merge-async calls = %d, want 1", puts)
+	}
+}
+
+func TestMergeAsyncPollAccepts202(t *testing.T) {
+	t.Parallel()
+	polls := 0
+	svc := asyncMergeService(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(`{"status":"pending","details":{"uuid":"u1"}}`))
+			return
+		}
+		polls++
+		if polls == 1 {
+			w.WriteHeader(http.StatusAccepted) // still running
+			_, _ = w.Write([]byte(`{"status":"pending","details":{"uuid":"u1"}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"status":"merged","details":{}}`))
+	})
+	if err := svc.MergeStackedPR(context.Background(), testRepo(), 42, "head1", "MERGE"); err != nil {
+		t.Fatalf("a 202 while polling is not a failure: %v", err)
+	}
+}
+
+func TestMergeAsyncConflictWithoutMergeIsAnError(t *testing.T) {
+	t.Parallel()
+	svc := asyncMergeService(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"message":"Head branch was modified"}`))
+	})
+	err := svc.MergeStackedPR(context.Background(), testRepo(), 42, "head1", "MERGE")
+	if err == nil || !strings.Contains(err.Error(), "Head branch was modified") {
+		t.Fatalf("err = %v, want GitHub's message", err)
+	}
+}
+
+// Not parallel: it shortens the package's merge deadline.
+func TestMergeAsyncStillRunningIsNotSuccess(t *testing.T) {
+	wait := mergeAsyncWait
+	mergeAsyncWait = 0
+	defer func() { mergeAsyncWait = wait }()
+	svc := asyncMergeService(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"status":"pending","details":{"uuid":"u1"}}`))
+	})
+	err := svc.MergeStackedPR(context.Background(), testRepo(), 42, "head1", "MERGE")
+	if !errors.Is(err, domain.ErrMergeInProgress) {
+		t.Fatalf("err = %v, want ErrMergeInProgress", err)
 	}
 }

@@ -53,6 +53,7 @@ func (m *Model) handleStackPickKey(msg tea.KeyMsg) tea.Cmd {
 		m.stackPicker.Move(-1)
 	case "enter":
 		mem, ok := m.stackPicker.Selected()
+		st := m.stackPicker.Stack()
 		m.stackPicker.Close()
 		m.syncStatus()
 		if !ok {
@@ -61,7 +62,7 @@ func (m *Model) handleStackPickKey(msg tea.KeyMsg) tea.Cmd {
 		if m.currentView() == domain.PrimaryViewPRDetail {
 			return m.handleStackHop(prdetail.StackHop{Number: mem.Number})
 		}
-		return m.openStackMember(mem, m.stacks.Lookup(m.selectedRepoName(), mem.Number))
+		return m.openStackMember(mem, st)
 	}
 	m.syncStatus()
 	return nil
@@ -93,7 +94,8 @@ func (m *Model) handleStackHop(msg prdetail.StackHop) tea.Cmd {
 }
 
 // openStackMember opens a stack member in PR detail and moves the dashboard
-// cursor onto it when it is listed.
+// cursor onto it when it is listed. The preview, hidden behind the detail
+// view, catches up when the dashboard is back on screen.
 func (m *Model) openStackMember(mem domain.StackMember, st *domain.Stack) tea.Cmd {
 	summary := domain.PullRequestSummary{Number: mem.Number, Title: mem.Title, State: mem.State, IsDraft: mem.IsDraft}
 	if mem.Summary != nil {
@@ -102,10 +104,9 @@ func (m *Model) openStackMember(mem domain.StackMember, st *domain.Stack) tea.Cm
 	if summary.Repo == "" && st != nil {
 		summary.Repo = st.Repo
 	}
-	var sync tea.Cmd
 	if m.prList.SelectNumber(mem.Number) {
 		m.state.Dashboard.SelectedIndex = m.prList.Cursor
-		sync = m.syncCurrentSelection()
+		m.previewBehind = true
 	}
-	return tea.Batch(m.openPRDetailForJump(summary), sync)
+	return m.openPRDetailForJump(summary)
 }

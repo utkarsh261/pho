@@ -3,6 +3,7 @@ package prdetail
 import (
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -130,5 +131,29 @@ func TestStatusHintTeachesStackKeys(t *testing.T) {
 	}
 	if hint := makeReviewersModel(120, 30).StatusHint(); strings.Contains(hint, "stack") {
 		t.Errorf("unstacked hint = %q", hint)
+	}
+}
+
+func TestStartOnKeepsTabAndPanel(t *testing.T) {
+	t.Parallel()
+	for _, focus := range []PRDetailFocus{FocusFiles, FocusContent} {
+		m := stackedModel(120, 2, testStack(3))
+		m.StartOn(TabDiff, focus)
+		if m.ActiveTab() != TabDiff || m.PanelFocus() != focus {
+			t.Errorf("StartOn(Diff, %v) left tab %v, focus %v", focus, m.ActiveTab(), m.PanelFocus())
+		}
+	}
+}
+
+func TestHeaderSurvivesParentLoop(t *testing.T) {
+	t.Parallel()
+	st := testStack(3)
+	st.Members[2].Parent = 3 // #1 claims to sit on #3, which sits on #2, on #1
+	done := make(chan string, 1)
+	go func() { done <- stackedModel(120, 2, st).renderHeader() }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("renderHeader hung on a parent loop")
 	}
 }
