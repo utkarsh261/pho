@@ -135,6 +135,22 @@ func TestMergeAsyncConflictWithoutMergeIsAnError(t *testing.T) {
 	}
 }
 
+func TestMergeAsyncLongErrorKeepsGitHubsReason(t *testing.T) {
+	t.Parallel()
+	reason := "Repository rule violations found: " + strings.Repeat("a required check is missing; ", 30)
+	svc := asyncMergeService(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"message":           reason,
+			"documentation_url": "https://docs.github.com/rest/pulls/pulls#merge-a-pull-request-asynchronously",
+		})
+	})
+	err := svc.MergeStackedPR(context.Background(), testRepo(), 42, "head1", "MERGE")
+	if err == nil || err.Error() != reason {
+		t.Fatalf("err = %v, want GitHub's whole reason (%d bytes)", err, len(reason))
+	}
+}
+
 // Not parallel: it shortens the package's merge deadline.
 func TestMergeAsyncStillRunningIsNotSuccess(t *testing.T) {
 	wait := mergeAsyncWait

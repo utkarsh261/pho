@@ -237,6 +237,10 @@ func (f *fakePRService) LoadDraftComments(ctx context.Context, repo domain.Repos
 func (f *fakePRService) DeleteDraftComments(ctx context.Context, repo domain.Repository, number int, headSHA string) error {
 	return nil
 }
+func (f *fakePRService) MergeStackedPR(_ context.Context, _ domain.Repository, _ int, _, _ string) error {
+	return nil
+}
+
 func (f *fakePRService) MergePR(ctx context.Context, repo domain.Repository, number int, prID string, headRefOID string, method string) error {
 	return nil
 }

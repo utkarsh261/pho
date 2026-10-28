@@ -61,6 +61,10 @@ func (s *resolvePRService) LoadDraftComments(_ context.Context, _ domain.Reposit
 func (s *resolvePRService) DeleteDraftComments(_ context.Context, _ domain.Repository, _ int, _ string) error {
 	return nil
 }
+func (s *resolvePRService) MergeStackedPR(_ context.Context, _ domain.Repository, _ int, _, _ string) error {
+	return nil
+}
+
 func (s *resolvePRService) MergePR(_ context.Context, _ domain.Repository, _ int, _, _, _ string) error {
 	return nil
 }

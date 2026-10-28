@@ -3,6 +3,7 @@ package rest
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -53,12 +54,16 @@ func (c *Client) mergeAsyncCall(ctx context.Context, logMsg, method, url string,
 	for _, code := range ok {
 		accepted = accepted || status == code
 	}
-	if !accepted {
-		return MergeAsyncResult{}, fmt.Errorf("rest: unexpected status %d: %s", status, string(body))
-	}
 	var out MergeAsyncResult
 	if err := json.Unmarshal(body, &out); err != nil {
-		return MergeAsyncResult{}, fmt.Errorf("rest: decode response: %w", err)
+		// Show what GitHub said rather than a parse error.
+		return MergeAsyncResult{}, fmt.Errorf("rest: unexpected reply %d: %s", status, bodySnippet(body))
+	}
+	if !accepted && out.Message != "" {
+		return MergeAsyncResult{}, errors.New(out.Message)
+	}
+	if !accepted {
+		return MergeAsyncResult{}, fmt.Errorf("rest: unexpected status %d: %s", status, bodySnippet(body))
 	}
 	return out, nil
 }

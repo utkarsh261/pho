@@ -557,6 +557,10 @@ func (s *prService) LoadDraftComments(_ context.Context, _ domain.Repository, _ 
 func (s *prService) DeleteDraftComments(_ context.Context, _ domain.Repository, _ int, _ string) error {
 	return nil
 }
+func (s *prService) MergeStackedPR(_ context.Context, _ domain.Repository, _ int, _, _ string) error {
+	return nil
+}
+
 func (s *prService) MergePR(_ context.Context, _ domain.Repository, _ int, _, _, _ string) error {
 	return nil
 }

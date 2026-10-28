@@ -238,6 +238,10 @@ func (s *stubPRService) LoadDraftComments(_ context.Context, _ domain.Repository
 func (s *stubPRService) DeleteDraftComments(_ context.Context, _ domain.Repository, _ int, _ string) error {
 	return nil
 }
+func (s *stubPRService) MergeStackedPR(_ context.Context, _ domain.Repository, _ int, _, _ string) error {
+	return nil
+}
+
 func (s *stubPRService) MergePR(_ context.Context, _ domain.Repository, _ int, _, _, _ string) error {
 	return nil
 }

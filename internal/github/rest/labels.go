@@ -143,7 +143,7 @@ func labelStatusErr(status int, body []byte, want int, op LabelOp, owner, repo s
 			return errors.New(msg)
 		}
 	}
-	return fmt.Errorf("rest: unexpected status %d: %s", status, string(body))
+	return fmt.Errorf("rest: unexpected status %d: %s", status, bodySnippet(body))
 }
 
 func forbiddenForOtherReasons(body []byte) bool {
@@ -192,6 +192,18 @@ func validationMessage(body []byte) string {
 	return e.Message
 }
 
+// maxJSONBodySize caps a sendJSON reply. Callers parse it, error replies
+// included, so it must fit GitHub's longer messages whole.
+const maxJSONBodySize = 64 << 10
+
+// bodySnippet is the start of a reply, short enough to show in an error.
+func bodySnippet(body []byte) string {
+	if len(body) > maxErrorBodySize {
+		return string(body[:maxErrorBodySize]) + "…"
+	}
+	return string(body)
+}
+
 // sendJSON performs an authenticated request with an optional JSON body and
 // returns the status and (size-capped) response body.
 func (c *Client) sendJSON(ctx context.Context, logMsg, method, u string, payload any) (int, []byte, error) {
@@ -227,6 +239,6 @@ func (c *Client) sendJSON(ctx context.Context, logMsg, method, u string, payload
 	}
 	defer resp.Body.Close()
 	statusCode = resp.StatusCode
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodySize))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxJSONBodySize))
 	return resp.StatusCode, body, nil
 }

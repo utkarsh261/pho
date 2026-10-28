@@ -62,6 +62,10 @@ func (s *mergePRService) LoadDraftComments(_ context.Context, _ domain.Repositor
 func (s *mergePRService) DeleteDraftComments(_ context.Context, _ domain.Repository, _ int, _ string) error {
 	return nil
 }
+func (s *mergePRService) MergeStackedPR(_ context.Context, _ domain.Repository, _ int, _, _ string) error {
+	return nil
+}
+
 func (s *mergePRService) MergePR(ctx context.Context, repo domain.Repository, number int, prID, headRefOID, method string) error {
 	if s.mergePRFn != nil {
 		return s.mergePRFn(ctx, repo, number, prID, headRefOID, method)
