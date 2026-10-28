@@ -45,6 +45,13 @@ func (m *PRDetailModel) StatusHint() string {
 	case mergeStepSelectMethod:
 		return fmt.Sprintf("Merge #%d: [s]quash [r]ebase [M]erge [esc]cancel", m.Summary.Number)
 	case mergeStepConfirm:
+		if m.Stack != nil && m.Stack.Native {
+			if mem, ok := m.Stack.Member(m.Summary.Number); ok && mem.Parent != 0 {
+				if below, _ := m.Stack.Member(mem.Parent); below.State == domain.PRStateOpen {
+					return fmt.Sprintf("%s and merge #%d? #%d below it is still open (y/n)", strings.ToLower(m.mergeMethod), m.Summary.Number, mem.Parent)
+				}
+			}
+		}
 		return fmt.Sprintf("%s and merge #%d? (y/n)", strings.ToLower(m.mergeMethod), m.Summary.Number)
 	case mergeStepChecking:
 		return "Checking mergeability..."
@@ -132,6 +139,9 @@ func (m *PRDetailModel) StatusHint() string {
 	hint := "Tab: Switch | Space: Visual | 1/2/3/4: Tabs | R: Refresh | /: Search | ?"
 	if len(m.drafts) > 0 {
 		hint = "Tab: Switch | Space: Visual | 1/2/3/4: Tabs | R: Refresh | /: Search | D: Discard drafts | ?"
+	}
+	if m.Stack != nil {
+		hint = strings.TrimSuffix(hint, "?") + "{/}: Down/Up stack | S: Stack | ?"
 	}
 	return hint
 }

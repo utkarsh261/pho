@@ -141,6 +141,16 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		return m, func() tea.Msg { return OpenThemePicker{} }
 	case "L":
 		return m, m.labelKey()
+	case "{", "}":
+		if m.CommitMode {
+			return m, nil
+		}
+		return m, m.stackHop(msg.String() == "}")
+	case "S":
+		if m.CommitMode {
+			return m, nil
+		}
+		return m, m.stackPickKey()
 	case "ctrl+p":
 		if m.Diff == nil || len(m.Diff.Files) == 0 {
 			m.diffNotice = "No files to go to"

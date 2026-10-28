@@ -107,6 +107,9 @@ const scrollPadding = 4
 type PRDetailModel struct {
 	Summary domain.PullRequestSummary
 
+	// Stack is the stack this PR belongs to, nil when it isn't stacked.
+	Stack *domain.Stack
+
 	Detail *domain.PRPreviewSnapshot
 
 	Diff *model.DiffModel

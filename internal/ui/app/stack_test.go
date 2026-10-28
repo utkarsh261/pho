@@ -2,11 +2,15 @@ package app
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/utkarsh261/pho/internal/application/cmds"
+
 	"github.com/utkarsh261/pho/internal/domain"
 	"github.com/utkarsh261/pho/internal/testutil"
+	"github.com/utkarsh261/pho/internal/ui/views/prdetail"
 )
 
 func setupStack(t *testing.T) *Model {
@@ -21,6 +25,7 @@ func setupStack(t *testing.T) *Model {
 	prs := []domain.PullRequestSummary{mk(2, "b", "a"), mk(9, "x", "main"), mk(1, "a", "main"), mk(3, "c", "b")}
 	m := setupModelWithPRs(t, []domain.Repository{repo}, prs)
 	m.focus = domain.FocusPRListPanel
+	m.syncStatus()
 	return m
 }
 
@@ -39,6 +44,9 @@ func TestDashboardGroupsStacks(t *testing.T) {
 		if got := tabNumbers(m, tab); !slices.Equal(got, []int{3, 2, 1, 9}) {
 			t.Errorf("%s = %v, want the stack together top-first: [3 2 1 9]", tab, got)
 		}
+	}
+	if !strings.Contains(m.status.View(), "S: Stack") {
+		t.Error("status bar should offer S on a stacked PR")
 	}
 
 	plain := setupStack(t)
@@ -83,5 +91,84 @@ func TestInvolvingWithoutRepoNameStillFillsTab(t *testing.T) {
 	}})
 	if got := tabNumbers(m, domain.TabInvolving); !slices.Equal(got, []int{9}) {
 		t.Errorf("Involving = %v, want [9]", got)
+	}
+}
+
+func stackKey(s string) tea.KeyMsg {
+	if s == "esc" {
+		return tea.KeyMsg{Type: tea.KeyEsc}
+	}
+	if s == "enter" {
+		return tea.KeyMsg{Type: tea.KeyEnter}
+	}
+	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
+}
+
+func TestStackHopKeepsTabAndCursor(t *testing.T) {
+	t.Parallel()
+	m := setupStack(t)
+	m.prList.SelectNumber(1)
+	_, cmd := m.Update(stackKey("enter"))
+	drainCmds(m, cmd)
+	if m.currentView() != domain.PrimaryViewPRDetail || m.prDetail.Summary.Number != 1 {
+		t.Fatalf("expected #1 open, view %s", m.currentView())
+	}
+	if m.prDetail.Stack == nil {
+		t.Fatal("detail should know its stack")
+	}
+	_, cmd = m.Update(stackKey("2"))
+	drainCmds(m, cmd)
+
+	_, cmd = m.Update(stackKey("}"))
+	drainCmds(m, cmd)
+	_, cmd = m.Update(stackKey("}"))
+	drainCmds(m, cmd)
+	if m.prDetail.Summary.Number != 3 {
+		t.Fatalf("after two hops up, open PR = #%d, want #3", m.prDetail.Summary.Number)
+	}
+	if m.prDetail.ActiveTab() != prdetail.TabDiff || m.prDetail.PanelFocus() != prdetail.FocusContent {
+		t.Errorf("hop should keep the Diff tab and content focus, got %v / %v", m.prDetail.ActiveTab(), m.prDetail.PanelFocus())
+	}
+	if len(m.viewStack) != 2 {
+		t.Errorf("hops should replace the detail view, stack = %v", m.viewStack)
+	}
+
+	_, cmd = m.Update(stackKey("q"))
+	drainCmds(m, cmd)
+	if m.currentView() != domain.PrimaryViewDashboard {
+		t.Fatalf("esc should return to the dashboard, got %s", m.currentView())
+	}
+	if sel, _ := m.currentSelectedPR(); sel.Number != 3 {
+		t.Errorf("cursor on #%d, want #3 (the last PR read)", sel.Number)
+	}
+}
+
+func TestStackPickerOpensMember(t *testing.T) {
+	t.Parallel()
+	m := setupStack(t)
+	m.prList.SelectNumber(2)
+	_, _ = m.Update(stackKey("S"))
+	if !m.stackPicker.Visible {
+		t.Fatal("S should open the stack picker")
+	}
+	view := m.View()
+	for _, want := range []string{"Stack · 3 PRs onto main", "#3", "#1", "╰ main"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("picker missing %q", want)
+		}
+	}
+	_, _ = m.Update(stackKey("j")) // down to #1
+	_, cmd := m.Update(stackKey("enter"))
+	drainCmds(m, cmd)
+	if m.stackPicker.Visible || m.currentView() != domain.PrimaryViewPRDetail || m.prDetail.Summary.Number != 1 {
+		t.Fatalf("enter should open #1; view %s", m.currentView())
+	}
+
+	// On an unstacked PR, S does nothing.
+	m = setupStack(t)
+	m.prList.SelectNumber(9)
+	_, _ = m.Update(stackKey("S"))
+	if m.stackPicker.Visible {
+		t.Error("S on an unstacked PR should not open the picker")
 	}
 }

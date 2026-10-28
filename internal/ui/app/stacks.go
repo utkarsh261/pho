@@ -6,7 +6,7 @@ import (
 )
 
 // rebuildStacks finds stacks among the selected repo's loaded open PRs and
-// the Involving tab's, then hands them to the dashboard panels.
+// the Involving tab's, then hands them to the panels and the open PR.
 func (m *Model) rebuildStacks(open []domain.PullRequestSummary) {
 	prs := append([]domain.PullRequestSummary(nil), open...)
 	if inv, ok := m.selectedInvolving(); ok {
@@ -23,6 +23,9 @@ func (m *Model) rebuildStacks(open []domain.PullRequestSummary) {
 	m.stacks = stack.Build(prs)
 	m.prList.SetStacks(m.stacks)
 	m.preview.SetStacks(m.stacks)
+	if m.prDetail != nil {
+		m.prDetail.SetStack(m.stacks.Lookup(m.prDetail.Summary.Repo, m.prDetail.Summary.Number))
+	}
 }
 
 // selectedInvolving is the Involving snapshot when it was loaded for the

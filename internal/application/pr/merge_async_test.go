@@ -1,0 +1,85 @@
+package pr
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/utkarsh261/pho/internal/github/rest"
+	pholog "github.com/utkarsh261/pho/internal/log"
+)
+
+// stackedMergeClient rejects GraphQL merges the way GitHub does for a PR in
+// a native stack.
+type stackedMergeClient struct{ fakeGitHubClient }
+
+func (*stackedMergeClient) MergePullRequest(_ context.Context, _, _, _, _ string) error {
+	return errors.New("graphql query failed: This pull request is part of a stack and must be merged using the asynchronous merge REST API.")
+}
+
+func asyncMergeService(t *testing.T, handler http.HandlerFunc) *PRService {
+	t.Helper()
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	return &PRService{
+		Cache:  newTestCoordinator(t),
+		Client: &stackedMergeClient{},
+		REST:   &rest.Client{BaseURL: server.URL, HTTPClient: server.Client(), Token: "t"},
+		Owner:  "owner",
+		Repo:   "repo",
+		Log:    pholog.NewNop(),
+	}
+}
+
+func TestMergePRFallsBackToAsyncMergeForStacks(t *testing.T) {
+	t.Parallel()
+	var put map[string]any
+	polls := 0
+	svc := asyncMergeService(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPut && r.URL.Path == "/repos/owner/repo/pulls/42/merge-async":
+			_ = json.NewDecoder(r.Body).Decode(&put)
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(`{"status":"pending","details":{"uuid":"u1"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/repos/owner/repo/pulls/42/merge-async/u1":
+			polls++
+			_, _ = w.Write([]byte(`{"status":"merged","details":{"sha":"abc"}}`))
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+	if err := svc.MergePR(context.Background(), testRepo(), 42, "pr_1", "head1", "SQUASH"); err != nil {
+		t.Fatalf("merge: %v", err)
+	}
+	if put["merge_method"] != "squash" || put["sha"] != "head1" {
+		t.Errorf("merge-async body = %v", put)
+	}
+	if polls != 1 {
+		t.Errorf("polled %d times, want 1", polls)
+	}
+}
+
+func TestMergePRAsyncFailureCarriesGitHubReason(t *testing.T) {
+	t.Parallel()
+	svc := asyncMergeService(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"status":"failed","details":{"message":"Required status check \"ci\" is failing"}}`))
+	})
+	err := svc.MergePR(context.Background(), testRepo(), 42, "pr_1", "head1", "MERGE")
+	if err == nil || !strings.Contains(err.Error(), `"ci" is failing`) {
+		t.Fatalf("err = %v, want GitHub's reason", err)
+	}
+}
+
+func TestMergePRKeepsGraphQLForUnstackedPRs(t *testing.T) {
+	t.Parallel()
+	svc := &PRService{Cache: newTestCoordinator(t), Client: &fakeGitHubClient{}, Log: pholog.NewNop()}
+	if err := svc.MergePR(context.Background(), testRepo(), 42, "pr_1", "head1", "MERGE"); err != nil {
+		t.Fatalf("merge: %v", err)
+	}
+}

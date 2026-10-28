@@ -195,7 +195,12 @@ func (s *PRService) CheckMergeable(ctx context.Context, repo domain.Repository, 
 func (s *PRService) MergePR(ctx context.Context, repo domain.Repository, number int, prID string, headRefOID string, method string) error {
 	defer s.logTimer("pr merge", pholog.FieldRepo, repo.FullName, pholog.FieldPRNumber, number, "method", method)()
 	s.logDebug("merge pr", "repo", repo.FullName, "number", number, "method", method)
-	if err := s.Client.MergePullRequest(ctx, repo.Host, prID, headRefOID, method); err != nil {
+	err := s.Client.MergePullRequest(ctx, repo.Host, prID, headRefOID, method)
+	if err != nil && strings.Contains(err.Error(), "asynchronous merge") {
+		// GitHub only merges PRs in a native stack through its async REST API.
+		err = s.mergeAsync(ctx, repo, number, headRefOID, method)
+	}
+	if err != nil {
 		s.logWarn("merge pr failed", "repo", repo.FullName, "number", number, "err", err)
 		return err
 	}
