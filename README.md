@@ -85,6 +85,7 @@ Flags work before or after `pr <number>`:
 | `--debug` | Log at debug level (also `PHO_DEBUG=1`) |
 | `--reset` | Clear the SQLite and repo discovery caches before starting |
 | `--version` | Print the version and exit |
+| `--changelog` | Print the latest release notes and exit |
 
 ## Configuration
 
@@ -120,7 +121,16 @@ max_memory_mb = 16         # in-memory cache size
 [logging]
 file = "~/.local/state/pho/debug.log"
 level = "info"             # debug, info, warn or error
+
+[updates]
+whats_new = true           # mention a new version in the status bar after an upgrade
 ```
+
+## What's new
+
+After you upgrade, the dashboard's status bar says so for a few launches. Press `W` on the dashboard to read the release notes, at any time. `pho --changelog` prints them in the terminal.
+
+pho fetches the notes from GitHub's public API without your token. Set `[updates] whats_new = false` or `PHO_NO_UPDATE_CHECK=1` to stop the status-bar mention; `W` and `--changelog` still work. pho remembers the last version you saw in `~/.local/state/pho/state.json`.
 
 ## Themes
 <img width="1600" height="900" alt="pho-themes" src="https://github.com/user-attachments/assets/7d452bdc-015c-43b3-bcaf-cd24e83f562c" />

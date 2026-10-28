@@ -119,3 +119,40 @@ func TestSetSearchStateClearedRestoresHelp(t *testing.T) {
 		t.Fatalf("expected search state to be cleared, got %q", view)
 	}
 }
+
+func TestStatusBarNotice(t *testing.T) {
+	t.Parallel()
+
+	m := NewStatusBarModel()
+	m.Focus = domain.FocusPRListPanel
+	m.Errors = domain.ErrorState{
+		Errors: []domain.AppError{{Kind: domain.ErrorKindNetwork, Message: "offline"}},
+	}
+	m.Notice = "✦ Updated to 1.2.0 | W: What's new"
+	m.SetRect(240)
+
+	view := m.View()
+	hints := strings.Index(view, "j/k: Navigate")
+	errAt := strings.Index(view, "network: offline")
+	notice := strings.Index(view, "✦ Updated to 1.2.0")
+	if hints < 0 || errAt < 0 || notice < 0 {
+		t.Fatalf("missing a segment in %q", view)
+	}
+	if notice < errAt {
+		t.Errorf("notice comes before the error, so a narrow terminal would cut the error first: %q", view)
+	}
+
+	// Narrow: the hints survive and the notice is what gets cut.
+	m.Errors = domain.ErrorState{}
+	m.SetRect(len("j/k: Navigate | h/l: Tab | Enter: Open | Tab: Next panel | ?: Keymap") + 8)
+	view = m.View()
+	if !strings.Contains(view, "?: Keymap") || strings.Contains(view, "What's new") {
+		t.Errorf("narrow bar should keep hints and cut the notice: %q", view)
+	}
+
+	m.Notice = ""
+	m.SetRect(240)
+	if strings.Contains(m.View(), "Updated") {
+		t.Error("empty notice still drawn")
+	}
+}

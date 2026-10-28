@@ -47,6 +47,8 @@ import (
 	"github.com/utkarsh261/pho/internal/github/graphql"
 	"github.com/utkarsh261/pho/internal/github/rest"
 	pholog "github.com/utkarsh261/pho/internal/log"
+	"github.com/utkarsh261/pho/internal/release"
+	"github.com/utkarsh261/pho/internal/state"
 	"github.com/utkarsh261/pho/internal/ui/app"
 	"github.com/utkarsh261/pho/internal/ui/theme"
 	"github.com/utkarsh261/pho/internal/ui/views/prdetail"
@@ -90,6 +92,7 @@ func xdgDir(env, fallback string) string {
 
 type invocation struct {
 	Version    bool
+	Changelog  bool
 	Debug      bool
 	Reset      bool
 	ConfigPath string
@@ -100,6 +103,7 @@ type invocation struct {
 
 func registerFlags(fs *flag.FlagSet, inv *invocation, hidden map[string]bool) {
 	fs.BoolVar(&inv.Version, "version", false, "print version and exit")
+	fs.BoolVar(&inv.Changelog, "changelog", false, "print recent release notes and exit")
 	fs.BoolVar(&inv.Debug, "debug", false, "enable debug logging (also set by PHO_DEBUG=1)")
 	fs.BoolVar(&inv.Reset, "reset", false, "clear all caches (SQLite + discovery) and exit")
 	fs.StringVar(&inv.RootDir, "root", ".", "root directory to scan for git repos")
@@ -163,6 +167,8 @@ func parseInvocation(args []string) (invocation, error) {
 		switch f.Name {
 		case "version":
 			inv.Version = tail.Version
+		case "changelog":
+			inv.Changelog = tail.Changelog
 		case "debug":
 			inv.Debug = tail.Debug
 		case "reset":
@@ -236,6 +242,10 @@ func main() {
 		fmt.Println("pho", version)
 		return
 	}
+	if inv.Changelog {
+		printChangelog(os.Stdout, &release.Client{}, version, stdoutWidth())
+		return
+	}
 
 	if len(rootDir) >= 2 && rootDir[:2] == "~/" {
 		if home, err := os.UserHomeDir(); err == nil {
@@ -265,6 +275,14 @@ func main() {
 		level = "debug"
 	}
 	logger := pholog.New(cfg.Logging.File, level)
+
+	// Decided before the cache is created below, since an existing cache
+	// marks someone who used pho before this kept any state.
+	paths := config.ResolvePaths(configPath)
+	stateStore := state.NewStore(paths.StateFile)
+	announce := planLaunch(stateStore, version,
+		existingUser(paths.ConfigFile, cfg.Cache.Dir),
+		cfg.Updates.WhatsNew && !updatesOptedOut(), logger.Warn)
 
 	if reset {
 		if err := clearCaches(); err != nil {
@@ -367,6 +385,11 @@ func main() {
 			return config.SaveTheme(configPath, name)
 		},
 		ConfiguredTheme: cfg.UI.Theme,
+		Version:         version,
+		AnnounceVersion: announce.Version,
+		WhatsNewSince:   announce.Since,
+		FetchReleases:   (&release.Client{}).List,
+		State:           stateStore,
 	}
 	model := app.NewModel(deps)
 

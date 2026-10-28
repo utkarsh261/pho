@@ -55,7 +55,7 @@ func (m *Model) themePicking() bool {
 // another overlay may have opened in between: the picker then stays shut
 // rather than open underneath it.
 func (m *Model) openThemePicker() tea.Cmd {
-	if m.state.Search.OverlayOpen || m.keymapOverlay.Visible || m.theme == nil ||
+	if m.state.Search.OverlayOpen || m.keymapOverlay.Visible || m.whatsNew.Visible || m.theme == nil ||
 		(m.createPR != nil && m.createPR.Active()) {
 		return nil
 	}

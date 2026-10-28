@@ -70,6 +70,9 @@ type rawConfig struct {
 		Theme      string `toml:"theme"`
 		Background string `toml:"background"`
 	} `toml:"ui"`
+	Updates struct {
+		WhatsNew *bool `toml:"whats_new"`
+	} `toml:"updates"`
 }
 
 type Config struct {
@@ -115,12 +118,18 @@ type Config struct {
 		// "terminal" to keep the terminal's own (for transparency).
 		Background string
 	}
+	Updates struct {
+		// WhatsNew announces a new version in the status bar after an
+		// upgrade, pointing at its release notes.
+		WhatsNew bool
+	}
 }
 
 type Paths struct {
 	ConfigFile string
 	CacheDir   string
 	LogFile    string
+	StateFile  string
 }
 
 func xdgDir(envVar, homeRelDefault string) string {
@@ -145,7 +154,7 @@ func expandTilde(path string) string {
 	return filepath.Join(home, path[1:])
 }
 
-// ResolvePaths derives the three canonical filesystem paths for the given
+// ResolvePaths derives the canonical filesystem paths for the given
 // (possibly empty) config file path.
 func ResolvePaths(configPath string) Paths {
 	if configPath == "" {
@@ -153,11 +162,12 @@ func ResolvePaths(configPath string) Paths {
 		configPath = filepath.Join(cfgDir, "pho", "config.toml")
 	}
 	cacheDir := filepath.Join(xdgDir("XDG_CACHE_HOME", ".cache"), "pho")
-	logFile := filepath.Join(xdgDir("XDG_STATE_HOME", ".local/state"), "pho", "debug.log")
+	stateDir := filepath.Join(xdgDir("XDG_STATE_HOME", ".local/state"), "pho")
 	return Paths{
 		ConfigFile: configPath,
 		CacheDir:   cacheDir,
-		LogFile:    logFile,
+		LogFile:    filepath.Join(stateDir, "debug.log"),
+		StateFile:  filepath.Join(stateDir, "state.json"),
 	}
 }
 
@@ -176,6 +186,7 @@ func defaults() Config {
 	cfg.Logging.Level = "info"
 	cfg.Palette.MaxPRs = 300
 	cfg.UI.Background = "theme"
+	cfg.Updates.WhatsNew = true
 	return cfg
 }
 
@@ -278,6 +289,10 @@ func Load(path string) (Config, error) {
 	cfg.Diff.RowBudget = raw.Diff.RowBudget
 	cfg.UI.Theme = raw.UI.Theme
 	cfg.UI.Background = strings.ToLower(strings.TrimSpace(raw.UI.Background))
+	cfg.Updates.WhatsNew = def.Updates.WhatsNew
+	if raw.Updates.WhatsNew != nil {
+		cfg.Updates.WhatsNew = *raw.Updates.WhatsNew
+	}
 
 	// Fill zero-value fields with defaults.
 	applyDefaults(&cfg, def)

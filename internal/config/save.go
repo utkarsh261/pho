@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/utkarsh261/pho/internal/fsutil"
 )
 
 // ErrManualEdit means the config defines [ui] in a form SaveTheme does not
@@ -66,7 +68,10 @@ func SaveTheme(path, name string) error {
 		}
 		return nil
 	}
-	return writeAtomic(target, []byte(updated), mode)
+	if err := fsutil.WriteAtomic(target, []byte(updated), mode); err != nil {
+		return fmt.Errorf("config: %w", err)
+	}
+	return nil
 }
 
 // writeTarget resolves the regular file SaveTheme should write, following a
@@ -243,36 +248,6 @@ func verifyThemeEdit(old, updated, name string) error {
 	}
 	if !reflect.DeepEqual(before, after) {
 		return ErrManualEdit
-	}
-	return nil
-}
-
-func writeAtomic(path string, data []byte, mode fs.FileMode) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".config.toml.*")
-	if err != nil {
-		return fmt.Errorf("config: write %s: %w", path, err)
-	}
-	cleanup := func(err error) error {
-		tmp.Close()
-		os.Remove(tmp.Name())
-		return fmt.Errorf("config: write %s: %w", path, err)
-	}
-	if _, err := tmp.Write(data); err != nil {
-		return cleanup(err)
-	}
-	if err := tmp.Sync(); err != nil {
-		return cleanup(err)
-	}
-	if err := tmp.Chmod(mode); err != nil {
-		return cleanup(err)
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(tmp.Name())
-		return fmt.Errorf("config: write %s: %w", path, err)
-	}
-	if err := os.Rename(tmp.Name(), path); err != nil {
-		os.Remove(tmp.Name())
-		return fmt.Errorf("config: write %s: %w", path, err)
 	}
 	return nil
 }

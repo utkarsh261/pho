@@ -78,6 +78,8 @@ func dispatchGlobal(msg tea.KeyMsg) Result {
 			return Result{Action: CreatePR{}}
 		case 'T':
 			return Result{Action: OpenThemePicker{}}
+		case 'W':
+			return Result{Action: OpenWhatsNew{}}
 		}
 	}
 	return Result{}
@@ -303,6 +305,11 @@ func (OpenThemePicker) isAction() {}
 type OpenStackPicker struct{}
 
 func (OpenStackPicker) isAction() {}
+
+// OpenWhatsNew opens the release notes panel.
+type OpenWhatsNew struct{}
+
+func (OpenWhatsNew) isAction() {}
 
 type TriggerRefresh struct{}
 

@@ -362,6 +362,7 @@ func buildDashboardBindings(ctx Context) []Group {
 			{Key: "ctrl+p", Description: "Jump to PR/Repo", Direct: true},
 			{Key: "q", Description: "Quit"},
 			{Key: "T", Description: "Theme", Direct: true},
+			{Key: "W", Description: "What's new", Direct: true},
 			{Key: "?", Description: "Keybindings"},
 		},
 	})

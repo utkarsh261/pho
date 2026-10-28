@@ -46,7 +46,7 @@ func (m *Model) labelPicking() bool {
 // starts loading the repository's. L reaches here as a message one step
 // after the key, so it stays shut if another overlay opened in between.
 func (m *Model) openLabelPicker() tea.Cmd {
-	if m.state.Search.OverlayOpen || m.keymapOverlay.Visible ||
+	if m.state.Search.OverlayOpen || m.keymapOverlay.Visible || m.whatsNew.Visible ||
 		(m.createPR != nil && m.createPR.Active()) {
 		return nil
 	}
