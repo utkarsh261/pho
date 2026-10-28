@@ -91,6 +91,17 @@ type Dependencies struct {
 	WhatsNewSince   string
 	FetchReleases   func(ctx context.Context, n int) ([]release.Release, error)
 	State           *state.Store
+
+	// CheckForUpdates turns on the daily update check and its status-bar
+	// notice. LatestKnown and LastUpdateCheck are the last check's result;
+	// FetchLatest asks GitHub for the newest release.
+	CheckForUpdates bool
+	LatestKnown     string
+	LastUpdateCheck time.Time
+	FetchLatest     func(ctx context.Context) (release.Release, error)
+	// RunUpdate upgrades pho in place (brew upgrade); nil when pho wasn't
+	// installed with Homebrew, which leaves U off.
+	RunUpdate func() tea.Cmd
 }
 
 type Model struct {
@@ -125,6 +136,14 @@ type Model struct {
 
 	announce        string
 	whatsNewLoading bool
+
+	// Update check: the newest release known, whether U is waiting for
+	// Enter, and the outcome of an upgrade run from U.
+	latestKnown   string
+	updateConfirm bool
+	updateTarget  string
+	updateResult  string
+	updated       bool
 
 	focus         domain.FocusTarget
 	previousFocus domain.FocusTarget
@@ -204,6 +223,7 @@ func NewModel(deps Dependencies) *Model {
 		keymapOverlay:     keymapoverlay.NewModel(),
 		whatsNew:          whatsnew.NewModel(),
 		announce:          deps.AnnounceVersion,
+		latestKnown:       deps.LatestKnown,
 		createPR:          createpr.NewModel(),
 		focus:             domain.FocusRepoPanel,
 		previousFocus:     domain.FocusRepoPanel,
@@ -300,6 +320,8 @@ func (m *Model) Init() tea.Cmd {
 		cmdsOut = append(cmdsOut, m.loadRepoCmds(repo, false)...)
 	}
 
+	cmdsOut = append(cmdsOut, m.checkForUpdatesCmd())
+
 	// Start spinner animations.
 	cmdsOut = append(cmdsOut, m.preview.Init(), m.status.Init())
 
@@ -342,6 +364,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.handleThemeSaved(msg)
 	case WhatsNewLoaded:
 		m.handleWhatsNewLoaded(msg)
+		return m, nil
+	case UpdateChecked:
+		m.handleUpdateChecked(msg)
+		return m, nil
+	case UpdateFinished:
+		m.handleUpdateFinished(msg)
 		return m, nil
 	case prdetail.OpenBrowserFile:
 		url := fileBrowserURL(m.selectedRepoForURL(msg.Repo), msg)
@@ -729,6 +757,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if m.updateConfirm {
+		return m, m.handleUpdateConfirmKey(msg)
+	}
+
 	// Create PR overlay takes priority when active.
 	if m.createPR != nil && m.createPR.Active() {
 		cmd := m.createPR.Update(msg)
@@ -809,6 +841,8 @@ func (m *Model) handleRootAction(action keymap.Action) tea.Cmd {
 		return m.openStackPicker()
 	case keymap.OpenWhatsNew:
 		return m.openWhatsNew()
+	case keymap.UpdatePho:
+		return m.startUpdate()
 	default:
 		return nil
 	}
@@ -1544,6 +1578,8 @@ func (m *Model) syncStatus() {
 		m.status.HintOverride = filePickHint
 	} else if m.labelPicking() {
 		m.status.HintOverride = labelPickHint
+	} else if m.updateConfirm {
+		m.status.HintOverride = m.updateConfirmHint()
 	} else if m.createPR != nil && m.createPR.Active() {
 		m.status.HintOverride = "Tab: Next field   ←/→: Change option   Ctrl+S: Create PR   Esc: Cancel"
 	} else if m.currentView() == domain.PrimaryViewPRDetail && m.prDetail != nil {
@@ -1558,6 +1594,9 @@ func (m *Model) syncStatus() {
 	if m.currentView() == domain.PrimaryViewDashboard && m.status.HintOverride == "" &&
 		m.focus != domain.FocusCmdPalette {
 		m.status.Notice = m.announcement()
+		if m.status.Notice == "" {
+			m.status.Notice = m.updateNotice()
+		}
 	}
 	m.syncPRDetailSearchStatus()
 }

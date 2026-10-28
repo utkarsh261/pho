@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/utkarsh261/pho/internal/fsutil"
 	"github.com/utkarsh261/pho/internal/release"
@@ -18,9 +19,11 @@ import (
 const AnnounceLaunches = 3
 
 type State struct {
-	LastSeenVersion   string `json:"last_seen_version,omitempty"`
-	AnnouncedVersion  string `json:"announced_version,omitempty"`
-	AnnouncedLaunches int    `json:"announced_launches,omitempty"`
+	LastSeenVersion   string    `json:"last_seen_version,omitempty"`
+	AnnouncedVersion  string    `json:"announced_version,omitempty"`
+	AnnouncedLaunches int       `json:"announced_launches,omitempty"`
+	LastUpdateCheck   time.Time `json:"last_update_check,omitzero"`
+	LatestKnown       string    `json:"latest_known,omitempty"`
 }
 
 // Store is safe for concurrent use.
@@ -78,6 +81,9 @@ func (s *Store) load() (State, error) {
 	// A non-stable baseline would never compare older than a release.
 	if !release.IsRelease(st.LastSeenVersion) {
 		st.LastSeenVersion = ""
+	}
+	if !release.IsRelease(st.LatestKnown) {
+		st.LatestKnown = ""
 	}
 	return st, nil
 }

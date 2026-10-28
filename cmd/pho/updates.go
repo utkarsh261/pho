@@ -5,13 +5,16 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/term"
 
 	"github.com/utkarsh261/pho/internal/release"
 	"github.com/utkarsh261/pho/internal/state"
+	"github.com/utkarsh261/pho/internal/ui/app"
 	"github.com/utkarsh261/pho/internal/ui/markdown"
 )
 
@@ -44,6 +47,22 @@ func planLaunch(store *state.Store, version string, existing, enabled bool, warn
 		return state.Announcement{}
 	}
 	return a
+}
+
+// updateCheckEnabled reports whether this run looks for a newer release:
+// on unless turned off, and only for release builds in a terminal.
+func updateCheckEnabled(configured bool, version string, stdoutTTY bool) bool {
+	return configured && !updatesOptedOut() && release.IsRelease(version) && stdoutTTY
+}
+
+// brewUpdater returns the in-place upgrade for Homebrew installs, nil for
+// any other install.
+func brewUpdater() func() tea.Cmd {
+	brew, ok := release.DetectBrew(os.Executable, exec.LookPath)
+	if !ok {
+		return nil
+	}
+	return app.BrewUpgrade(brew)
 }
 
 // printChangelog falls back to the releases link on any error.

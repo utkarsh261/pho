@@ -33,6 +33,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
+	"golang.org/x/term"
 
 	"github.com/utkarsh261/pho/internal/application/dashboard"
 	"github.com/utkarsh261/pho/internal/application/discovery"
@@ -309,6 +310,10 @@ func main() {
 		announce = planLaunch(stateStore, version, existing,
 			cfg.Updates.WhatsNew && !updatesOptedOut(), logger.Warn)
 	}
+	saved, err := stateStore.Load()
+	if err != nil {
+		logger.Warn("could not read state", "path", stateStore.Path(), "err", err)
+	}
 
 	// Ensure cache directory exists
 	if err := os.MkdirAll(cfg.Cache.Dir, 0o700); err != nil {
@@ -393,6 +398,11 @@ func main() {
 		WhatsNewSince:   announce.Since,
 		FetchReleases:   (&release.Client{}).List,
 		State:           stateStore,
+		CheckForUpdates: updateCheckEnabled(cfg.Updates.Check, version, term.IsTerminal(int(os.Stdout.Fd()))),
+		LatestKnown:     saved.LatestKnown,
+		LastUpdateCheck: saved.LastUpdateCheck,
+		FetchLatest:     (&release.Client{}).Latest,
+		RunUpdate:       brewUpdater(),
 	}
 	model := app.NewModel(deps)
 

@@ -95,3 +95,24 @@ func TestUpdatesOptedOut(t *testing.T) {
 		}
 	}
 }
+
+func TestUpdateCheckEnabled(t *testing.T) {
+	t.Setenv("PHO_NO_UPDATE_CHECK", "")
+	if !updateCheckEnabled(true, "1.2.0", true) {
+		t.Error("default release build in a terminal should check")
+	}
+	for name, got := range map[string]bool{
+		"config off":     updateCheckEnabled(false, "1.2.0", true),
+		"dev build":      updateCheckEnabled(true, "dev", true),
+		"prerelease":     updateCheckEnabled(true, "1.3.0-rc.1", true),
+		"not a terminal": updateCheckEnabled(true, "1.2.0", false),
+	} {
+		if got {
+			t.Errorf("%s: check enabled, want off", name)
+		}
+	}
+	t.Setenv("PHO_NO_UPDATE_CHECK", "1")
+	if updateCheckEnabled(true, "1.2.0", true) {
+		t.Error("PHO_NO_UPDATE_CHECK=1 should turn the check off")
+	}
+}

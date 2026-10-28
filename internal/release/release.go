@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -51,6 +52,18 @@ func (c *Client) List(ctx context.Context, n int) ([]Release, error) {
 		}
 	}
 	return out, nil
+}
+
+func (c *Client) Latest(ctx context.Context) (Release, error) {
+	var raw apiRelease
+	if err := c.get(ctx, "/releases/latest", &raw); err != nil {
+		return Release{}, err
+	}
+	rel, ok := convert(raw)
+	if !ok {
+		return Release{}, fmt.Errorf("release: latest release has unexpected tag %q", raw.TagName)
+	}
+	return rel, nil
 }
 
 func convert(r apiRelease) (Release, bool) {
@@ -191,4 +204,29 @@ func Markdown(releases []Release) string {
 		}
 	}
 	return b.String()
+}
+
+// BrewFormula is pho's Homebrew formula, tap included so it can't clash
+// with another formula called pho.
+const BrewFormula = "utkarsh261/tap/pho"
+
+// DetectBrew reports whether the running pho was installed with Homebrew
+// and brew is on the PATH, returning brew's path. executable and lookPath
+// are os.Executable and exec.LookPath outside tests.
+func DetectBrew(executable func() (string, error), lookPath func(string) (string, error)) (string, bool) {
+	exe, err := executable()
+	if err != nil {
+		return "", false
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	if !strings.Contains(filepath.ToSlash(exe), "/Cellar/pho/") {
+		return "", false
+	}
+	brew, err := lookPath("brew")
+	if err != nil {
+		return "", false
+	}
+	return brew, true
 }
