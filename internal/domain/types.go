@@ -324,6 +324,9 @@ type PRPreviewSnapshot struct {
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 	Reviewers      []PreviewReviewer
+	// LatestReviews holds each user's latest submitted review, whatever
+	// its state. Reviewers only covers the last few reviews overall.
+	LatestReviews  []ReviewSummary
 	ReviewThreads  []PreviewReviewThread
 	Checks         []PreviewCheckRow
 	FileCount      int

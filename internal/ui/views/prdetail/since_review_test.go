@@ -87,6 +87,12 @@ func sinceDetail(reviewSHA string) domain.PRPreviewSnapshot {
 // loaded. The range diff is not loaded yet.
 func newSinceModel(t *testing.T, reviewSHA string) *PRDetailModel {
 	t.Helper()
+	return newSinceModelWith(t, sinceDetail(reviewSHA), sinceFullDiff)
+}
+
+// newSinceModelWith opens a PR with the given detail and PR diff loaded.
+func newSinceModelWith(t *testing.T, detail domain.PRPreviewSnapshot, fullRaw string) *PRDetailModel {
+	t.Helper()
 	m := NewModel(domain.PullRequestSummary{
 		Number: 1, Title: "Test PR", Author: "alice", Repo: "owner/repo",
 		State: domain.PRStateOpen, HeadRefOID: sinceHead, BaseRefName: "main",
@@ -94,8 +100,8 @@ func newSinceModel(t *testing.T, reviewSHA string) *PRDetailModel {
 	m.Width, m.Height = 120, 30
 	m.ViewerLogin = "me"
 	m.SetTheme(theme.Default())
-	m, _ = m.Update(cmds.PRDetailLoaded{Repo: "owner/repo", Number: 1, Detail: sinceDetail(reviewSHA)})
-	m, _ = m.Update(cmds.DiffLoaded{Repo: "owner/repo", Number: 1, Diff: parseTestDiff(t, sinceFullDiff, sinceHead)})
+	m, _ = m.Update(cmds.PRDetailLoaded{Repo: "owner/repo", Number: 1, Detail: detail})
+	m, _ = m.Update(cmds.DiffLoaded{Repo: "owner/repo", Number: 1, Diff: parseTestDiff(t, fullRaw, sinceHead)})
 	m.leftPanel.Focus = FocusContent
 	return m
 }
@@ -394,5 +400,88 @@ func TestSinceReviewCmdHitsService(t *testing.T) {
 	}
 	if m.loadSinceReviewCmd() != nil {
 		t.Error("refetched while loading")
+	}
+}
+
+func TestSinceReviewPillClearsAfterReviewingHead(t *testing.T) {
+	m := newSinceModel(t, sinceFrom)
+	m, _ = m.Update(sinceRangeLoaded(t, diffmodel.RangeDiff{Diff: parseTestDiff(t, sinceRangeDiff, sinceHead)}))
+	m.switchTab(TabDiff)
+	if !strings.Contains(plainText(m.View()), "new since review") {
+		t.Fatal("no pill before the new review")
+	}
+	// The viewer reviews the head; the old range is still cached.
+	m, _ = m.Update(cmds.PRDetailLoaded{Repo: "owner/repo", Number: 1, Detail: sinceDetail(sinceHead)})
+	if m.hasNewSinceReview() || strings.Contains(plainText(m.View()), "new since review") {
+		t.Error("pill still shown after reviewing the head")
+	}
+}
+
+func TestSinceReviewFindsReviewOutsideRecentWindow(t *testing.T) {
+	// Only LatestReviews has the viewer's review, as when more than the
+	// fetched window of later reviews came after it.
+	d := sinceDetail("")
+	d.LatestReviews = []domain.ReviewSummary{{AuthorLogin: "me", State: "COMMENTED", CommitSHA: sinceFrom, SubmittedAt: time.Now()}}
+	m := newSinceModelWith(t, d, sinceFullDiff)
+	if !m.since.loading || m.since.from != sinceFrom {
+		t.Errorf("since = %+v, want a fetch from the review in LatestReviews", m.since)
+	}
+}
+
+func TestSinceReviewSwapMarksOpenInlineDraftStale(t *testing.T) {
+	m := pressKey(newSinceModel(t, sinceFrom), "s") // range still loading
+	hi, li := lineAt(t, &m.Diff.Files[1], "var x = 2")
+	m.visual = visualModeState{Active: true, FileIdx: 1, HunkIdx: hi, StartLine: li, EndLine: li}
+	m.compose.Open(composeModeDraftInline, commentEntry{}, 0)
+
+	m, _ = m.Update(sinceRangeLoaded(t, diffmodel.RangeDiff{Diff: parseTestDiff(t, sinceRangeDiff, sinceHead)}))
+	if !m.since.active {
+		t.Fatal("range did not land")
+	}
+	if !m.inlineDraftStale || m.visual.Active {
+		t.Errorf("stale=%v visual=%v, want the draft marked stale and the selection dropped", m.inlineDraftStale, m.visual.Active)
+	}
+}
+
+func TestSinceReviewResetsFileListOnSwap(t *testing.T) {
+	m := newSinceModel(t, sinceFrom)
+	m, _ = m.Update(sinceRangeLoaded(t, diffmodel.RangeDiff{Diff: parseTestDiff(t, sinceRangeDiff, sinceHead)}))
+	m.switchTab(TabDiff)
+	m.leftPanel.Cursor, m.leftPanel.LastOpenedIndex, m.ContentScroll = 1, 1, 5
+	m = pressKey(m, "s") // the range has one file
+	if m.leftPanel.Cursor != 0 || m.leftPanel.LastOpenedIndex != 0 || m.ContentScroll != 0 {
+		t.Errorf("cursor=%d lastOpened=%d scroll=%d, want all 0", m.leftPanel.Cursor, m.leftPanel.LastOpenedIndex, m.ContentScroll)
+	}
+}
+
+// The PR diff has two hunks of c.go; the range has one hunk bridging them.
+func TestSinceReviewCommentMustStayInOnePRHunk(t *testing.T) {
+	full := "diff --git a/c.go b/c.go\n--- a/c.go\n+++ b/c.go\n" +
+		"@@ -1,3 +1,3 @@\n l1\n-old2\n+new2\n l3\n" +
+		"@@ -20,3 +20,3 @@\n l20\n-old21\n+new21\n l22\n"
+	var rng strings.Builder
+	rng.WriteString("diff --git a/c.go b/c.go\n--- a/c.go\n+++ b/c.go\n@@ -2,20 +2,20 @@\n new2\n")
+	for i := 3; i <= 20; i++ {
+		fmt.Fprintf(&rng, " l%d\n", i)
+	}
+	rng.WriteString("-new21\n+newer21\n")
+
+	for _, tt := range []struct {
+		from, to string
+		want     bool
+	}{
+		{"new2", "l3", true},       // both in the PR's first hunk
+		{"new2", "newer21", false}, // one end in each PR hunk
+	} {
+		m := newSinceModelWith(t, sinceDetail(sinceFrom), full)
+		m, _ = m.Update(sinceRangeLoaded(t, diffmodel.RangeDiff{Diff: parseTestDiff(t, rng.String(), sinceHead)}))
+		m = pressKey(m, "s")
+		f := &m.Diff.Files[0]
+		hi, start := lineAt(t, f, tt.from)
+		_, end := lineAt(t, f, tt.to)
+		m.visual = visualModeState{Active: true, FileIdx: 0, HunkIdx: hi, StartLine: start, EndLine: end}
+		if got := m.sinceReviewCommentable(); got != tt.want {
+			t.Errorf("%s..%s commentable = %v, want %v", tt.from, tt.to, got, tt.want)
+		}
 	}
 }

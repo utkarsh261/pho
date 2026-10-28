@@ -732,7 +732,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		if m.compose.mode == composeModeDraftInline {
 			if m.draftsStale || m.inlineDraftStale {
 				m.compose.status = composeStatusError
-				m.compose.errMsg = "The diff changed; reopen the inline draft on the current head"
+				m.compose.errMsg = "The diff changed under this draft; select the lines again"
 				return m, tea.Batch(spinCmd, composeCmd)
 			}
 			if body == "" || !m.validVisualState() {

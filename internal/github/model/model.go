@@ -170,6 +170,7 @@ type PullRequestNode struct {
 	StatusCheckRollup        *StatusCheckRollup          `json:"statusCheckRollup,omitempty"`
 	Commits                  CommitConnection            `json:"commits"`
 	Reviews                  ReviewConnection            `json:"reviews"`
+	LatestReviews            OpinionatedReviewConnection `json:"latestReviews"`
 	ReviewThreads            ReviewThreadConnection      `json:"reviewThreads"`
 	Files                    FileConnection              `json:"files"`
 	TimelineItems            TimelineItemConnection      `json:"timelineItems"`

@@ -37,7 +37,15 @@ func (m *PRDetailModel) lastReview() (domain.PreviewReviewer, bool) {
 	if m.Detail == nil {
 		return domain.PreviewReviewer{}, false
 	}
-	return domain.LastReview(m.Detail.Reviewers, m.ViewerLogin)
+	// Reviewers is only the last few reviews overall; LatestReviews has
+	// everyone's latest, so a review buried under bot reviews still counts.
+	all := append([]domain.PreviewReviewer(nil), m.Detail.Reviewers...)
+	for _, r := range m.Detail.LatestReviews {
+		all = append(all, domain.PreviewReviewer{
+			Login: r.AuthorLogin, State: r.State, SubmittedAt: r.SubmittedAt, CommitSHA: r.CommitSHA,
+		})
+	}
+	return domain.LastReview(all, m.ViewerLogin)
 }
 
 // HasLastReview reports whether the viewer has reviewed this PR, i.e.
@@ -84,7 +92,13 @@ func (m *PRDetailModel) syncSinceReviewCmd() tea.Cmd {
 // review that the since-review scope can show.
 func (m *PRDetailModel) hasNewSinceReview() bool {
 	rd := m.since.rng
-	return rd != nil && !rd.Rewritten && len(rd.Diff.Files) > 0 && rd.ToSHA == m.Summary.HeadRefOID
+	if rd == nil || rd.Rewritten || len(rd.Diff.Files) == 0 || rd.ToSHA != m.Summary.HeadRefOID {
+		return false
+	}
+	// The loaded range may predate a newer review, e.g. one just submitted
+	// at the head.
+	r, ok := m.lastReview()
+	return ok && r.CommitSHA == rd.FromSHA
 }
 
 // toggleSinceReview handles s: it switches the Diff tab between all changes
@@ -137,7 +151,7 @@ func (m *PRDetailModel) enterSinceReview() {
 	}
 	m.since.active = true
 	m.leftPanel.ScopeLabel = "since review"
-	m.setActiveDiff(&rd.Diff)
+	m.swapScopedDiff(&rd.Diff)
 
 	commits := "1 commit"
 	if rd.Commits != 1 {
@@ -163,11 +177,35 @@ func (m *PRDetailModel) exitSinceReview() {
 	m.since.active, m.since.full = false, nil
 	m.leftPanel.ScopeLabel = ""
 	if full != nil {
-		m.setActiveDiff(full)
+		m.swapScopedDiff(full)
 		return
 	}
-	m.Diff = nil
-	m.leftPanel.Files = nil
+	m.swapScopedDiff(nil)
+}
+
+// swapScopedDiff switches between the full PR diff and the range diff (nil
+// while the full one is still loading). Positions into the old diff mean
+// nothing in the new one: the file list cursor and scroll go back to the
+// top, and a selection or an inline draft being written is dropped or
+// marked stale. The swap can land while one is open, when the range or a
+// head-change reload arrives.
+func (m *PRDetailModel) swapScopedDiff(dm *model.DiffModel) {
+	if m.compose.active && m.compose.mode == composeModeDraftInline {
+		m.inlineDraftStale = true
+	}
+	m.visual.Active = false
+	m.leftPanel.Cursor, m.leftPanel.Scroll, m.leftPanel.LastOpenedIndex = 0, 0, 0
+	m.diffScroll = 0
+	if m.activeTab == TabDiff {
+		m.ContentScroll = 0
+	}
+	if dm == nil {
+		m.Diff = nil
+		m.leftPanel.Files = nil
+		m.invalidateDiffCursor()
+		return
+	}
+	m.setActiveDiff(dm)
 }
 
 // handleRangeDiffLoaded stores a range diff and, if asked for, shows it.
@@ -214,7 +252,8 @@ func (m *PRDetailModel) sinceReviewHidesDraft(d domain.DraftInlineComment) bool 
 // sinceReviewCommentable reports whether the visual selection can take an
 // inline comment. GitHub only accepts lines that are in the PR's own diff,
 // so in the since-review scope both ends must be new-side lines that the
-// full PR diff also has.
+// full PR diff also has, in the same hunk there: a range hunk can bridge two
+// PR hunks, and GitHub rejects a multi-line comment that spans hunks.
 func (m *PRDetailModel) sinceReviewCommentable() bool {
 	if !m.since.active {
 		return true
@@ -224,17 +263,24 @@ func (m *PRDetailModel) sinceReviewCommentable() bool {
 	}
 	f := &m.Diff.Files[m.visual.FileIdx]
 	h := &f.Hunks[m.visual.HunkIdx]
-	for _, li := range []int{m.visual.StartLine, m.visual.EndLine} {
+	var hunks [2][2]int
+	for i, li := range []int{m.visual.StartLine, m.visual.EndLine} {
 		path, line, side, ok := anchorForLine(f, &h.Lines[li])
-		if !ok || side != "RIGHT" || !diffHasNewLine(m.since.full, path, line) {
+		if !ok || side != "RIGHT" {
 			return false
 		}
+		fi, hi, found := newLineHunk(m.since.full, path, line)
+		if !found {
+			return false
+		}
+		hunks[i] = [2]int{fi, hi}
 	}
-	return true
+	return hunks[0] == hunks[1]
 }
 
-// diffHasNewLine reports whether dm shows line of path on the new side.
-func diffHasNewLine(dm *model.DiffModel, path string, line int) bool {
+// newLineHunk finds the file and hunk of dm that show line of path on the
+// new side.
+func newLineHunk(dm *model.DiffModel, path string, line int) (fileIdx, hunkIdx int, ok bool) {
 	for fi := range dm.Files {
 		f := &dm.Files[fi]
 		if f.NewPath != path {
@@ -243,12 +289,12 @@ func diffHasNewLine(dm *model.DiffModel, path string, line int) bool {
 		for hi := range f.Hunks {
 			for _, l := range f.Hunks[hi].Lines {
 				if l.Kind != "deletion" && l.NewLine != nil && *l.NewLine == line {
-					return true
+					return fi, hi, true
 				}
 			}
 		}
 	}
-	return false
+	return 0, 0, false
 }
 
 func shortSHA(sha string) string {
