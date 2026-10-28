@@ -16,6 +16,15 @@ func buildCommitDiffURL(baseURL, owner, repo, sha string) string {
 	return fmt.Sprintf("%s/repos/%s/%s/commits/%s", baseURL, owner, repo, sha)
 }
 
+// buildCompareURL constructs the REST API URL for comparing two commits.
+// GitHub only accepts the three-dot form, which diffs head against the merge
+// base of the two commits.
+//
+// Format: {baseURL}/repos/{owner}/{repo}/compare/{base}...{head}
+func buildCompareURL(baseURL, owner, repo, base, head string) string {
+	return fmt.Sprintf("%s/repos/%s/%s/compare/%s...%s", baseURL, owner, repo, base, head)
+}
+
 // buildRepoURL constructs the REST API URL for fetching repo metadata.
 //
 // Format: {baseURL}/repos/{owner}/{repo}

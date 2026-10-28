@@ -585,6 +585,10 @@ func (s *prService) LoadPRCommits(_ context.Context, _ domain.Repository, _ int,
 func (s *prService) LoadCommitDiff(_ context.Context, _ domain.Repository, _ string, _ bool) (diffmodel.DiffModel, error) {
 	return diffmodel.DiffModel{}, nil
 }
+
+func (s *prService) LoadRangeDiff(_ context.Context, _ domain.Repository, _ int, _, _ string, _ bool) (diffmodel.RangeDiff, error) {
+	return diffmodel.RangeDiff{}, nil
+}
 func (s *prService) CreatePR(_ context.Context, _ domain.CreatePRParams) (domain.PullRequestSummary, error) {
 	return domain.PullRequestSummary{}, nil
 }

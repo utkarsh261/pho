@@ -229,6 +229,27 @@ func TestBuildBindings_PRDetailHasDiscardDrafts(t *testing.T) {
 	}
 }
 
+func TestBuildBindings_PRDetailSinceReviewOnlyWithReview(t *testing.T) {
+	hasS := func(ctx Context) bool {
+		for _, g := range BuildBindings(ctx) {
+			for _, b := range g.Bindings {
+				if g.Name == "Diff" && b.Key == "s" {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	ctx := Context{View: domain.PrimaryViewPRDetail, Focus: domain.FocusPRDetail, Tab: prdetail.TabDiff}
+	if hasS(ctx) {
+		t.Error("s listed without a review")
+	}
+	ctx.HasLastReview = true
+	if !hasS(ctx) {
+		t.Error("s missing with a review")
+	}
+}
+
 func TestBuildBindings_PRDetailOmitsDiscardWhenNoDrafts(t *testing.T) {
 	groups := BuildBindings(Context{View: domain.PrimaryViewPRDetail, Focus: domain.FocusPRDetail, Tab: prdetail.TabDiff, DraftCount: 0})
 	for _, g := range groups {

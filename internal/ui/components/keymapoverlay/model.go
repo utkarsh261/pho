@@ -44,6 +44,9 @@ type Context struct {
 	DraftCount int                 // only meaningful when View == PRDetail
 	Behind     bool                // only meaningful when View == PRDetail
 	Checks     bool                // Checks box focused or a job log shown (PRDetail)
+	// HasLastReview is set when the viewer has reviewed the PR, so s can
+	// show the changes since. Only meaningful when View == PRDetail.
+	HasLastReview bool
 }
 
 // Model is the keymap overlay state.
@@ -459,16 +462,17 @@ func buildPRDetailBindings(ctx Context) []Group {
 	// Tab-specific groups
 	switch ctx.Tab {
 	case prdetail.TabDiff:
-		groups = append(groups, Group{
-			Name: "Diff",
-			Bindings: []Binding{
-				{Key: "space", Description: "Visual mode"},
-				{Key: "J/K", Description: "Jump 5 lines"},
-				{Key: "ctrl+d/u", Description: "Half page"},
-				{Key: "z / Z", Description: "Collapse file / all"},
-				{Key: "O", Description: "Open file on GitHub"},
-			},
-		})
+		b := []Binding{
+			{Key: "space", Description: "Visual mode"},
+			{Key: "J/K", Description: "Jump 5 lines"},
+			{Key: "ctrl+d/u", Description: "Half page"},
+			{Key: "z / Z", Description: "Collapse file / all"},
+			{Key: "O", Description: "Open file on GitHub"},
+		}
+		if ctx.HasLastReview {
+			b = append(b, Binding{Key: "s", Description: "Since your review / all"})
+		}
+		groups = append(groups, Group{Name: "Diff", Bindings: b})
 	case prdetail.TabComments:
 		groups = append(groups, Group{
 			Name: "Comments",

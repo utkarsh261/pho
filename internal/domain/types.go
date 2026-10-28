@@ -286,6 +286,7 @@ type PreviewReviewer struct {
 	Avatar         string
 	Body           string    // review comment body (may be empty for inline-only reviews)
 	SubmittedAt    time.Time // zero if not provided
+	CommitSHA      string    // head commit the review was submitted against
 	InlineComments []PreviewInlineComment
 }
 
@@ -323,6 +324,9 @@ type PRPreviewSnapshot struct {
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 	Reviewers      []PreviewReviewer
+	// LatestReviews holds each user's latest submitted review, whatever
+	// its state. Reviewers only covers the last few reviews overall.
+	LatestReviews  []ReviewSummary
 	ReviewThreads  []PreviewReviewThread
 	Checks         []PreviewCheckRow
 	FileCount      int
@@ -645,3 +649,23 @@ const (
 // FocusPRDetail is the internal focus target for PR detail view.
 // It is NOT added to the dashboard focus cycle.
 const FocusPRDetail FocusTarget = "pr_detail"
+
+// LastReview returns viewer's most recent submitted review that names a
+// commit. Pending reviews don't count: they haven't been submitted yet.
+func LastReview(reviewers []PreviewReviewer, viewer string) (PreviewReviewer, bool) {
+	var last PreviewReviewer
+	if viewer == "" {
+		return last, false
+	}
+	found := false
+	for _, r := range reviewers {
+		if r.CommitSHA == "" || r.State == "PENDING" || !strings.EqualFold(r.Login, viewer) {
+			continue
+		}
+		// Later entries win ties: reviews arrive in chronological order.
+		if !found || !r.SubmittedAt.Before(last.SubmittedAt) {
+			last, found = r, true
+		}
+	}
+	return last, found
+}

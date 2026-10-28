@@ -113,7 +113,7 @@ func normalizePullRequestSummary(repo domain.Repository, node model.PullRequestN
 
 	summary.RequestedReviewers = requestedReviewers(node.ReviewRequests)
 	summary.AssigneeLogins = assigneeLogins(node.Assignees)
-	summary.LatestReviews = latestOpinionatedReviews(node.LatestOpinionatedReviews)
+	summary.LatestReviews = reviewSummaries(node.LatestOpinionatedReviews)
 	summary.NativeStack = nativeStack(node)
 
 	return summary, nil
@@ -180,6 +180,7 @@ func normalizePreviewNode(repo domain.Repository, number int, node model.PullReq
 		CreatedAt:      createdAt,
 		UpdatedAt:      updatedAt,
 		Reviewers:      previewReviewers(node.Reviews),
+		LatestReviews:  reviewSummaries(node.LatestReviews),
 		ReviewThreads:  previewReviewThreads(node.ReviewThreads),
 		Checks:         previewChecks(rollupContexts(node)),
 		FileCount:      node.ChangedFiles,
@@ -254,7 +255,7 @@ func assigneeLogins(conn model.AssigneeConnection) []string {
 	return out
 }
 
-func latestOpinionatedReviews(conn model.OpinionatedReviewConnection) []domain.ReviewSummary {
+func reviewSummaries(conn model.OpinionatedReviewConnection) []domain.ReviewSummary {
 	out := make([]domain.ReviewSummary, 0, len(conn.Nodes))
 	for _, node := range conn.Nodes {
 		review := domain.ReviewSummary{
@@ -296,9 +297,17 @@ func previewReviewers(conn model.ReviewConnection) []domain.PreviewReviewer {
 			Avatar:      avatar,
 			Body:        strings.TrimSpace(node.Body),
 			SubmittedAt: submittedAt,
+			CommitSHA:   commitOID(node.Commit),
 		})
 	}
 	return out
+}
+
+func commitOID(c *model.CommitRef) string {
+	if c == nil {
+		return ""
+	}
+	return c.OID
 }
 
 func previewReviewThreads(conn model.ReviewThreadConnection) []domain.PreviewReviewThread {

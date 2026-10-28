@@ -534,12 +534,7 @@ func (s *PRService) loadDiffInner(ctx context.Context, repo domain.Repository, n
 	// Generate anchors.
 	anchor.Generate(dm, headSHA)
 
-	// Precompute StartRow for file-level virtualization.
-	cumulative := 0
-	for i := range dm.Files {
-		dm.Files[i].StartRow = cumulative
-		cumulative += dm.Files[i].DisplayRows
-	}
+	setStartRows(dm)
 
 	// Cache the DiffModel.
 	if headSHA != "" {
@@ -652,12 +647,7 @@ func (s *PRService) LoadCommitDiff(ctx context.Context, repo domain.Repository, 
 
 	anchor.Generate(dm, sha)
 
-	// Precompute StartRow for file-level virtualization.
-	cumulative := 0
-	for i := range dm.Files {
-		dm.Files[i].StartRow = cumulative
-		cumulative += dm.Files[i].DisplayRows
-	}
+	setStartRows(dm)
 
 	meta := commitDiffMeta(key, repo, sha, s.Now().UTC())
 	if err := s.Cache.Write(ctx, key, *dm, meta); err != nil {
@@ -665,6 +655,104 @@ func (s *PRService) LoadCommitDiff(ctx context.Context, repo domain.Repository, 
 	}
 
 	return *dm, nil
+}
+
+// LoadRangeDiff loads the changes on a PR's head branch from fromSHA to
+// toSHA, e.g. from the commit the viewer last reviewed to the current head.
+// When the branch was rewritten since fromSHA the result has Rewritten set
+// and no diff.
+func (s *PRService) LoadRangeDiff(ctx context.Context, repo domain.Repository, number int, fromSHA, toSHA string, force bool) (model.RangeDiff, error) {
+	defer s.logTimer("pr load range diff", pholog.FieldRepo, repo.FullName, pholog.FieldPRNumber, number, "from", fromSHA, "to", toSHA)()
+	key := rangeDiffCacheKey(repo.Host, repoFullName(repo), number, fromSHA, toSHA)
+
+	if !force {
+		var cached model.RangeDiff
+		if _, _, found, _ := s.Cache.StaleWhileRevalidate(ctx, key, &cached, nil); found {
+			s.logDebug("range diff cache hit", "key", key)
+			return cached, nil
+		}
+	}
+
+	restClient, err := s.restFor(repo.Host)
+	if err != nil {
+		return model.RangeDiff{}, fmt.Errorf("fetch range diff: %w", err)
+	}
+	owner, name := s.ownerName(repo), s.RepoName(repo)
+	cmp, err := restClient.FetchCompare(ctx, owner, name, fromSHA, toSHA)
+	if err != nil {
+		s.logWarn("compare fetch failed", "key", key, "err", err)
+		return model.RangeDiff{}, fmt.Errorf("fetch range diff: %w", err)
+	}
+
+	rd := model.RangeDiff{FromSHA: fromSHA, ToSHA: toSHA, Commits: cmp.TotalCommits}
+	switch cmp.Status {
+	case "diverged", "behind":
+		// GitHub only diffs from the merge base, which here would show the
+		// whole PR again plus whatever the rebase pulled in.
+		rd.Rewritten = true
+	case "identical":
+	default:
+		for _, c := range cmp.Commits {
+			if len(c.Parents) > 1 {
+				rd.BaseMerged = true
+				break
+			}
+		}
+		rawDiff, err := restClient.FetchCompareDiff(ctx, owner, name, fromSHA, toSHA)
+		partial := false
+		if errors.Is(err, rest.ErrDiffTooLarge) {
+			s.logDebug("range diff too large, using compare files", "key", key)
+			rawDiff, err = unifiedDiffFromFiles(cmp.Files), nil
+			partial = len(cmp.Files) >= maxCompareFiles
+		}
+		if err != nil {
+			s.logWarn("range diff fetch failed", "key", key, "err", err)
+			return model.RangeDiff{}, fmt.Errorf("fetch range diff: %w", err)
+		}
+		dm, err := parse.Parse(rawDiff)
+		if err != nil {
+			return model.RangeDiff{}, fmt.Errorf("parse range diff: %w", err)
+		}
+		dm.PartialFiles = partial
+		dm.BaseSHA = fromSHA
+		dm.HeadSHA = toSHA
+		dm.Repo = repoFullName(repo)
+		dm.PRNumber = number
+		anchor.Generate(dm, toSHA)
+		// Removed lines belong to the reviewed commit, not the head.
+		for fi := range dm.Files {
+			for hi := range dm.Files[fi].Hunks {
+				for li := range dm.Files[fi].Hunks[hi].Lines {
+					anchors := dm.Files[fi].Hunks[hi].Lines[li].Anchors
+					for ai := range anchors {
+						if anchors[ai].Side == "LEFT" {
+							anchors[ai].CommitSHA = fromSHA
+						}
+					}
+				}
+			}
+		}
+		setStartRows(dm)
+		rd.Diff = *dm
+	}
+
+	// A diff between two fixed commits never changes, so it is cached like
+	// a PR diff for a given head.
+	meta := diffMeta(key, repo, number, s.Now().UTC())
+	if err := s.Cache.Write(ctx, key, rd, meta); err != nil {
+		s.logWarn("range diff cache write error", "key", key, "err", err)
+	}
+	return rd, nil
+}
+
+// setStartRows precomputes each file's StartRow for file-level
+// virtualization.
+func setStartRows(dm *model.DiffModel) {
+	cumulative := 0
+	for i := range dm.Files {
+		dm.Files[i].StartRow = cumulative
+		cumulative += dm.Files[i].DisplayRows
+	}
 }
 
 func (s *PRService) RepoName(repo domain.Repository) string {
@@ -727,7 +815,7 @@ func repoFullName(repo domain.Repository) string {
 }
 
 func previewCacheKey(host, repo string, number int) string {
-	return fmt.Sprintf("preview:v4:host=%s:repo=%s:pr=%d", host, repo, number)
+	return fmt.Sprintf("preview:v5:host=%s:repo=%s:pr=%d", host, repo, number)
 }
 
 func diffCacheKey(host, repo string, number int, sha string) string {
@@ -799,6 +887,10 @@ func commitDiffMeta(key string, repo domain.Repository, sha string, fetchedAt ti
 		ExpiresAt: farFuture,
 		Encoding:  "json",
 	}
+}
+
+func rangeDiffCacheKey(host, repo string, number int, from, to string) string {
+	return fmt.Sprintf("rangediff:v1:host=%s:repo=%s:pr=%d:from=%s:to=%s", host, repo, number, from, to)
 }
 
 func draftInlineCacheKey(host, repo string, number int, sha string) string {

@@ -229,6 +229,7 @@ func (m *PRDetailModel) renderRightViewport(width, height int) string {
 		// Narrow panel: drop the padding so all four numbered tabs still fit.
 		tabsStr = truncateText(m.renderSectionTabsCompact(), innerW)
 	}
+	tabsStr = m.withSinceReviewPill(tabsStr, innerW)
 
 	var borderColor lipgloss.Color
 	if m.theme != nil {
@@ -304,6 +305,10 @@ func (m *PRDetailModel) sectionTabs(gap int) string {
 		} else {
 			parts[i] = inactive.Render(td.key + ":" + td.name)
 		}
+		// Flag pushes since the viewer's review; the Diff tab's pill says more.
+		if td.num == TabDiff && m.activeTab != TabDiff && m.hasNewSinceReview() {
+			parts[i] += lipgloss.NewStyle().Foreground(th.Warning).Render("•")
+		}
 	}
 	return strings.Join(parts, strings.Repeat(" ", max(gap, 1)))
 }
@@ -320,8 +325,12 @@ func (m *PRDetailModel) renderNarrowBody(width, height int) string {
 
 	var header string
 	if m.Diff != nil {
-		header = fmt.Sprintf("  %d files changed  +%d -%d",
-			fileCount, m.Diff.Stats.TotalAdditions, m.Diff.Stats.TotalDeletions)
+		scope := ""
+		if m.since.active {
+			scope = " since " + shortSHA(m.since.from)
+		}
+		header = fmt.Sprintf("  %d files changed%s  +%d -%d",
+			fileCount, scope, m.Diff.Stats.TotalAdditions, m.Diff.Stats.TotalDeletions)
 	} else {
 		header = fmt.Sprintf("  %d files changed", fileCount)
 	}

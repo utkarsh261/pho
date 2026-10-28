@@ -268,6 +268,10 @@ func (s *closeReopenPRService) LoadPRCommits(_ context.Context, _ domain.Reposit
 func (s *closeReopenPRService) LoadCommitDiff(_ context.Context, _ domain.Repository, _ string, _ bool) (diffmodel.DiffModel, error) {
 	return diffmodel.DiffModel{}, nil
 }
+
+func (s *closeReopenPRService) LoadRangeDiff(_ context.Context, _ domain.Repository, _ int, _, _ string, _ bool) (diffmodel.RangeDiff, error) {
+	return diffmodel.RangeDiff{}, nil
+}
 func (s *closeReopenPRService) PostComment(_ context.Context, _ domain.Repository, _, _ string) error {
 	return nil
 }

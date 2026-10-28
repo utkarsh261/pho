@@ -275,7 +275,10 @@ func pullRequestPreviewSelection(profile githubpkg.GitHubHostProfile) string {
 		labelsSelection,
 		"author { login }",
 		"assignees(first: 10) { nodes { login } }",
-		"reviews(first: 20) { nodes { author { login avatarUrl } state submittedAt body } }",
+		"reviews(last: 30) { nodes { author { login avatarUrl } state submittedAt body commit { oid } } }",
+		// One latest review per user, so the viewer's last review is found
+		// even when more than 30 others (bots) came after it.
+		"latestReviews(first: 100) { nodes { author { __typename login } state submittedAt commit { oid } } }",
 		"reviewThreads(first: 50) { nodes { id path line originalLine isResolved resolvedBy { login } comments(first: 50) { nodes { id author { login } body createdAt } } } }",
 		"comments(first: 20) { nodes { id author { login } body createdAt } }",
 		"files(first: 20) { nodes { path additions deletions } }",

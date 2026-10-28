@@ -244,6 +244,9 @@ func (m *PRDetailModel) rebuildDraftCovered() {
 	m.ensureDiffIndices()
 	m.draftCovered = make(map[hunkLineKey]bool)
 	for _, d := range m.drafts {
+		if m.sinceReviewHidesDraft(d) {
+			continue
+		}
 		fi, hi, endLI, ok := m.findDiffLineAnchor(d.Path, d.Line, d.Side)
 		if !ok {
 			continue

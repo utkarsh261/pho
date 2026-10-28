@@ -417,7 +417,7 @@ func TestNormalizePreviewResponse_ReviewThreadsFromJSON(t *testing.T) {
 	        "author": {"login": "alice"},
 	        "assignees": {"nodes": []},
 	        "reviews": {"nodes": [
-	          {"author": {"login": "bob"}, "state": "COMMENTED", "submittedAt": "2026-06-01T12:00:00Z", "body": "test latest", "avatarUrl": ""}
+	          {"author": {"login": "bob"}, "state": "COMMENTED", "submittedAt": "2026-06-01T12:00:00Z", "body": "test latest", "avatarUrl": "", "commit": {"oid": "abc123"}}
 	        ]},
 	        "reviewThreads": {"nodes": [
 	          {
@@ -447,7 +447,10 @@ func TestNormalizePreviewResponse_ReviewThreadsFromJSON(t *testing.T) {
 	        "statusCheckRollup": null,
 	        "labels": {"nodes": []},
 	        "reviewRequests": {"nodes": []},
-	        "latestOpinionatedReviews": {"nodes": []}
+	        "latestOpinionatedReviews": {"nodes": []},
+	        "latestReviews": {"nodes": [
+	          {"author": {"__typename": "User", "login": "bob"}, "state": "COMMENTED", "submittedAt": "2026-06-01T12:00:00Z", "commit": {"oid": "abc123"}}
+	        ]}
 	      }
 	    }
 	  }
@@ -460,6 +463,9 @@ func TestNormalizePreviewResponse_ReviewThreadsFromJSON(t *testing.T) {
 	snapshot, err := normalizePreviewResponse(repo, 42, resp.Data)
 	if err != nil {
 		t.Fatalf("normalize: %v", err)
+	}
+	if got := snapshot.LatestReviews; len(got) != 1 || got[0].AuthorLogin != "bob" || got[0].CommitSHA != "abc123" || got[0].SubmittedAt.IsZero() {
+		t.Errorf("LatestReviews = %+v", got)
 	}
 	if len(snapshot.ReviewThreads) != 2 {
 		t.Fatalf("expected 2 review threads, got %d", len(snapshot.ReviewThreads))
@@ -486,7 +492,10 @@ func TestNormalizePreviewResponse_ReviewThreadsFromJSON(t *testing.T) {
 	}
 
 	if len(snapshot.Reviewers) != 1 || snapshot.Reviewers[0].Login != "bob" {
-		t.Errorf("unexpected reviewers: %+v", snapshot.Reviewers)
+		t.Fatalf("unexpected reviewers: %+v", snapshot.Reviewers)
+	}
+	if got := snapshot.Reviewers[0].CommitSHA; got != "abc123" {
+		t.Errorf("reviewer CommitSHA = %q, want abc123", got)
 	}
 
 	if len(snapshot.Reviewers[0].InlineComments) != 0 {

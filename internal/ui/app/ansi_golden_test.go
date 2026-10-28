@@ -86,6 +86,11 @@ func ansiScreens() []ansiScreen {
 			ansiKeys(m, "/", "line")
 			return m
 		}},
+		{"prdetail_diff_since_review", false, func(t *testing.T) *Model {
+			m := ansiPRDetailSinceReview(t)
+			ansiKeys(m, "s")
+			return m
+		}},
 		{"prdetail_comments", true, func(t *testing.T) *Model { return ansiPRDetail(t, "3") }},
 		{"prdetail_close_prompt", false, func(t *testing.T) *Model { return ansiPRDetail(t, "x") }},
 		{"prdetail_commits", false, func(t *testing.T) *Model { return ansiPRDetail(t, "4") }},
@@ -337,6 +342,35 @@ func ansiPRDetail(t testing.TB, tab string) *Model {
 		t.Fatalf("expected PR detail view, got %s", m.currentView())
 	}
 	ansiKeys(m, tab)
+	return m
+}
+
+// ansiPRDetailSinceReview opens the fixture PR on the Diff tab after the
+// viewer (octocat) reviewed an earlier commit and one line changed since.
+func ansiPRDetailSinceReview(t *testing.T) *Model {
+	t.Helper()
+	detail, diff := ansiPRDetailFixture()
+	detail.HeadRefOID = "f6e5d4c3b2a1"
+	detail.Reviewers = append(detail.Reviewers, domain.PreviewReviewer{
+		Login: "octocat", State: "COMMENTED", CommitSHA: "a1b2c3d4e5f6", SubmittedAt: fixedNow().Add(-4 * time.Hour),
+	})
+	since := deeplinkDiffFixture()
+	since.Files[0].Hunks[0].Lines = []diffmodel.DiffLine{
+		{Kind: "context", Raw: " func login() {"},
+		{Kind: "context", Raw: " \tclearCookie(new line)"},
+		{Kind: "addition", Raw: "+\tclearSession()"},
+		{Kind: "context", Raw: " }"},
+	}
+	since.Files[0].DisplayRows = 5
+	repo := testutil.Repo("acme/alpha")
+	prSvc := &stubPRService{detailResult: detail, diffResult: diff, rangeDiff: diffmodel.RangeDiff{
+		Diff: since, FromSHA: "a1b2c3d4e5f6", ToSHA: detail.HeadRefOID, Commits: 1,
+	}}
+	m := newDeepLinkTestModel(t, 123, []domain.Repository{repo}, prSvc)
+	m.SetTheme(ansiTheme(t))
+	_, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	drainCmds(m, m.Init())
+	ansiKeys(m, "2")
 	return m
 }
 

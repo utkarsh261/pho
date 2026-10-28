@@ -196,6 +196,10 @@ func (f *fakePRService) LoadPRCommits(ctx context.Context, repo domain.Repositor
 func (f *fakePRService) LoadCommitDiff(ctx context.Context, repo domain.Repository, sha string, force bool) (diffmodel.DiffModel, error) {
 	return diffmodel.DiffModel{}, nil
 }
+
+func (f *fakePRService) LoadRangeDiff(_ context.Context, _ domain.Repository, _ int, _, _ string, _ bool) (diffmodel.RangeDiff, error) {
+	return diffmodel.RangeDiff{}, nil
+}
 func (f *fakePRService) PostComment(ctx context.Context, repo domain.Repository, prID string, body string) error {
 	return nil
 }

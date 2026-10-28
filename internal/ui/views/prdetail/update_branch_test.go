@@ -51,6 +51,10 @@ func (s *updateBranchPRService) LoadPRCommits(_ context.Context, _ domain.Reposi
 func (s *updateBranchPRService) LoadCommitDiff(_ context.Context, _ domain.Repository, _ string, _ bool) (diffmodel.DiffModel, error) {
 	return diffmodel.DiffModel{}, nil
 }
+
+func (s *updateBranchPRService) LoadRangeDiff(_ context.Context, _ domain.Repository, _ int, _, _ string, _ bool) (diffmodel.RangeDiff, error) {
+	return diffmodel.RangeDiff{}, nil
+}
 func (s *updateBranchPRService) PostComment(_ context.Context, _ domain.Repository, _, _ string) error {
 	return nil
 }

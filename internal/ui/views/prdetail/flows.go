@@ -30,6 +30,9 @@ func (m *PRDetailModel) StatusMode() string {
 // StatusHint returns the status bar hint text for the current state.
 func (m *PRDetailModel) StatusHint() string {
 	if m.visual.Active {
+		if m.diffNotice != "" {
+			return m.diffNotice
+		}
 		return "j/k: Select lines | c: Comment | d: Discard | Esc: Exit visual"
 	}
 	if m.confirmDiscardAll {

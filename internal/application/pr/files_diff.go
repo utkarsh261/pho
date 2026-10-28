@@ -11,6 +11,9 @@ import (
 // maxListedFiles is GitHub's cap on the per-file endpoints.
 const maxListedFiles = 3000
 
+// maxCompareFiles is GitHub's cap on the files in a compare response.
+const maxCompareFiles = 300
+
 // unifiedDiffFromFiles rebuilds a unified diff from per-file API results so
 // it goes through the same parser (and line numbering) as a raw diff.
 // Files GitHub sent without a patch get a parse.PatchUnavailableMarker line.

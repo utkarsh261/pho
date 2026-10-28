@@ -40,6 +40,10 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		case "k", "up":
 			m.shrinkVisualSelectionUp()
 		case "c":
+			if !m.sinceReviewCommentable() {
+				m.diffNotice = "Can't comment here: not part of the PR diff · s: all changes"
+				break
+			}
 			if m.PRService != nil {
 				draft := m.findDraftForSelection()
 				m.inlineDraftStale = false
@@ -247,6 +251,11 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 			}
 		}
 		return m, nil
+	case "s":
+		if m.CommitMode {
+			return m, nil
+		}
+		return m, m.toggleSinceReview()
 	case " ":
 		if m.CommitMode {
 			return m, nil

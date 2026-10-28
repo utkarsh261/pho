@@ -195,6 +195,9 @@ type PRDetailModel struct {
 	// diffNotice is a one-key status message (e.g. why z did nothing).
 	diffNotice string
 
+	// since is the Diff tab's "since your review" scope (since_review.go).
+	since sinceReviewState
+
 	// Inline review drafts
 	visual            visualModeState
 	drafts            []domain.DraftInlineComment
@@ -354,6 +357,9 @@ func (m *PRDetailModel) reloadHeadDependentState(headSHA string) tea.Cmd {
 	m.commits = nil
 	m.commitsLoaded = false
 	m.commitsLoading = reloadCommits
+	// The since-review scope stays on; the range for the new head is
+	// fetched once the detail settles (syncSinceReviewCmd).
+	m.since.full = nil
 
 	if m.PRService == nil {
 		m.DiffLoading = false
@@ -369,6 +375,20 @@ func (m *PRDetailModel) reloadHeadDependentState(headSHA string) tea.Cmd {
 			cmds.LoadPRCommitsCmd(m.PRService, m.Repo, m.Summary.Number, headSHA, true))
 	}
 	return tea.Batch(cmdsOut...)
+}
+
+// setActiveDiff makes dm the diff on screen and rebuilds everything derived
+// from it: cursor, indices, search, sidebar files, draft markers, collapse.
+func (m *PRDetailModel) setActiveDiff(dm *model.DiffModel) {
+	m.Diff = dm
+	m.invalidateDiffCursor()
+	m.rebuildDiffIndices()
+	m.searchIndex = nil
+	m.leftPanel.Files = dm.Files
+	m.leftPanel.Loading = false
+	m.rebuildDraftCovered()
+	m.resetCollapse()
+	m.refreshSearchMatches()
 }
 
 // NewModel creates a new PRDetailModel for the given PR.
@@ -629,6 +649,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		if headChanged || reloadUnknownHead {
 			out = append(out, m.reloadHeadDependentState(m.Summary.HeadRefOID))
 		}
+		out = append(out, m.syncSinceReviewCmd())
 		// Stale cache hit → schedule background revalidation.
 		if msg.FromCache {
 			out = append(out, m.loadPRDetailCmd(true))
@@ -655,17 +676,19 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 			return m, tea.Batch(spinCmd, composeCmd,
 				cmds.LoadDiffCmd(m.PRService, m.Repo, m.Summary.Number, m.Summary.HeadRefOID, true))
 		}
-		m.Diff = &msg.Diff
-		m.invalidateDiffCursor()
-		m.rebuildDiffIndices()
-		m.searchIndex = nil
-		// Sync files into left panel.
-		m.leftPanel.Files = m.Diff.Files
-		m.leftPanel.Loading = false
 		// Load persisted drafts for this PR/SHA; files with drafts stay expanded.
 		m.loadDrafts()
-		m.resetCollapse()
-		m.refreshSearchMatches()
+		if m.since.active {
+			// The range diff stays on screen; s brings this one back.
+			m.since.full = &msg.Diff
+			m.leftPanel.Loading = false
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
+		m.setActiveDiff(&msg.Diff)
+		return m, tea.Batch(spinCmd, composeCmd)
+
+	case cmds.RangeDiffLoaded:
+		m.handleRangeDiffLoaded(msg)
 		return m, tea.Batch(spinCmd, composeCmd)
 
 	case cmds.CommitsLoaded:
@@ -701,14 +724,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 			return m, tea.Batch(spinCmd, composeCmd)
 		}
 		m.DiffErr = nil
-		m.Diff = &msg.Diff
-		m.invalidateDiffCursor()
-		m.rebuildDiffIndices()
-		m.searchIndex = nil
-		m.resetCollapse()
-		m.refreshSearchMatches()
-		m.leftPanel.Files = m.Diff.Files
-		m.leftPanel.Loading = false
+		m.setActiveDiff(&msg.Diff)
 		return m, tea.Batch(spinCmd, composeCmd)
 
 	case submitComposeMsg:
@@ -716,7 +732,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		if m.compose.mode == composeModeDraftInline {
 			if m.draftsStale || m.inlineDraftStale {
 				m.compose.status = composeStatusError
-				m.compose.errMsg = "The diff changed; reopen the inline draft on the current head"
+				m.compose.errMsg = "The diff changed under this draft; select the lines again"
 				return m, tea.Batch(spinCmd, composeCmd)
 			}
 			if body == "" || !m.validVisualState() {
