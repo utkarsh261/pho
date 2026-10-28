@@ -5,6 +5,8 @@ package prdetail
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -106,6 +108,9 @@ const scrollPadding = 4
 
 type PRDetailModel struct {
 	Summary domain.PullRequestSummary
+
+	// Stack is the stack this PR belongs to, nil when it isn't stacked.
+	Stack *domain.Stack
 
 	Detail *domain.PRPreviewSnapshot
 
@@ -925,13 +930,17 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 			return m, tea.Batch(spinCmd, composeCmd)
 		}
 		m.mergeStep = mergeStepExecuting
-		return m, tea.Batch(spinCmd, composeCmd, cmds.MergePRCmd(m.PRService, m.mergeRepo, m.Summary.Number, m.mergePRID, msg.State.HeadRefOid, m.mergeMethod))
+		return m, tea.Batch(spinCmd, composeCmd, cmds.MergePRCmd(m.PRService, m.mergeRepo, m.Summary.Number, m.mergePRID, msg.State.HeadRefOid, m.mergeMethod, m.Stack != nil && m.Stack.Native))
 
 	case cmds.MergePRMsg:
 		if m.mergeStep != mergeStepExecuting {
 			return m, tea.Batch(spinCmd, composeCmd)
 		}
 		m.mergeStep = mergeStepNone
+		if errors.Is(msg.Err, domain.ErrMergeInProgress) {
+			m.mergeErr = fmt.Sprintf("GitHub is still merging #%d · R: Refresh", m.Summary.Number)
+			return m, tea.Batch(spinCmd, composeCmd)
+		}
 		if msg.Err != nil {
 			m.mergeErr = "Merge failed: " + msg.Err.Error()
 			return m, tea.Batch(spinCmd, composeCmd)

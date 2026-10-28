@@ -45,6 +45,11 @@ func (m *PRDetailModel) StatusHint() string {
 	case mergeStepSelectMethod:
 		return fmt.Sprintf("Merge #%d: [s]quash [r]ebase [M]erge [esc]cancel", m.Summary.Number)
 	case mergeStepConfirm:
+		if below := m.openBelowInNativeStack(); len(below) > 0 {
+			// GitHub merges every open PR under this one along with it.
+			return fmt.Sprintf("%s and merge #%d and the %s below it (%s)? (y/n)",
+				strings.ToLower(m.mergeMethod), m.Summary.Number, plural(len(below), "PR"), prList(below))
+		}
 		return fmt.Sprintf("%s and merge #%d? (y/n)", strings.ToLower(m.mergeMethod), m.Summary.Number)
 	case mergeStepChecking:
 		return "Checking mergeability..."
@@ -132,6 +137,9 @@ func (m *PRDetailModel) StatusHint() string {
 	hint := "Tab: Switch | Space: Visual | 1/2/3/4: Tabs | R: Refresh | /: Search | ?"
 	if len(m.drafts) > 0 {
 		hint = "Tab: Switch | Space: Visual | 1/2/3/4: Tabs | R: Refresh | /: Search | D: Discard drafts | ?"
+	}
+	if m.Stack != nil {
+		hint = strings.TrimSuffix(hint, "?") + "{/}: Down/Up stack | S: Stack | ?"
 	}
 	return hint
 }

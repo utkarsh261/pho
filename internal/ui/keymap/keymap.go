@@ -142,6 +142,8 @@ func dispatchPRListPanel(msg tea.KeyMsg) Result {
 			return Result{Action: ChangeTab{Direction: TabNext}}
 		case 'o':
 			return Result{Action: OpenBrowser{}}
+		case 'S':
+			return Result{Action: OpenStackPicker{}}
 		case 'q':
 			return Result{Action: Quit{}}
 		case '/':
@@ -296,6 +298,11 @@ func (OpenDashboardFilter) isAction() {}
 type OpenThemePicker struct{}
 
 func (OpenThemePicker) isAction() {}
+
+// OpenStackPicker lists the selected PR's stack to jump between.
+type OpenStackPicker struct{}
+
+func (OpenStackPicker) isAction() {}
 
 type TriggerRefresh struct{}
 

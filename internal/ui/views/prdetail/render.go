@@ -111,10 +111,11 @@ func (m *PRDetailModel) renderHeader() string {
 	content := lipgloss.NewStyle().Padding(0, 1).Width(innerW).Render(line1 + "\n" + line2)
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
+		BorderTop(false).
 		BorderBottom(false).
 		BorderForeground(th.Border).
 		Render(content)
-	return box + "\n" + m.headerBottomBorder(th, innerW)
+	return m.headerTopBorder(th, innerW) + "\n" + box + "\n" + m.headerBottomBorder(th, innerW)
 }
 
 // headerBottomBorder closes the header box with the PR's labels set into the

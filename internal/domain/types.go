@@ -615,6 +615,10 @@ type LabelChange struct {
 // for lack of permission. The error's own text says what was refused.
 var ErrLabelPermission = errors.New("no permission to change labels")
 
+// ErrMergeInProgress means GitHub accepted a merge but hadn't finished it
+// by the time pho stopped waiting.
+var ErrMergeInProgress = errors.New("GitHub is still merging")
+
 // Empty reports whether the change does nothing.
 func (c LabelChange) Empty() bool {
 	return len(c.Create) == 0 && len(c.Add) == 0 && len(c.Remove) == 0

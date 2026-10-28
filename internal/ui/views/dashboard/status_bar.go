@@ -21,6 +21,7 @@ type StatusBarModel struct {
 	CurrentTab   domain.DashboardTab
 	SelectedRepo string
 	HintOverride string // when non-empty, replaces focus-based hint text
+	Stacked      bool   // the selected PR is in a stack, so S has something to show
 	Mode         string // diff input mode badge ("VISUAL" or "SEARCH"); "" hides it
 	theme        *theme.Theme
 	spinner      spinner.Model
@@ -164,6 +165,9 @@ func (m *StatusBarModel) hintText() string {
 	case domain.FocusRepoPanel:
 		return "j/k: Move | Enter: Select | Tab: Next panel | ?: Keymap"
 	case domain.FocusPRListPanel:
+		if m.Stacked {
+			return "j/k: Navigate | h/l: Tab | Enter: Open | S: Stack | Tab: Next panel | ?: Keymap"
+		}
 		return "j/k: Navigate | h/l: Tab | Enter: Open | Tab: Next panel | ?: Keymap"
 	case domain.FocusPreviewPanel:
 		return "j/k: Scroll | Enter: Open | Tab: Next panel | ?: Keymap"

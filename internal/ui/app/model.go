@@ -20,6 +20,7 @@ import (
 	"github.com/utkarsh261/pho/internal/ui/components/createpr"
 	"github.com/utkarsh261/pho/internal/ui/components/keymapoverlay"
 	"github.com/utkarsh261/pho/internal/ui/components/overlay"
+	"github.com/utkarsh261/pho/internal/ui/components/stackmap"
 	"github.com/utkarsh261/pho/internal/ui/keymap"
 	"github.com/utkarsh261/pho/internal/ui/layout"
 	"github.com/utkarsh261/pho/internal/ui/theme"
@@ -133,6 +134,8 @@ type Model struct {
 	currentDashboard domain.DashboardSnapshot
 	currentInvolving domain.InvolvingSnapshot
 	involvingRepo    string // the repo currentInvolving was loaded for
+	stackPicker      stackmap.Picker
+	previewBehind    bool // the cursor moved while PR detail hid the preview
 	// stacks indexes the selected repo's stacked PRs.
 	stacks    domain.StackIndex
 	openPages openPRPages
@@ -306,6 +309,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.openThemePicker()
 	case prdetail.OpenFilePicker:
 		return m, m.openFilePicker()
+	case prdetail.OpenStackPicker:
+		return m, m.openStackPicker()
+	case prdetail.StackHop:
+		return m, m.handleStackHop(msg)
 	case prdetail.OpenLabelPicker:
 		return m, m.openLabelPicker()
 	case cmds.RepoLabelsLoaded, cmds.PRLabelsLoaded:
@@ -604,6 +611,9 @@ func (m *Model) viewFrame() string {
 	if m.themePicking() {
 		return m.palette.ViewOver(bg)
 	}
+	if m.stackPicker.Visible {
+		return m.stackPicker.ViewOver(bg)
+	}
 	if m.keymapOverlay.Visible {
 		return m.keymapOverlay.ViewOver(bg)
 	}
@@ -694,6 +704,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	if m.stackPicker.Visible {
+		return m, m.handleStackPickKey(msg)
+	}
 	// The theme picker can open over any view, so it routes its own keys.
 	if m.themePicking() {
 		return m, m.handleThemePickKey(msg)
@@ -761,6 +774,8 @@ func (m *Model) handleRootAction(action keymap.Action) tea.Cmd {
 		return m.openCreatePROverlay()
 	case keymap.OpenThemePicker:
 		return m.openThemePicker()
+	case keymap.OpenStackPicker:
+		return m.openStackPicker()
 	default:
 		return nil
 	}
@@ -1455,6 +1470,7 @@ func (m *Model) applyWindowSize(msg tea.WindowSizeMsg) {
 	m.status.SetRect(m.layout.Current.Width)
 	m.palette, _ = m.palette.Update(msg)
 	m.keymapOverlay.SetSize(msg.Width, msg.Height)
+	m.stackPicker.SetSize(msg.Width, msg.Height)
 	m.syncPaletteStats()
 	m.syncStatus()
 }
@@ -1486,7 +1502,13 @@ func (m *Model) syncStatus() {
 	} else {
 		m.status.SelectedRepo = ""
 	}
-	if m.themePicking() {
+	m.status.Stacked = false
+	if sel, ok := m.currentSelectedPR(); ok {
+		m.status.Stacked = m.stacks.Lookup(sel.Repo, sel.Number) != nil
+	}
+	if m.stackPicker.Visible {
+		m.status.HintOverride = stackPickHint
+	} else if m.themePicking() {
 		m.status.HintOverride = themePickHint
 	} else if m.filePicking() {
 		m.status.HintOverride = filePickHint
@@ -1692,7 +1714,7 @@ func (m *Model) recentTabPRs() ([]domain.PullRequestSummary, time.Time) {
 }
 
 func (m *Model) currentSelectedPR() (domain.PullRequestSummary, bool) {
-	prs := m.currentPRsForTab(m.prList.Active)
+	prs := m.state.Dashboard.PRsByTab[m.prList.Active]
 	if len(prs) == 0 {
 		return domain.PullRequestSummary{}, false
 	}
@@ -1911,6 +1933,7 @@ func (m *Model) openPRDetailForSummary(summary domain.PullRequestSummary, repo d
 	m.prDetail.Log = m.log
 	m.prDetail.Limits = m.deps.DiffLimits
 	m.prDetail.SetTheme(m.theme)
+	m.prDetail.SetStack(m.stacks.Lookup(m.prDetail.Summary.Repo, m.prDetail.Summary.Number))
 	m.prDetail.ViewerLogin = m.state.Session.ViewerByHost[repo.Host]
 	m.prDetail.Width = m.layout.Current.Width
 	m.prDetail.Height = m.layout.Current.Height - 2
@@ -1937,6 +1960,7 @@ func (m *Model) openPRDetailForJump(summary domain.PullRequestSummary) tea.Cmd {
 	m.prDetail.Log = m.log
 	m.prDetail.Limits = m.deps.DiffLimits
 	m.prDetail.SetTheme(m.theme)
+	m.prDetail.SetStack(m.stacks.Lookup(m.prDetail.Summary.Repo, m.prDetail.Summary.Number))
 	m.prDetail.ViewerLogin = m.state.Session.ViewerByHost[repo.Host]
 	m.prDetail.Width = m.layout.Current.Width
 	m.prDetail.Height = m.layout.Current.Height - 2
@@ -2106,6 +2130,7 @@ func (m *Model) openPRDetail() tea.Cmd {
 	m.prDetail.Log = m.log
 	m.prDetail.Limits = m.deps.DiffLimits
 	m.prDetail.SetTheme(m.theme)
+	m.prDetail.SetStack(m.stacks.Lookup(m.prDetail.Summary.Repo, m.prDetail.Summary.Number))
 	m.prDetail.ViewerLogin = m.state.Session.ViewerByHost[repo.Host]
 	m.prDetail.Width = m.layout.Current.Width
 	m.prDetail.Height = m.layout.Current.Height - 2 // minus status bar
@@ -2137,6 +2162,11 @@ func (m *Model) handleBackToDashboard() tea.Cmd {
 	m.previousFocus = domain.FocusPreviewPanel
 	m.rebuildDashboardTabs()
 	m.syncStatus()
+	if m.previewBehind {
+		// The cursor moved while hopping along a stack.
+		m.previewBehind = false
+		return m.syncCurrentSelection()
+	}
 	return nil
 }
 

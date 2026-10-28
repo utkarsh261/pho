@@ -87,6 +87,10 @@ func (s *updateBranchPRService) LoadDraftComments(_ context.Context, _ domain.Re
 func (s *updateBranchPRService) DeleteDraftComments(_ context.Context, _ domain.Repository, _ int, _ string) error {
 	return nil
 }
+func (s *updateBranchPRService) MergeStackedPR(_ context.Context, _ domain.Repository, _ int, _, _ string) error {
+	return nil
+}
+
 func (s *updateBranchPRService) MergePR(_ context.Context, _ domain.Repository, _ int, _, _, _ string) error {
 	return nil
 }

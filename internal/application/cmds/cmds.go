@@ -53,6 +53,9 @@ type PRService interface {
 	LoadDraftComments(ctx context.Context, repo domain.Repository, number int, headSHA string) ([]domain.DraftInlineComment, error)
 	DeleteDraftComments(ctx context.Context, repo domain.Repository, number int, headSHA string) error
 	MergePR(ctx context.Context, repo domain.Repository, number int, prID string, headRefOID string, method string) error
+	// MergeStackedPR merges a PR in a native GitHub stack, which GitHub
+	// won't merge through GraphQL.
+	MergeStackedPR(ctx context.Context, repo domain.Repository, number int, headRefOID string, method string) error
 	CheckMergeable(ctx context.Context, repo domain.Repository, number int) (domain.MergeableState, error)
 	ClosePR(ctx context.Context, repo domain.Repository, number int, prID string) error
 	ReopenPR(ctx context.Context, repo domain.Repository, number int, prID string) error
@@ -524,9 +527,17 @@ func CheckMergeableCmd(svc PRService, repo domain.Repository, number int) tea.Cm
 	}
 }
 
-func MergePRCmd(svc PRService, repo domain.Repository, number int, prID string, headRefOID string, method string) tea.Cmd {
+// MergePRCmd merges a PR; inStack routes a PR in a native stack straight to
+// the merge GitHub accepts for it.
+func MergePRCmd(svc PRService, repo domain.Repository, number int, prID string, headRefOID string, method string, inStack bool) tea.Cmd {
 	return func() tea.Msg {
-		if err := svc.MergePR(context.Background(), repo, number, prID, headRefOID, method); err != nil {
+		var err error
+		if inStack {
+			err = svc.MergeStackedPR(context.Background(), repo, number, headRefOID, method)
+		} else {
+			err = svc.MergePR(context.Background(), repo, number, prID, headRefOID, method)
+		}
+		if err != nil {
 			return MergePRMsg{Repo: repoKey(repo), Number: number, Method: method, Err: err}
 		}
 		return MergePRMsg{Repo: repoKey(repo), Number: number, Method: method}

@@ -334,6 +334,7 @@ func buildDashboardBindings(ctx Context) []Group {
 				{Key: "j/k", Description: "Move up/down"},
 				{Key: "h/l", Description: "Prev/next tab"},
 				{Key: "enter", Description: "Open PR detail"},
+				{Key: "S", Description: "List the PR's stack"},
 			},
 		})
 	case domain.FocusPreviewPanel:
@@ -455,6 +456,14 @@ func buildPRDetailBindings(ctx Context) []Group {
 			Bindings: []Binding{
 				{Key: "/", Description: "Search diff"},
 				{Key: "n/N", Description: "Next/prev match"},
+			},
+		},
+		{
+			Name: "Stacks",
+			Bindings: []Binding{
+				{Key: "{", Description: "PR below (toward base)"},
+				{Key: "}", Description: "PR above"},
+				{Key: "S", Description: "List the stack"},
 			},
 		},
 	}
