@@ -785,6 +785,7 @@ func (m *Model) toggleKeymapOverlay() tea.Cmd {
 			ctx.Behind = m.prDetail.Detail.MergeState == "BEHIND"
 		}
 		ctx.DraftCount = m.prDetail.DraftCount()
+		ctx.Checks = m.prDetail.ChecksActive()
 	}
 	m.keymapOverlay.Groups = keymapoverlay.BuildBindings(ctx)
 	m.keymapOverlay.Visible = true
