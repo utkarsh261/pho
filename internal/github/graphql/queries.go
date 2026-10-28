@@ -183,6 +183,7 @@ func buildPreviewQuery(profile githubpkg.GitHubHostProfile) string {
 }
 
 func buildAllPRsQuery(profile githubpkg.GitHubHostProfile, owner, name, after string) string {
+	profile.SupportsPRStack = false // the jump palette never shows stacks
 	afterClause := ""
 	if after != "" {
 		afterClause = fmt.Sprintf(`, after: "%s"`, after)
@@ -237,9 +238,16 @@ func pullRequestSummarySelection(profile githubpkg.GitHubHostProfile) string {
 	if profile.SupportsHeadRefOID {
 		fields = append(fields, "headRefOid")
 	}
+	if profile.SupportsPRStack {
+		fields = append(fields, stackSelection)
+	}
 	fields = append(fields, rollupSelection(profile, false))
 	return strings.Join(fields, "\n        ")
 }
+
+// stackSelection fetches a PR's native GitHub stack, with every layer's
+// number and state so layers on unloaded pages, and merged ones, still show.
+const stackSelection = "stackEntry { position } stack { number size baseRefName entries(first: 25) { nodes { position pullRequest { number title state isDraft } } } }"
 
 // labelsSelection fetches a PR's first page of labels plus the full count, so
 // the UI's "+N" includes labels beyond the page.

@@ -43,6 +43,7 @@ type rawConfig struct {
 		DefaultTab  string `toml:"default_tab"`
 		RecentHours int    `toml:"recent_hours"`
 		MaxPRs      int    `toml:"max_prs"`
+		GroupStacks *bool  `toml:"group_stacks"`
 	} `toml:"dashboard"`
 	Cache struct {
 		Dir            string   `toml:"dir"`
@@ -83,7 +84,8 @@ type Config struct {
 	Dashboard struct {
 		DefaultTab  string
 		RecentHours int
-		MaxPRs      int // cap on open PRs the All tab loads
+		MaxPRs      int  // cap on open PRs the All tab loads
+		GroupStacks bool // list stacked PRs together, top of the stack first
 	}
 	Cache struct {
 		Dir            string
@@ -166,6 +168,7 @@ func defaults() Config {
 	cfg.Dashboard.DefaultTab = "my_prs"
 	cfg.Dashboard.RecentHours = 24
 	cfg.Dashboard.MaxPRs = 300
+	cfg.Dashboard.GroupStacks = true
 	cfg.Cache.MaxMemoryMB = 16
 	cfg.Cache.DashboardTTL = 2 * time.Minute
 	cfg.Cache.DiscoveryTTL = 1 * time.Hour
@@ -259,6 +262,7 @@ func Load(path string) (Config, error) {
 	cfg.Dashboard.DefaultTab = raw.Dashboard.DefaultTab
 	cfg.Dashboard.RecentHours = raw.Dashboard.RecentHours
 	cfg.Dashboard.MaxPRs = raw.Dashboard.MaxPRs
+	cfg.Dashboard.GroupStacks = raw.Dashboard.GroupStacks == nil || *raw.Dashboard.GroupStacks
 	cfg.Cache.Dir = raw.Cache.Dir
 	cfg.Cache.MaxMemoryMB = raw.Cache.MaxMemoryMB
 	cfg.Cache.DashboardTTL = raw.Cache.DashboardTTL.Duration

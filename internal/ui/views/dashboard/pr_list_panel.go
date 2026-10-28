@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/utkarsh261/pho/internal/domain"
+	"github.com/utkarsh261/pho/internal/ui/components/stackmap"
 	"github.com/utkarsh261/pho/internal/ui/theme"
 	"github.com/utkarsh261/pho/internal/ui/timefmt"
 )
@@ -37,6 +38,7 @@ type PRListPanelModel struct {
 	Height  int
 	theme   *theme.Theme
 	lastKey string
+	stacks  domain.StackIndex
 }
 
 func NewPRListPanelModel() *PRListPanelModel {
@@ -68,6 +70,11 @@ func (m *PRListPanelModel) SetTabSnapshot(tab domain.DashboardTab, prs []domain.
 		Truncated:  truncated,
 	}
 	m.ensureVisible()
+}
+
+// SetStacks sets the stacks drawn as rails between list rows.
+func (m *PRListPanelModel) SetStacks(idx domain.StackIndex) {
+	m.stacks = idx
 }
 
 // SetTabScanned records how many open PRs a filtered tab was built from, so
@@ -208,7 +215,7 @@ func (m *PRListPanelModel) View() string {
 		lines = append(lines, fitLine(row.line1, m.Width))
 		lines = append(lines, fitLine(row.line2, m.Width))
 		if i < len(rows)-1 {
-			lines = append(lines, fitLine("", m.Width))
+			lines = append(lines, fitLine(row.sep, m.Width))
 		}
 	}
 	if footer := m.footerLine(); footer != "" {
@@ -320,7 +327,7 @@ func (m *PRListPanelModel) visibleRows() []prRow {
 func (m *PRListPanelModel) renderRow(pr domain.PullRequestSummary, index int) prRow {
 	selected := index == m.Cursor
 	if m.theme == nil {
-		return m.renderRowPlain(pr, selected)
+		return m.renderRowPlain(pr, index, selected)
 	}
 	th := m.theme
 
@@ -328,6 +335,7 @@ func (m *PRListPanelModel) renderRow(pr domain.PullRequestSummary, index int) pr
 	if selected {
 		edge = th.PrimaryTxt.Render("▎")
 	}
+	rail := m.railAt(index)
 	glyph := m.stateGlyph(pr)
 	num := th.Number.Render(fmt.Sprintf("#%d", pr.Number))
 	meta := m.ciIconStyled(pr.CIStatus) + " " + m.reviewIconStyled(pr.ReviewDecision, pr.IsDraft)
@@ -358,16 +366,88 @@ func (m *PRListPanelModel) renderRow(pr domain.PullRequestSummary, index int) pr
 	if age := timefmt.Relative(pr.UpdatedAt, time.Now()); age != "" {
 		sub = append(sub, age)
 	}
-	line2 := edge + "   " + th.MutedTxt.Render(strings.Join(sub, " · "))
+	subText := th.MutedTxt.Render(strings.Join(sub, " · "))
+	railStyle := th.FaintTxt
+	if rail.active {
+		railStyle = th.PrimaryTxt
+	}
+	var line2, sep string
+	switch {
+	case rail.stack == nil:
+		line2 = edge + "   " + subText
+	case !rail.grouped:
+		// Its stackmates aren't in this tab: say where it sits instead.
+		line2 = edge + "   " + subText + th.FaintTxt.Render(fmt.Sprintf(" · stack %d/%d", rail.member.Layer, rail.stack.Height()))
+	case rail.continues:
+		line2 = edge + railStyle.Render("│") + "  " + subText + th.MutedTxt.Render(rail.forkNote)
+		sep = " " + railStyle.Render("│")
+	default:
+		line2 = edge + railStyle.Render("╰─") + " " + subText + th.MutedTxt.Render(rail.baseNote)
+	}
 
 	if selected {
 		line1 = th.FillRow(th.Highlight, m.Width, line1)
 		line2 = th.FillRow(th.Highlight, m.Width, line2)
 	}
-	return prRow{line1: line1, line2: line2}
+	return prRow{line1: line1, line2: line2, sep: sep}
 }
 
-func (m *PRListPanelModel) renderRowPlain(pr domain.PullRequestSummary, selected bool) prRow {
+// stackRail is how a list row joins the rail drawn through its stack.
+type stackRail struct {
+	stack     *domain.Stack
+	member    domain.StackMember
+	grouped   bool   // a stackmate is listed right above or below
+	continues bool   // the next row is in the same stack
+	active    bool   // the cursor is somewhere in this stack
+	forkNote  string // " · ↳ on #12" when the row below isn't its base
+	baseNote  string // " · onto main" on the last row of a group
+}
+
+func (m *PRListPanelModel) railAt(index int) stackRail {
+	prs := m.currentPRs()
+	if m.stacks == nil || index < 0 || index >= len(prs) {
+		return stackRail{}
+	}
+	pr := prs[index]
+	st := m.stacks.Lookup(pr.Repo, pr.Number)
+	if st == nil {
+		return stackRail{}
+	}
+	// A rail joins two rows only when they read top-first, as grouping lists
+	// them; in recency order a stack's PRs can sit the other way up.
+	joined := func(upper, lower int) bool {
+		if upper < 0 || lower >= len(prs) {
+			return false
+		}
+		a, b := prs[upper], prs[lower]
+		return m.stacks.Lookup(a.Repo, a.Number) == st && m.stacks.Lookup(b.Repo, b.Number) == st &&
+			st.IndexOf(a.Number) < st.IndexOf(b.Number)
+	}
+	r := stackRail{stack: st, continues: joined(index, index+1)}
+	r.grouped = r.continues || joined(index-1, index)
+	r.member, _ = st.Member(pr.Number)
+	if sel, ok := m.currentSelected(); ok {
+		r.active = m.stacks.Lookup(sel.Repo, sel.Number) == st
+	}
+	switch {
+	case r.continues && r.member.Parent != 0 && prs[index+1].Number != r.member.Parent:
+		r.forkNote = fmt.Sprintf(" · ↳ on #%d", r.member.Parent)
+	case !r.continues && r.member.Parent != 0 && !parentMerged(st, r.member):
+		r.baseNote = fmt.Sprintf(" · on #%d", r.member.Parent)
+	case !r.continues:
+		r.baseNote = " · onto " + st.Trunk
+	}
+	return r
+}
+
+// parentMerged reports whether the PR below mem has landed, which leaves mem
+// based on the trunk.
+func parentMerged(st *domain.Stack, mem domain.StackMember) bool {
+	p, ok := st.Member(mem.Parent)
+	return ok && p.State == domain.PRStateMerged
+}
+
+func (m *PRListPanelModel) renderRowPlain(pr domain.PullRequestSummary, index int, selected bool) prRow {
 	bar := " "
 	if selected {
 		bar = "▌"
@@ -379,6 +459,12 @@ func (m *PRListPanelModel) renderRowPlain(pr domain.PullRequestSummary, selected
 	branch := pr.HeadRefName
 	if branch == "" {
 		branch = pr.BaseRefName
+	}
+	if rail := m.railAt(index); rail.grouped {
+		if rail.continues {
+			return prRow{line1: line1, line2: bar + "| " + branch + rail.forkNote, sep: " |"}
+		}
+		return prRow{line1: line1, line2: bar + "`-" + branch + rail.baseNote}
 	}
 	return prRow{line1: line1, line2: strings.TrimRight(bar+" "+branch, " ")}
 }
@@ -475,40 +561,17 @@ func (m *PRListPanelModel) tabCount(tab domain.DashboardTab) int {
 }
 
 func (m *PRListPanelModel) ciIconStyled(status domain.CIStatus) string {
-	icon := ciIcon(status)
 	if m.theme == nil {
-		return icon
+		return ciIcon(status)
 	}
-	switch status {
-	case domain.CIStatusSuccess:
-		return m.theme.CISuccess.Render(icon)
-	case domain.CIStatusFailure, domain.CIStatusError:
-		return m.theme.CIFailure.Render(icon)
-	case domain.CIStatusPending:
-		return m.theme.CIPending.Render(icon)
-	default:
-		return m.theme.CIMuted.Render(icon)
-	}
+	return stackmap.CIIcon(m.theme, status)
 }
 
 func (m *PRListPanelModel) reviewIconStyled(decision domain.ReviewDecision, isDraft bool) string {
-	icon := reviewIcon(decision, isDraft)
 	if m.theme == nil {
-		return icon
+		return reviewIcon(decision, isDraft)
 	}
-	if isDraft {
-		return m.theme.ReviewDraft.Render(icon)
-	}
-	switch decision {
-	case domain.ReviewDecisionApproved:
-		return m.theme.ReviewApproved.Render(icon)
-	case domain.ReviewDecisionChangesRequested:
-		return m.theme.ReviewChanges.Render(icon)
-	case domain.ReviewDecisionReviewRequired:
-		return m.theme.ReviewRequired.Render(icon)
-	default:
-		return m.theme.ReviewMuted.Render(icon)
-	}
+	return stackmap.ReviewIcon(m.theme, decision, isDraft)
 }
 
 func (m *PRListPanelModel) prNumberStyled(number int) string {
@@ -608,4 +671,5 @@ func (m *PRListPanelModel) ensureVisible() {
 type prRow struct {
 	line1 string
 	line2 string
+	sep   string // the blank line below the row, which may carry a stack rail
 }

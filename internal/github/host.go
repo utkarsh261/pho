@@ -10,6 +10,7 @@ type GitHubHostProfile struct {
 	ViewerLogin            string // resolved from gh auth status
 	SupportsTopLevelRollup bool   // PullRequest.statusCheckRollup available (probe result)
 	SupportsHeadRefOID     bool   // PullRequest.headRefOid available (probe result)
+	SupportsPRStack        bool   // PullRequest.stack / stackEntry available (probe result)
 }
 
 func DefaultGraphQLURL(host string) string {

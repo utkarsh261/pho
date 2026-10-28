@@ -456,6 +456,7 @@ func (c *Client) profileForHost(host string) githubpkg.GitHubHostProfile {
 func (c *Client) applyCapabilityFallback(host string, errs []graphQLError) bool {
 	needsRollupFallback := false
 	needsHeadRefOIDFallback := false
+	needsStackFallback := false
 	for _, err := range errs {
 		msg := strings.ToLower(err.Message)
 		if strings.Contains(msg, "statuscheckrollup") {
@@ -464,8 +465,14 @@ func (c *Client) applyCapabilityFallback(host string, errs []graphQLError) bool 
 		if strings.Contains(msg, "headrefoid") {
 			needsHeadRefOIDFallback = true
 		}
+		// "Field 'stack' doesn't exist on type 'PullRequest'", likewise
+		// 'stackEntry', or any other error raised under those fields (no
+		// access, preview not enabled): stacks are optional, the PRs aren't.
+		if strings.Contains(msg, "'stack") || strings.Contains(msg, "pullrequeststack") || underStackField(err.Path) {
+			needsStackFallback = true
+		}
 	}
-	if !needsRollupFallback && !needsHeadRefOIDFallback {
+	if !needsRollupFallback && !needsHeadRefOIDFallback && !needsStackFallback {
 		return false
 	}
 
@@ -485,7 +492,22 @@ func (c *Client) applyCapabilityFallback(host string, errs []graphQLError) bool 
 		state.profile.SupportsHeadRefOID = false
 		changed = true
 	}
+	if needsStackFallback && state.profile.SupportsPRStack {
+		state.profile.SupportsPRStack = false
+		changed = true
+	}
 	return changed
+}
+
+// underStackField reports whether an error's path runs through a PR's
+// stack or stackEntry field.
+func underStackField(path []any) bool {
+	for _, p := range path {
+		if s, ok := p.(string); ok && (s == "stack" || s == "stackEntry") {
+			return true
+		}
+	}
+	return false
 }
 
 type graphQLErrorList []graphQLError
@@ -508,6 +530,7 @@ func defaultProfileForHost(host string) githubpkg.GitHubHostProfile {
 		RESTURL:                githubpkg.DefaultRESTURL(host),
 		SupportsTopLevelRollup: true,
 		SupportsHeadRefOID:     true,
+		SupportsPRStack:        true,
 	}
 }
 

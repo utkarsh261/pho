@@ -2,6 +2,8 @@ package graphql
 
 import (
 	"fmt"
+	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -112,8 +114,46 @@ func normalizePullRequestSummary(repo domain.Repository, node model.PullRequestN
 	summary.RequestedReviewers = requestedReviewers(node.ReviewRequests)
 	summary.AssigneeLogins = assigneeLogins(node.Assignees)
 	summary.LatestReviews = latestOpinionatedReviews(node.LatestOpinionatedReviews)
+	summary.NativeStack = nativeStack(node)
 
 	return summary, nil
+}
+
+// nativeStack maps a PR's GitHub stack, nil when it isn't in one.
+func nativeStack(node model.PullRequestNode) *domain.NativeStack {
+	if node.Stack == nil || node.StackEntry == nil {
+		return nil
+	}
+	st := &domain.NativeStack{
+		Number:   node.Stack.Number,
+		Trunk:    node.Stack.BaseRefName,
+		Position: node.StackEntry.Position,
+	}
+	for _, e := range node.Stack.Entries.Nodes {
+		if e.PullRequest == nil {
+			continue
+		}
+		st.Layers = append(st.Layers, domain.NativeStackLayer{
+			Position: e.Position,
+			Number:   e.PullRequest.Number,
+			Title:    e.PullRequest.Title,
+			State:    parsePRState(e.PullRequest.State),
+			IsDraft:  e.PullRequest.IsDraft,
+		})
+	}
+	// Only the first page of layers is fetched; a PR high in a long stack
+	// still belongs in its own.
+	if !slices.ContainsFunc(st.Layers, func(l domain.NativeStackLayer) bool { return l.Number == node.Number }) {
+		st.Layers = append(st.Layers, domain.NativeStackLayer{
+			Position: st.Position,
+			Number:   node.Number,
+			Title:    node.Title,
+			State:    parsePRState(node.State),
+			IsDraft:  node.IsDraft,
+		})
+	}
+	sort.Slice(st.Layers, func(i, j int) bool { return st.Layers[i].Position < st.Layers[j].Position })
+	return st
 }
 
 func normalizePreviewNode(repo domain.Repository, number int, node model.PullRequestNode) (domain.PRPreviewSnapshot, error) {

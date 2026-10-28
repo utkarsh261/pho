@@ -6,6 +6,8 @@ package domain
 import (
 	"context"
 	"errors"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -130,6 +132,95 @@ type PullRequestSummary struct {
 	RequestedReviewers []string // logins of directly requested reviewer users
 	AssigneeLogins     []string
 	LatestReviews      []ReviewSummary // one per reviewer, latest opinionated only
+
+	// NativeStack is the PR's GitHub stack, nil when it isn't in one or the
+	// host doesn't support stacks.
+	NativeStack *NativeStack `json:",omitempty"`
+}
+
+// NativeStack is a GitHub stack as the API reports it for one of its PRs.
+type NativeStack struct {
+	Number   int
+	Trunk    string // the branch the bottom layer targets
+	Position int    // this PR's layer; 1 is closest to the trunk
+	Layers   []NativeStackLayer
+}
+
+// Stack is a chain of PRs where each one's base branch is the head branch
+// of the PR below it. Members run top-first, so the trunk is below the last.
+type Stack struct {
+	Repo    string
+	Trunk   string // the branch the bottom PR targets, e.g. "main"
+	Native  bool   // a GitHub stack, rather than one inferred from branches
+	Members []StackMember
+}
+
+// StackMember is one PR in a Stack.
+type StackMember struct {
+	Number   int
+	Title    string
+	State    PRState
+	IsDraft  bool
+	Parent   int   // the PR this one is based on; 0 for the bottom PR
+	Indent   int   // fork depth, for drawing side branches
+	Layer    int   // 1 for the bottom PR, 2 for the one on it, and so on
+	Children []int // PRs based on this one, newest first
+	// Summary is the loaded PR, nil for layers on unloaded pages or merged.
+	Summary *PullRequestSummary
+}
+
+// Height is the number of layers in the stack's tallest branch.
+func (s *Stack) Height() int {
+	h := 0
+	for _, m := range s.Members {
+		h = max(h, m.Layer)
+	}
+	return h
+}
+
+// Member returns the member with this PR number.
+func (s *Stack) Member(number int) (StackMember, bool) {
+	for _, m := range s.Members {
+		if m.Number == number {
+			return m, true
+		}
+	}
+	return StackMember{}, false
+}
+
+// IndexOf is a member's position in Members, or -1.
+func (s *Stack) IndexOf(number int) int {
+	for i, m := range s.Members {
+		if m.Number == number {
+			return i
+		}
+	}
+	return -1
+}
+
+// StackIndex finds the stack a PR belongs to.
+type StackIndex map[string]*Stack
+
+// StackKey is a PR's key in a StackIndex.
+func StackKey(repo string, number int) string {
+	return strings.ToLower(repo) + "#" + strconv.Itoa(number)
+}
+
+// Lookup returns the stack holding this PR, or nil.
+func (idx StackIndex) Lookup(repo string, number int) *Stack {
+	if idx == nil {
+		return nil
+	}
+	return idx[StackKey(repo, number)]
+}
+
+// NativeStackLayer is one PR of a native stack, ordered by Position.
+type NativeStackLayer struct {
+	Position int
+	Number   int
+	Title    string
+	State    PRState
+	IsDraft  bool
 }
 
 type ReviewSummary struct {

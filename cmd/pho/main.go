@@ -352,6 +352,7 @@ func main() {
 		Host:            profiles[0].Host,
 		MaxJumpPRs:      cfg.Palette.MaxPRs,
 		MaxDashboardPRs: cfg.Dashboard.MaxPRs,
+		NoStackGrouping: !cfg.Dashboard.GroupStacks,
 		DiffLimits: prdetail.DiffLimits{
 			CollapseLines:     cfg.Diff.CollapseLines,
 			CollapseLineWidth: cfg.Diff.CollapseLineWidth,

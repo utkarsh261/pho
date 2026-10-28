@@ -144,6 +144,7 @@ func (a *authService) ResolveHosts(ctx context.Context) ([]githubpkg.GitHubHostP
 			ViewerLogin:            entry.Login,
 			SupportsTopLevelRollup: true,
 			SupportsHeadRefOID:     true,
+			SupportsPRStack:        true,
 		})
 	}
 
