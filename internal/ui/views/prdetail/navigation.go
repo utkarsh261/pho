@@ -495,6 +495,7 @@ func (m *PRDetailModel) handleRefresh() (*PRDetailModel, tea.Cmd) {
 	// A full user refresh already reloads detail and all visible dependent
 	// state, so it supersedes the SHA-less post-update fallback.
 	m.reloadDependentsIfHeadUnknown = false
+	m.exitSinceReview()
 	m.Detail = nil
 	m.Diff = nil
 	m.DiffErr = nil

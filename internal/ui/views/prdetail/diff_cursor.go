@@ -256,7 +256,11 @@ func (m *PRDetailModel) jumpToCommentCode() {
 	if entry.path == "" || entry.line <= 0 {
 		return
 	}
-	// Find the diff line matching (path, line).
+	// Find the diff line matching (path, line). Code the range diff doesn't
+	// show is in the full PR diff.
+	if _, _, _, ok := m.findDiffLineAnchorAnySide(entry.path, entry.line); !ok && m.since.active {
+		m.exitSinceReview()
+	}
 	if fi, hi, li, ok := m.findDiffLineAnchorAnySide(entry.path, entry.line); ok {
 		m.switchTab(TabDiff)
 		if !m.expandFileForJump(fi) {

@@ -47,6 +47,10 @@ type LeftPanelModel struct {
 	// HideCI suppresses the CI section entirely (used in commit mode).
 	HideCI bool
 
+	// ScopeLabel follows the file count in the header when Files is a
+	// subset of the PR, e.g. "since review".
+	ScopeLabel string
+
 	Focus PRDetailFocus
 
 	theme *theme.Theme
@@ -76,6 +80,12 @@ func (m *LeftPanelModel) renderFilesHeaderLabel(totalAdd, totalDel int) string {
 	if m.theme != nil {
 		labelStyled := m.panelLabel("Files", FocusFiles) + m.theme.MutedTxt.Render(fmt.Sprintf(" %d", len(m.Files)))
 		statsColored := m.theme.Additions.Render(fmt.Sprintf("+%d", totalAdd)) + " " + m.theme.Deletions.Render(fmt.Sprintf("-%d", totalDel))
+		if m.ScopeLabel != "" {
+			scoped := labelStyled + " " + lipgloss.NewStyle().Foreground(m.theme.Primary).Render(m.ScopeLabel)
+			if lipgloss.Width(scoped)+1+lipgloss.Width(statsColored) <= lpInner {
+				labelStyled = scoped
+			}
+		}
 		if lipgloss.Width(labelStyled)+1+lipgloss.Width(statsColored) > lpInner {
 			statsColored = formatFileStatsColored(totalAdd, totalDel, m.theme)
 		}
