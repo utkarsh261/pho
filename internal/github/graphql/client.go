@@ -456,6 +456,7 @@ func (c *Client) profileForHost(host string) githubpkg.GitHubHostProfile {
 func (c *Client) applyCapabilityFallback(host string, errs []graphQLError) bool {
 	needsRollupFallback := false
 	needsHeadRefOIDFallback := false
+	needsStackFallback := false
 	for _, err := range errs {
 		msg := strings.ToLower(err.Message)
 		if strings.Contains(msg, "statuscheckrollup") {
@@ -464,8 +465,12 @@ func (c *Client) applyCapabilityFallback(host string, errs []graphQLError) bool 
 		if strings.Contains(msg, "headrefoid") {
 			needsHeadRefOIDFallback = true
 		}
+		// "Field 'stack' doesn't exist on type 'PullRequest'", likewise 'stackEntry'.
+		if strings.Contains(msg, "'stack") || strings.Contains(msg, "pullrequeststack") {
+			needsStackFallback = true
+		}
 	}
-	if !needsRollupFallback && !needsHeadRefOIDFallback {
+	if !needsRollupFallback && !needsHeadRefOIDFallback && !needsStackFallback {
 		return false
 	}
 
@@ -483,6 +488,10 @@ func (c *Client) applyCapabilityFallback(host string, errs []graphQLError) bool 
 	}
 	if needsHeadRefOIDFallback && state.profile.SupportsHeadRefOID {
 		state.profile.SupportsHeadRefOID = false
+		changed = true
+	}
+	if needsStackFallback && state.profile.SupportsPRStack {
+		state.profile.SupportsPRStack = false
 		changed = true
 	}
 	return changed
@@ -508,6 +517,7 @@ func defaultProfileForHost(host string) githubpkg.GitHubHostProfile {
 		RESTURL:                githubpkg.DefaultRESTURL(host),
 		SupportsTopLevelRollup: true,
 		SupportsHeadRefOID:     true,
+		SupportsPRStack:        true,
 	}
 }
 

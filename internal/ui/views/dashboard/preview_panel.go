@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/utkarsh261/pho/internal/domain"
 	"github.com/utkarsh261/pho/internal/ui/components/labels"
+	"github.com/utkarsh261/pho/internal/ui/components/stackmap"
 	"github.com/utkarsh261/pho/internal/ui/markdown"
 	"github.com/utkarsh261/pho/internal/ui/theme"
 )
@@ -31,6 +32,7 @@ type PreviewPanelModel struct {
 	theme          *theme.Theme
 	spinner        spinner.Model
 	lastKey        string
+	stacks         domain.StackIndex
 	mdRenderer     *markdown.Renderer
 }
 
@@ -60,6 +62,11 @@ func (m *PreviewPanelModel) SetTheme(th *theme.Theme) {
 			m.mdRenderer.SetStyle(th.Markdown)
 		}
 	}
+}
+
+// SetStacks sets the stacks the preview maps for stacked PRs.
+func (m *PreviewPanelModel) SetStacks(idx domain.StackIndex) {
+	m.stacks = idx
 }
 
 func (m *PreviewPanelModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -250,6 +257,13 @@ func (m *PreviewPanelModel) buildLines() []string {
 	// Timestamps — one per line, separated from metadata by a blank line
 	lines = append(lines, "", m.createdLine(snap))
 	lines = append(lines, m.updatedLine(snap))
+
+	if st := m.stacks.Lookup(snap.Repo, snap.Number); st != nil {
+		lines = append(lines, "", m.divider(), m.sectionHeader(stackmap.Header(st)))
+		lines = append(lines, stackmap.Rows(m.theme, st, stackmap.Options{
+			Width: m.Width, Current: snap.Number, Cursor: -1, Window: 3,
+		})...)
+	}
 
 	if m.Loading && m.preview == nil {
 		lines = append(lines, "", m.spinner.View()+" Loading preview...")

@@ -174,6 +174,34 @@ type PullRequestNode struct {
 	Files                    FileConnection              `json:"files"`
 	TimelineItems            TimelineItemConnection      `json:"timelineItems"`
 	Repository               *RepositoryRef              `json:"repository,omitempty"`
+	StackEntry               *StackEntryNode             `json:"stackEntry,omitempty"`
+	Stack                    *StackNode                  `json:"stack,omitempty"`
+}
+
+// StackEntryNode is a PR's place in its native GitHub stack.
+type StackEntryNode struct {
+	Position int `json:"position"`
+}
+
+// StackNode is a native GitHub stack of pull requests.
+type StackNode struct {
+	Number      int    `json:"number"`
+	Size        int    `json:"size"`
+	BaseRefName string `json:"baseRefName"`
+	Entries     struct {
+		Nodes []StackEntryPRNode `json:"nodes"`
+	} `json:"entries"`
+}
+
+// StackEntryPRNode is one layer of a native stack.
+type StackEntryPRNode struct {
+	Position    int `json:"position"`
+	PullRequest *struct {
+		Number  int    `json:"number"`
+		Title   string `json:"title"`
+		State   string `json:"state"`
+		IsDraft bool   `json:"isDraft"`
+	} `json:"pullRequest"`
 }
 
 type LabelConnection struct {

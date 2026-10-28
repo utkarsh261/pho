@@ -52,6 +52,8 @@ type Dependencies struct {
 	MaxJumpPRs int
 	// MaxDashboardPRs caps how many open PRs the All tab loads.
 	MaxDashboardPRs int
+	// NoStackGrouping keeps stacked PRs in plain recency order.
+	NoStackGrouping bool
 	// DiffLimits controls which diff files start collapsed; zero fields use
 	// pho's defaults.
 	DiffLimits prdetail.DiffLimits
@@ -130,7 +132,9 @@ type Model struct {
 
 	currentDashboard domain.DashboardSnapshot
 	currentInvolving domain.InvolvingSnapshot
-	openPages        openPRPages
+	// stacks indexes the selected repo's stacked PRs.
+	stacks    domain.StackIndex
+	openPages openPRPages
 
 	hydratedRepos     map[string]struct{}
 	hydrationInFlight map[string]bool
@@ -1033,10 +1037,11 @@ func (m *Model) handleInvolvingLoaded(msg cmds.InvolvingLoaded) tea.Cmd {
 	prev, hadPrev := m.currentSelectedPR()
 	m.currentInvolving = msg.Snapshot
 	m.hydratedRepos[msg.Repo] = struct{}{}
-	m.state.Dashboard.PRsByTab[domain.TabInvolving] = append([]domain.PullRequestSummary(nil), msg.Snapshot.PRs...)
+	m.rebuildStacks()
+	m.state.Dashboard.PRsByTab[domain.TabInvolving] = m.groupStacks(msg.Snapshot.PRs)
 	m.state.Dashboard.LastRefreshAt[domain.TabInvolving] = msg.Snapshot.FetchedAt
 	m.state.Dashboard.FreshnessByTab[domain.TabInvolving] = freshnessFor(msg.Err)
-	m.prList.SetTabSnapshot(domain.TabInvolving, msg.Snapshot.PRs, msg.Snapshot.TotalCount, msg.Snapshot.Truncated)
+	m.prList.SetTabSnapshot(domain.TabInvolving, m.state.Dashboard.PRsByTab[domain.TabInvolving], msg.Snapshot.TotalCount, msg.Snapshot.Truncated)
 	m.prList.Active = m.state.Dashboard.ActiveTab
 	m.restoreSelection(prev, hadPrev)
 	m.syncPaletteStats()
@@ -1536,6 +1541,7 @@ func (m *Model) resetPreviewState() {
 	m.preview = dashboard.NewPreviewPanelModel()
 	m.preview.SetTheme(m.theme)
 	m.preview.SetRect(m.layout.Current.Preview, m.bodyHeight()-2)
+	m.preview.SetStacks(m.stacks)
 	m.state.Dashboard.Preview = nil
 	m.state.Dashboard.PreviewLoading = false
 }
@@ -1609,9 +1615,15 @@ func (m *Model) rebuildDashboardTabs() {
 	_, hasMore := m.nextOpenPRsPage()
 	total := m.currentDashboard.TotalCount
 	classified := m.classifier.Classify(viewer, open)
-	m.state.Dashboard.PRsByTab[domain.TabMyPRs] = append([]domain.PullRequestSummary(nil), classified[domain.TabMyPRs]...)
-	m.state.Dashboard.PRsByTab[domain.TabNeedsReview] = append([]domain.PullRequestSummary(nil), classified[domain.TabNeedsReview]...)
-	m.state.Dashboard.PRsByTab[domain.TabAll] = open
+	m.rebuildStacks()
+	m.state.Dashboard.PRsByTab[domain.TabMyPRs] = m.groupStacks(classified[domain.TabMyPRs])
+	m.state.Dashboard.PRsByTab[domain.TabNeedsReview] = m.groupStacks(classified[domain.TabNeedsReview])
+	m.state.Dashboard.PRsByTab[domain.TabAll] = m.groupStacks(open)
+	if inv := m.currentInvolving; !isZeroInvolvingSnapshot(inv) && sameRepo(inv.Repo.FullName, m.selectedRepoName()) {
+		// New pages can complete a stack that Involving shows part of.
+		m.state.Dashboard.PRsByTab[domain.TabInvolving] = m.groupStacks(inv.PRs)
+		m.prList.SetTabSnapshot(domain.TabInvolving, m.state.Dashboard.PRsByTab[domain.TabInvolving], inv.TotalCount, inv.Truncated)
+	}
 	m.state.Dashboard.TotalCount = total
 	m.state.Dashboard.Truncated = hasMore
 	for _, tab := range []domain.DashboardTab{domain.TabMyPRs, domain.TabNeedsReview, domain.TabAll} {

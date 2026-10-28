@@ -2,6 +2,7 @@ package graphql
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -112,8 +113,35 @@ func normalizePullRequestSummary(repo domain.Repository, node model.PullRequestN
 	summary.RequestedReviewers = requestedReviewers(node.ReviewRequests)
 	summary.AssigneeLogins = assigneeLogins(node.Assignees)
 	summary.LatestReviews = latestOpinionatedReviews(node.LatestOpinionatedReviews)
+	summary.NativeStack = nativeStack(node)
 
 	return summary, nil
+}
+
+// nativeStack maps a PR's GitHub stack, nil when it isn't in one.
+func nativeStack(node model.PullRequestNode) *domain.NativeStack {
+	if node.Stack == nil || node.StackEntry == nil {
+		return nil
+	}
+	st := &domain.NativeStack{
+		Number:   node.Stack.Number,
+		Trunk:    node.Stack.BaseRefName,
+		Position: node.StackEntry.Position,
+	}
+	for _, e := range node.Stack.Entries.Nodes {
+		if e.PullRequest == nil {
+			continue
+		}
+		st.Layers = append(st.Layers, domain.NativeStackLayer{
+			Position: e.Position,
+			Number:   e.PullRequest.Number,
+			Title:    e.PullRequest.Title,
+			State:    parsePRState(e.PullRequest.State),
+			IsDraft:  e.PullRequest.IsDraft,
+		})
+	}
+	sort.Slice(st.Layers, func(i, j int) bool { return st.Layers[i].Position < st.Layers[j].Position })
+	return st
 }
 
 func normalizePreviewNode(repo domain.Repository, number int, node model.PullRequestNode) (domain.PRPreviewSnapshot, error) {
