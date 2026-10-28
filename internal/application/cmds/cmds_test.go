@@ -691,3 +691,11 @@ func (s *prService) LoadPRLabels(_ context.Context, _ domain.Repository, _ int) 
 func (s *prService) ApplyLabels(_ context.Context, _ domain.Repository, _ int, _ domain.LabelChange) error {
 	return nil
 }
+
+func (s *prService) LoadJobLog(_ context.Context, _ domain.Repository, _ int64) (domain.JobLog, error) {
+	return domain.JobLog{}, nil
+}
+
+func (s *prService) RerunJob(_ context.Context, _ domain.Repository, _ int, _ int64) error {
+	return nil
+}

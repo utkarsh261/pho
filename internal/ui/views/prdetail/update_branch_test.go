@@ -832,3 +832,11 @@ func (s *updateBranchPRService) LoadPRLabels(_ context.Context, _ domain.Reposit
 func (s *updateBranchPRService) ApplyLabels(_ context.Context, _ domain.Repository, _ int, _ domain.LabelChange) error {
 	return nil
 }
+
+func (s *updateBranchPRService) LoadJobLog(_ context.Context, _ domain.Repository, _ int64) (domain.JobLog, error) {
+	return domain.JobLog{}, nil
+}
+
+func (s *updateBranchPRService) RerunJob(_ context.Context, _ domain.Repository, _ int, _ int64) error {
+	return nil
+}

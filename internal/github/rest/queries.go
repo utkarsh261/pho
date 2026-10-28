@@ -51,3 +51,17 @@ func buildRepoLabelsURL(baseURL, owner, repo string) string {
 func buildIssueLabelsURL(baseURL, owner, repo string, number int) string {
 	return fmt.Sprintf("%s/repos/%s/%s/issues/%d/labels", baseURL, owner, repo, number)
 }
+
+// buildJobLogsURL constructs the REST API URL for a GitHub Actions job's log.
+//
+// Format: {baseURL}/repos/{owner}/{repo}/actions/jobs/{jobID}/logs
+func buildJobLogsURL(baseURL, owner, repo string, jobID int64) string {
+	return fmt.Sprintf("%s/repos/%s/%s/actions/jobs/%d/logs", baseURL, owner, repo, jobID)
+}
+
+// buildRerunJobURL constructs the REST API URL for re-running a GitHub Actions job.
+//
+// Format: {baseURL}/repos/{owner}/{repo}/actions/jobs/{jobID}/rerun
+func buildRerunJobURL(baseURL, owner, repo string, jobID int64) string {
+	return fmt.Sprintf("%s/repos/%s/%s/actions/jobs/%d/rerun", baseURL, owner, repo, jobID)
+}

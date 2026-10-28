@@ -226,6 +226,43 @@ func (s *PRService) UpdateBranch(ctx context.Context, repo domain.Repository, nu
 	return nil
 }
 
+// jobLogTailLines is how many lines from the end of a job log are kept.
+const jobLogTailLines = 2000
+
+// LoadJobLog fetches the tail of a GitHub Actions job's log. Logs are not cached.
+func (s *PRService) LoadJobLog(ctx context.Context, repo domain.Repository, jobID int64) (domain.JobLog, error) {
+	defer s.logTimer("pr load job log", pholog.FieldRepo, repo.FullName, "job_id", jobID)()
+	restClient, err := s.restFor(repo.Host)
+	if err != nil {
+		return domain.JobLog{}, err
+	}
+	lines, truncated, err := restClient.FetchJobLogTail(ctx, s.ownerName(repo), s.RepoName(repo), jobID, jobLogTailLines)
+	if err != nil {
+		s.logWarn("load job log failed", "repo", repo.FullName, "job_id", jobID, "err", err)
+		return domain.JobLog{}, err
+	}
+	return domain.JobLog{Lines: lines, Truncated: truncated}, nil
+}
+
+// RerunJob re-runs a GitHub Actions job and invalidates the PR's preview cache
+// so the next load shows the check as queued.
+func (s *PRService) RerunJob(ctx context.Context, repo domain.Repository, number int, jobID int64) error {
+	defer s.logTimer("pr rerun job", pholog.FieldRepo, repo.FullName, "job_id", jobID)()
+	restClient, err := s.restFor(repo.Host)
+	if err != nil {
+		return err
+	}
+	if err := restClient.RerunJob(ctx, s.ownerName(repo), s.RepoName(repo), jobID); err != nil {
+		s.logWarn("rerun job failed", "repo", repo.FullName, "job_id", jobID, "err", err)
+		return err
+	}
+	previewKey := previewCacheKey(repo.Host, repoFullName(repo), number)
+	if delErr := s.Cache.Delete(ctx, previewKey); delErr != nil {
+		s.logWarn("rerun job cache delete failed", "key", previewKey, "err", delErr)
+	}
+	return nil
+}
+
 // ClosePR closes a PR and invalidates related caches.
 func (s *PRService) ClosePR(ctx context.Context, repo domain.Repository, number int, prID string) error {
 	defer s.logTimer("pr close", pholog.FieldRepo, repo.FullName, pholog.FieldPRNumber, number)()

@@ -198,14 +198,16 @@ func (m *PRDetailModel) renderRightViewport(width, height int) string {
 
 	// Render content based on active tab.
 	var lines []string
-	switch m.activeTab {
-	case TabDescription:
+	switch {
+	case m.ciLog.active:
+		lines = m.renderCILog(innerH, contentW) // all rows, so the footer sits at the bottom
+	case m.activeTab == TabDescription:
 		lines = m.renderDescriptionTab(scroll, contentH, contentW)
-	case TabDiff:
+	case m.activeTab == TabDiff:
 		lines = m.renderDiffTab(scroll, contentH, contentW)
-	case TabComments:
+	case m.activeTab == TabComments:
 		lines = m.renderCommentsTab(scroll, contentH, contentW)
-	case TabCommits:
+	case m.activeTab == TabCommits:
 		lines = m.renderCommitsTab(scroll, contentH, innerW-1)
 	}
 
@@ -213,11 +215,17 @@ func (m *PRDetailModel) renderRightViewport(width, height int) string {
 	for i, l := range lines {
 		lines[i] = " " + l
 	}
-	contentStr := renderBlock(lines, innerW, contentH)
+	blockH := contentH
+	if m.ciLog.active {
+		blockH = innerH
+	}
+	contentStr := renderBlock(lines, innerW, blockH)
 
 	// Build tab indicators based on active tab.
 	tabsStr := " " + m.renderSectionTabs()
-	if lipgloss.Width(tabsStr) > innerW {
+	if m.ciLog.active {
+		tabsStr = " " + m.renderCILogTitle(innerW-1)
+	} else if lipgloss.Width(tabsStr) > innerW {
 		// Narrow panel: drop the padding so all four numbered tabs still fit.
 		tabsStr = truncateText(m.renderSectionTabsCompact(), innerW)
 	}

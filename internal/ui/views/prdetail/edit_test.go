@@ -509,3 +509,11 @@ func (s *editPRService) LoadPRLabels(_ context.Context, _ domain.Repository, _ i
 func (s *editPRService) ApplyLabels(_ context.Context, _ domain.Repository, _ int, _ domain.LabelChange) error {
 	return nil
 }
+
+func (s *editPRService) LoadJobLog(_ context.Context, _ domain.Repository, _ int64) (domain.JobLog, error) {
+	return domain.JobLog{}, nil
+}
+
+func (s *editPRService) RerunJob(_ context.Context, _ domain.Repository, _ int, _ int64) error {
+	return nil
+}

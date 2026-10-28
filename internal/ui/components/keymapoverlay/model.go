@@ -43,6 +43,7 @@ type Context struct {
 	PRState    domain.PRState      // only meaningful when View == PRDetail
 	DraftCount int                 // only meaningful when View == PRDetail
 	Behind     bool                // only meaningful when View == PRDetail
+	Checks     bool                // Checks box focused or a job log shown (PRDetail)
 }
 
 // Model is the keymap overlay state.
@@ -477,6 +478,17 @@ func buildPRDetailBindings(ctx Context) []Group {
 				{Key: "r", Description: "Reply"},
 				{Key: "m", Description: "Resolve/Unresolve"},
 				{Key: "[/]", Description: "Prev/Next unresolved"},
+			},
+		})
+	}
+	if ctx.Checks {
+		groups = append(groups, Group{
+			Name: "Checks",
+			Bindings: []Binding{
+				{Key: "enter", Description: "View log (Actions) / Open"},
+				{Key: "n/N", Description: "Next/prev error"},
+				{Key: "r", Description: "Re-run job (Actions)"},
+				{Key: "o", Description: "Open check in browser"},
 			},
 		})
 	}

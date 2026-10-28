@@ -407,7 +407,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		return m, nil
-	case cmds.MergeableChecked, cmds.MergePRMsg, cmds.PRStateChangedMsg, cmds.PRUpdated, cmds.UpdateBranchMsg:
+	case prdetail.CINoticeClearMsg, prdetail.CIRefreshMsg:
+		// Delayed follow-ups of a re-run: deliver them even if the user has
+		// gone back to the dashboard, or a notice would stick and the checks
+		// stay stale when the same PR (and model) is reopened.
+		if m.prDetail != nil {
+			next, cmd := m.prDetail.Update(msg)
+			m.prDetail = next
+			m.syncStatus()
+			return m, cmd
+		}
+		return m, nil
+	case cmds.MergeableChecked, cmds.MergePRMsg, cmds.PRStateChangedMsg, cmds.PRUpdated, cmds.UpdateBranchMsg,
+		cmds.CILogLoaded, cmds.CIRerunMsg:
 		if m.prDetail != nil {
 			next, cmd := m.prDetail.Update(msg)
 			m.prDetail = next
@@ -432,6 +444,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			case cmds.UpdateBranchMsg:
+				if stateMsg.Err == nil {
+					if repo, ok := m.findRepoByHostAndFullName(stateMsg.Host, stateMsg.Repo); ok && m.deps.Dashboard != nil {
+						_ = m.deps.Dashboard.InvalidateRepo(context.Background(), repo)
+					}
+				}
+			case cmds.CIRerunMsg:
 				if stateMsg.Err == nil {
 					if repo, ok := m.findRepoByHostAndFullName(stateMsg.Host, stateMsg.Repo); ok && m.deps.Dashboard != nil {
 						_ = m.deps.Dashboard.InvalidateRepo(context.Background(), repo)
@@ -767,6 +785,7 @@ func (m *Model) toggleKeymapOverlay() tea.Cmd {
 			ctx.Behind = m.prDetail.Detail.MergeState == "BEHIND"
 		}
 		ctx.DraftCount = m.prDetail.DraftCount()
+		ctx.Checks = m.prDetail.ChecksActive()
 	}
 	m.keymapOverlay.Groups = keymapoverlay.BuildBindings(ctx)
 	m.keymapOverlay.Visible = true

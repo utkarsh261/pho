@@ -18,6 +18,7 @@
 - **Open a PR directly** - `pho pr 123` to launch straight into a PR's detail view.
 - **PR detail** - Browse description, diff, comments, and commits. Sidebar for files and CI checks.
 - **Stacked PRs** - PRs built on another open PR's branch, and GitHub's native stacks, are listed together with a rail joining them, and the preview maps the whole stack with each PR's CI and review state.
+- **CI logs** - `Enter` on a GitHub Actions check shows the end of its job log with error lines highlighted; `n`/`N` jumps between errors and `r` re-runs the job.
 - **Diff navigation** - Line-by-line cursor, `gg`/`G`, `Ctrl+d`/`Ctrl+u`, visual mode for selecting ranges.
 - **Inline reviews** - Draft inline comments on diff lines, edit, discard, and batch-submit with a review event. Just like Github web UI.
 - **Comments & approvals** - Post top-level comments, review comments, or approve directly.
