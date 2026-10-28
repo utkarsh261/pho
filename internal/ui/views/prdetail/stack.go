@@ -90,6 +90,46 @@ func (m *PRDetailModel) stackPickKey() tea.Cmd {
 	return func() tea.Msg { return OpenStackPicker{} }
 }
 
+// openBelowInNativeStack lists the open PRs under this one in a native
+// GitHub stack, nearest first: GitHub merges them all along with this one.
+func (m *PRDetailModel) openBelowInNativeStack() []int {
+	if m.Stack == nil || !m.Stack.Native {
+		return nil
+	}
+	var below []int
+	mem, ok := m.Stack.Member(m.Summary.Number)
+	for ok && mem.Parent != 0 && len(below) < len(m.Stack.Members) {
+		mem, ok = m.Stack.Member(mem.Parent)
+		if ok && (mem.State == domain.PRStateOpen || mem.State == "") {
+			below = append(below, mem.Number)
+		}
+	}
+	return below
+}
+
+// plural is "1 PR" or "3 PRs".
+func plural(n int, noun string) string {
+	if n == 1 {
+		return "1 " + noun
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
+}
+
+// prList is "#14, #13", eliding the middle of long lists.
+func prList(numbers []int) string {
+	parts := make([]string, 0, len(numbers))
+	for i, n := range numbers {
+		if len(numbers) > 4 && i == 2 {
+			parts = append(parts, "…")
+		}
+		if len(numbers) > 4 && i >= 2 && i < len(numbers)-1 {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("#%d", n))
+	}
+	return strings.Join(parts, ", ")
+}
+
 // stackPath is the line through the stack this PR is on: its bases down to
 // the bottom, then the newest PR on top of each up to the top.
 func (m *PRDetailModel) stackPath() (path []int, current int) {

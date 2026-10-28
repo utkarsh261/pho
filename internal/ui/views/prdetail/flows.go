@@ -45,12 +45,10 @@ func (m *PRDetailModel) StatusHint() string {
 	case mergeStepSelectMethod:
 		return fmt.Sprintf("Merge #%d: [s]quash [r]ebase [M]erge [esc]cancel", m.Summary.Number)
 	case mergeStepConfirm:
-		if m.Stack != nil && m.Stack.Native {
-			if mem, ok := m.Stack.Member(m.Summary.Number); ok && mem.Parent != 0 {
-				if below, _ := m.Stack.Member(mem.Parent); below.State == domain.PRStateOpen {
-					return fmt.Sprintf("%s and merge #%d? #%d below it is still open (y/n)", strings.ToLower(m.mergeMethod), m.Summary.Number, mem.Parent)
-				}
-			}
+		if below := m.openBelowInNativeStack(); len(below) > 0 {
+			// GitHub merges every open PR under this one along with it.
+			return fmt.Sprintf("%s and merge #%d and the %s below it (%s)? (y/n)",
+				strings.ToLower(m.mergeMethod), m.Summary.Number, plural(len(below), "PR"), prList(below))
 		}
 		return fmt.Sprintf("%s and merge #%d? (y/n)", strings.ToLower(m.mergeMethod), m.Summary.Number)
 	case mergeStepChecking:

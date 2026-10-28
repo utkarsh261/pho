@@ -134,6 +134,39 @@ func TestStatusHintTeachesStackKeys(t *testing.T) {
 	}
 }
 
+func TestMergePromptNamesPRsMergedBelow(t *testing.T) {
+	t.Parallel()
+	confirm := func(number int, st *domain.Stack) string {
+		m := stackedModel(120, number, st)
+		m.mergeStep, m.mergeMethod = mergeStepConfirm, "SQUASH"
+		return m.StatusHint()
+	}
+	native := func() *domain.Stack {
+		st := testStack(3)
+		st.Native = true
+		return st
+	}
+
+	if got := confirm(3, native()); got != "squash and merge #3 and the 2 PRs below it (#2, #1)? (y/n)" {
+		t.Errorf("top of a native stack: %q", got)
+	}
+	merged := native()
+	merged.Members[2].State = domain.PRStateMerged // #1 has landed
+	if got := confirm(3, merged); got != "squash and merge #3 and the 1 PR below it (#2)? (y/n)" {
+		t.Errorf("with the bottom merged: %q", got)
+	}
+	if got := confirm(1, native()); got != "squash and merge #1? (y/n)" {
+		t.Errorf("bottom of a native stack: %q", got)
+	}
+	// Inferred stacks merge one PR at a time.
+	if got := confirm(3, testStack(3)); got != "squash and merge #3? (y/n)" {
+		t.Errorf("inferred stack: %q", got)
+	}
+	if got := prList([]int{9, 8, 7, 6, 5, 4}); got != "#9, #8, …, #4" {
+		t.Errorf("long list = %q", got)
+	}
+}
+
 func TestStartOnKeepsTabAndPanel(t *testing.T) {
 	t.Parallel()
 	for _, focus := range []PRDetailFocus{FocusFiles, FocusContent} {
