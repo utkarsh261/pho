@@ -24,41 +24,57 @@ func Build(prs []domain.PullRequestSummary) domain.StackIndex {
 }
 
 func buildNative(prs []domain.PullRequestSummary, byKey map[string]*domain.PullRequestSummary, idx domain.StackIndex) {
-	// One PR's view of a native stack lists every layer, so take the first
-	// PR seen for each stack (preferring the one listing the most layers).
+	// Each PR reports the stack's first page of layers plus itself, so the
+	// layers of a long stack are spread over its PRs: combine them all.
 	type stackID struct {
 		repo   string
 		number int
 	}
-	best := map[stackID]*domain.NativeStack{}
+	type native struct {
+		trunk  string
+		layers map[int]domain.NativeStackLayer // by position
+	}
+	stacks := map[stackID]*native{}
 	var order []stackID
 	for _, pr := range prs {
 		ns := pr.NativeStack
-		if ns == nil || len(ns.Layers) < 2 {
+		if ns == nil {
 			continue
 		}
 		id := stackID{strings.ToLower(pr.Repo), ns.Number}
-		if cur, ok := best[id]; !ok {
+		n, ok := stacks[id]
+		if !ok {
+			n = &native{trunk: ns.Trunk, layers: map[int]domain.NativeStackLayer{}}
+			stacks[id] = n
 			order = append(order, id)
-			best[id] = ns
-		} else if len(ns.Layers) > len(cur.Layers) {
-			best[id] = ns
+		}
+		for _, l := range ns.Layers {
+			if _, seen := n.layers[l.Position]; !seen {
+				n.layers[l.Position] = l
+			}
 		}
 	}
 	for _, id := range order {
-		ns := best[id]
-		layers := append([]domain.NativeStackLayer(nil), ns.Layers...)
+		n := stacks[id]
+		if len(n.layers) < 2 {
+			continue
+		}
+		layers := make([]domain.NativeStackLayer, 0, len(n.layers))
+		for _, l := range n.layers {
+			layers = append(layers, l)
+		}
 		sort.Slice(layers, func(i, j int) bool { return layers[i].Position > layers[j].Position })
 		repo := id.repo
-		st := &domain.Stack{Trunk: ns.Trunk, Native: true}
+		st := &domain.Stack{Trunk: n.trunk, Native: true}
 		for i, l := range layers {
 			m := domain.StackMember{
 				Number:  l.Number,
 				Title:   l.Title,
 				State:   l.State,
 				IsDraft: l.IsDraft,
-				Layer:   len(layers) - i,
+				Layer:   l.Position,
 			}
+			// Layers no loaded PR reported leave gaps; link across them.
 			if i+1 < len(layers) {
 				m.Parent = layers[i+1].Number
 			}

@@ -132,6 +132,7 @@ type Model struct {
 
 	currentDashboard domain.DashboardSnapshot
 	currentInvolving domain.InvolvingSnapshot
+	involvingRepo    string // the repo currentInvolving was loaded for
 	// stacks indexes the selected repo's stacked PRs.
 	stacks    domain.StackIndex
 	openPages openPRPages
@@ -1036,13 +1037,13 @@ func (m *Model) handleInvolvingLoaded(msg cmds.InvolvingLoaded) tea.Cmd {
 	}
 	prev, hadPrev := m.currentSelectedPR()
 	m.currentInvolving = msg.Snapshot
+	m.involvingRepo = msg.Repo
 	m.hydratedRepos[msg.Repo] = struct{}{}
 	m.state.Dashboard.LastRefreshAt[domain.TabInvolving] = msg.Snapshot.FetchedAt
 	m.state.Dashboard.FreshnessByTab[domain.TabInvolving] = freshnessFor(msg.Err)
 	if isZeroDashboardSnapshot(m.currentDashboard) {
 		m.rebuildStacks(m.allOpenPRs())
-		m.state.Dashboard.PRsByTab[domain.TabInvolving] = m.groupStacks(msg.Snapshot.PRs)
-		m.prList.SetTabSnapshot(domain.TabInvolving, m.state.Dashboard.PRsByTab[domain.TabInvolving], msg.Snapshot.TotalCount, msg.Snapshot.Truncated)
+		m.regroupInvolving()
 		m.prList.Active = m.state.Dashboard.ActiveTab
 		m.restoreSelection(prev, hadPrev)
 	} else {
@@ -1625,11 +1626,7 @@ func (m *Model) rebuildDashboardTabs() {
 	m.state.Dashboard.PRsByTab[domain.TabMyPRs] = m.groupStacks(classified[domain.TabMyPRs])
 	m.state.Dashboard.PRsByTab[domain.TabNeedsReview] = m.groupStacks(classified[domain.TabNeedsReview])
 	m.state.Dashboard.PRsByTab[domain.TabAll] = m.groupStacks(open)
-	if inv, ok := m.selectedInvolving(); ok {
-		// New pages can complete a stack that Involving shows part of.
-		m.state.Dashboard.PRsByTab[domain.TabInvolving] = m.groupStacks(inv.PRs)
-		m.prList.SetTabSnapshot(domain.TabInvolving, m.state.Dashboard.PRsByTab[domain.TabInvolving], inv.TotalCount, inv.Truncated)
-	}
+	m.regroupInvolving() // new pages can complete a stack that Involving shows part of
 	m.state.Dashboard.TotalCount = total
 	m.state.Dashboard.Truncated = hasMore
 	for _, tab := range []domain.DashboardTab{domain.TabMyPRs, domain.TabNeedsReview, domain.TabAll} {

@@ -72,3 +72,16 @@ func TestInvolvingRegroupsEveryTab(t *testing.T) {
 		t.Errorf("Involving = %v", got)
 	}
 }
+
+func TestInvolvingWithoutRepoNameStillFillsTab(t *testing.T) {
+	t.Parallel()
+	m := setupStack(t)
+	repo := m.selectedRepoName()
+	// A result for the selected repo whose snapshot carries no repo name.
+	_, _ = m.Update(cmds.InvolvingLoaded{Repo: repo, Snapshot: domain.InvolvingSnapshot{
+		PRs: []domain.PullRequestSummary{pr(repo, 9, "x")}, TotalCount: 1, FetchedAt: fixedNow(),
+	}})
+	if got := tabNumbers(m, domain.TabInvolving); !slices.Equal(got, []int{9}) {
+		t.Errorf("Involving = %v, want [9]", got)
+	}
+}

@@ -144,6 +144,34 @@ func TestBuildNative(t *testing.T) {
 	}
 }
 
+func TestBuildNativeCombinesEveryPRsLayers(t *testing.T) {
+	// A 30-layer stack: each PR lists layers 1-25 and adds itself.
+	firstPage := make([]domain.NativeStackLayer, 25)
+	for i := range firstPage {
+		firstPage[i] = domain.NativeStackLayer{Position: i + 1, Number: 100 + i + 1}
+	}
+	at := func(pos int) domain.PullRequestSummary {
+		p := pr(100+pos, fmt.Sprintf("l%d", pos), "x", 1)
+		layers := append(append([]domain.NativeStackLayer(nil), firstPage...), domain.NativeStackLayer{Position: pos, Number: 100 + pos})
+		p.NativeStack = &domain.NativeStack{Number: 7, Trunk: "main", Position: pos, Layers: layers}
+		return p
+	}
+	idx := Build([]domain.PullRequestSummary{at(27), at(28)})
+	st := idx.Lookup("o/r", 127)
+	if st == nil || idx.Lookup("o/r", 128) != st {
+		t.Fatal("both PRs past the first page should be in the stack")
+	}
+	if len(st.Members) != 27 {
+		t.Fatalf("members = %d, want 25 + #127 + #128", len(st.Members))
+	}
+	if m, _ := st.Member(128); m.Layer != 28 || m.Parent != 127 {
+		t.Errorf("#128 = layer %d on #%d, want layer 28 on #127", m.Layer, m.Parent)
+	}
+	if m, _ := st.Member(127); m.Layer != 27 {
+		t.Errorf("#127 layer = %d, want its real position 27", m.Layer)
+	}
+}
+
 func TestGroup(t *testing.T) {
 	prs := []domain.PullRequestSummary{
 		pr(2, "b", "a", 1), pr(9, "other", "main", 2), pr(1, "a", "main", 3), pr(3, "c", "b", 4),

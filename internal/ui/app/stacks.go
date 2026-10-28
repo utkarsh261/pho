@@ -25,18 +25,20 @@ func (m *Model) rebuildStacks(open []domain.PullRequestSummary) {
 	m.preview.SetStacks(m.stacks)
 }
 
-// selectedInvolving is the Involving snapshot when it belongs to the
+// selectedInvolving is the Involving snapshot when it was loaded for the
 // selected repo; after a repo switch it still holds the old repo's.
 func (m *Model) selectedInvolving() (domain.InvolvingSnapshot, bool) {
-	inv := m.currentInvolving
-	if isZeroInvolvingSnapshot(inv) {
-		return inv, false
+	return m.currentInvolving, m.involvingRepo != "" && sameRepo(m.involvingRepo, m.selectedRepoName())
+}
+
+// regroupInvolving lists the Involving tab against the current stacks.
+func (m *Model) regroupInvolving() {
+	inv, ok := m.selectedInvolving()
+	if !ok {
+		return
 	}
-	repo := inv.Repo.FullName
-	if repo == "" && len(inv.PRs) > 0 {
-		repo = inv.PRs[0].Repo
-	}
-	return inv, sameRepo(repo, m.selectedRepoName())
+	m.state.Dashboard.PRsByTab[domain.TabInvolving] = m.groupStacks(inv.PRs)
+	m.prList.SetTabSnapshot(domain.TabInvolving, m.state.Dashboard.PRsByTab[domain.TabInvolving], inv.TotalCount, inv.Truncated)
 }
 
 // groupStacks lists each stack's PRs together, top of the stack first. The
