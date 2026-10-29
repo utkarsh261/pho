@@ -6,7 +6,6 @@ import (
 	"runtime"
 	"sync"
 	"testing"
-	"time"
 )
 
 func TestStore_MissingFile(t *testing.T) {
@@ -15,18 +14,12 @@ func TestStore_MissingFile(t *testing.T) {
 	if err != nil || st != (State{}) {
 		t.Fatalf("Load = %+v, %v; want empty state, nil", st, err)
 	}
-	if s.Exists() {
-		t.Error("Exists() = true for a missing file")
-	}
 }
 
 func TestStore_RoundTrip(t *testing.T) {
 	s := NewStore(filepath.Join(t.TempDir(), "pho", "state.json"))
-	now := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
 	if err := s.Update(func(st *State) {
 		st.LastSeenVersion = "1.2.0"
-		st.LastUpdateCheck = now
-		st.LatestKnown = "1.3.0"
 	}); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
@@ -34,7 +27,7 @@ func TestStore_RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if st.LastSeenVersion != "1.2.0" || st.LatestKnown != "1.3.0" || !st.LastUpdateCheck.Equal(now) {
+	if st.LastSeenVersion != "1.2.0" {
 		t.Errorf("Load = %+v", st)
 	}
 }
@@ -58,10 +51,10 @@ func TestStore_CorruptFile(t *testing.T) {
 
 func TestStore_NonReleaseVersionsDropped(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.json")
-	os.WriteFile(path, []byte(`{"last_seen_version":"dev","latest_known":"1.3.0-rc.1"}`), 0o600)
+	os.WriteFile(path, []byte(`{"last_seen_version":"dev"}`), 0o600)
 	st, err := NewStore(path).Load()
-	if err != nil || st.LastSeenVersion != "" || st.LatestKnown != "" {
-		t.Errorf("Load = %+v, %v; want both versions dropped", st, err)
+	if err != nil || st.LastSeenVersion != "" {
+		t.Errorf("Load = %+v, %v; want the version dropped", st, err)
 	}
 }
 

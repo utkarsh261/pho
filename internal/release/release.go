@@ -53,18 +53,6 @@ func (c *Client) List(ctx context.Context, n int) ([]Release, error) {
 	return out, nil
 }
 
-func (c *Client) Latest(ctx context.Context) (Release, error) {
-	var raw apiRelease
-	if err := c.get(ctx, "/releases/latest", &raw); err != nil {
-		return Release{}, err
-	}
-	rel, ok := convert(raw)
-	if !ok {
-		return Release{}, fmt.Errorf("release: latest release has unexpected tag %q", raw.TagName)
-	}
-	return rel, nil
-}
-
 func convert(r apiRelease) (Release, bool) {
 	if r.Draft || r.Prerelease || !IsRelease(r.TagName) {
 		return Release{}, false

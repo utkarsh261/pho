@@ -151,19 +151,6 @@ func TestList(t *testing.T) {
 	}
 }
 
-func TestLatest(t *testing.T) {
-	c := serve(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/releases/latest" {
-			t.Errorf("unexpected path %s", r.URL.Path)
-		}
-		w.Write([]byte(`{"tag_name":"v1.4.0"}`))
-	})
-	got, err := c.Latest(context.Background())
-	if err != nil || got.Version != "1.4.0" {
-		t.Fatalf("Latest = %+v, %v; want 1.4.0", got, err)
-	}
-}
-
 func TestFailuresReturnErrors(t *testing.T) {
 	tests := map[string]http.HandlerFunc{
 		"server error": func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusInternalServerError) },
@@ -175,8 +162,8 @@ func TestFailuresReturnErrors(t *testing.T) {
 	for name, h := range tests {
 		t.Run(name, func(t *testing.T) {
 			c := serve(t, h)
-			if _, err := c.Latest(context.Background()); err == nil {
-				t.Error("Latest succeeded, want error")
+			if _, err := c.List(context.Background(), 5); err == nil {
+				t.Error("List succeeded, want error")
 			}
 		})
 	}

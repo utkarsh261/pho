@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -96,7 +97,7 @@ func TestWhatsNew_NonReleaseBuildLeavesStateAlone(t *testing.T) {
 			if !m.whatsNew.Visible {
 				t.Fatal("W didn't open the panel")
 			}
-			if store.Exists() {
+			if _, err := os.Stat(store.Path()); err == nil {
 				st, _ := store.Load()
 				t.Errorf("a %s build wrote state: %+v", v, st)
 			}
