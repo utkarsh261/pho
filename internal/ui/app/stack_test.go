@@ -10,6 +10,7 @@ import (
 
 	"github.com/utkarsh261/pho/internal/domain"
 	"github.com/utkarsh261/pho/internal/testutil"
+	"github.com/utkarsh261/pho/internal/ui/components/stackmap"
 	"github.com/utkarsh261/pho/internal/ui/views/dashboard"
 	"github.com/utkarsh261/pho/internal/ui/views/prdetail"
 )
@@ -187,7 +188,8 @@ func TestPreviewKeepsStackMapAcrossTabs(t *testing.T) {
 	if sel, _ := m.currentSelectedPR(); sel.Number != 3 {
 		t.Fatalf("cursor on #%d, want #3", sel.Number)
 	}
-	if !strings.Contains(m.preview.View(), "Stack · 3 PRs onto main") {
-		t.Errorf("preview lost the stack map after switching tabs:\n%s", m.preview.View())
+	header := stackmap.Header(m.stacks.Lookup("acme/stack", 3))
+	if !strings.Contains(m.preview.View(), header) {
+		t.Errorf("preview lost the stack map (%q) after switching tabs:\n%s", header, m.preview.View())
 	}
 }
