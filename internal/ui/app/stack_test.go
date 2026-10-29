@@ -10,6 +10,8 @@ import (
 
 	"github.com/utkarsh261/pho/internal/domain"
 	"github.com/utkarsh261/pho/internal/testutil"
+	"github.com/utkarsh261/pho/internal/ui/components/stackmap"
+	"github.com/utkarsh261/pho/internal/ui/views/dashboard"
 	"github.com/utkarsh261/pho/internal/ui/views/prdetail"
 )
 
@@ -170,5 +172,24 @@ func TestStackPickerOpensMember(t *testing.T) {
 	_, _ = m.Update(stackKey("S"))
 	if m.stackPicker.Visible {
 		t.Error("S on an unstacked PR should not open the picker")
+	}
+}
+
+func TestPreviewKeepsStackMapAcrossTabs(t *testing.T) {
+	t.Parallel()
+	m := setupStack(t)
+	// The stub echoes the host-qualified repo; real previews carry owner/name.
+	svc := m.deps.Dashboard.(*stubDashboardService)
+	svc.previewByPR = map[string]domain.PRPreviewSnapshot{
+		previewKey("github.com/acme/stack", 3): {Repo: "acme/stack", Number: 3, Title: "layer c"},
+	}
+	_, cmd := m.Update(dashboard.ChangeTabMsg{Tab: domain.TabAll})
+	drainCmds(m, cmd)
+	if sel, _ := m.currentSelectedPR(); sel.Number != 3 {
+		t.Fatalf("cursor on #%d, want #3", sel.Number)
+	}
+	header := stackmap.Header(m.stacks.Lookup("acme/stack", 3))
+	if !strings.Contains(m.preview.View(), header) {
+		t.Errorf("preview lost the stack map (%q) after switching tabs:\n%s", header, m.preview.View())
 	}
 }

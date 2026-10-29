@@ -46,6 +46,19 @@ func NewPreviewPanelModel() *PreviewPanelModel {
 	}
 }
 
+// Reset drops the selected PR and its preview. Theme, size, stacks and the
+// markdown renderer stay, so callers don't have to re-apply them.
+func (m *PreviewPanelModel) Reset() {
+	m.selectedRepo = ""
+	m.selectedNumber = 0
+	m.summary = nil
+	m.preview = nil
+	m.Scroll = 0
+	m.Loading = false
+	m.PendingFetch = false
+	m.lastKey = ""
+}
+
 func (m *PreviewPanelModel) Init() tea.Cmd { return m.spinner.Tick }
 
 func (m *PreviewPanelModel) SetRect(width, height int) {

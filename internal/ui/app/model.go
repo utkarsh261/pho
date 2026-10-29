@@ -1167,11 +1167,7 @@ func (m *Model) handleChangeTabMsg(msg dashboard.ChangeTabMsg) tea.Cmd {
 	m.prList.Cursor = 0
 	m.prList.Scroll = 0
 	m.state.Dashboard.SelectedIndex = 0
-	m.state.Dashboard.Preview = nil
-	m.state.Dashboard.PreviewLoading = false
-	m.preview = dashboard.NewPreviewPanelModel()
-	m.preview.SetTheme(m.theme)
-	m.preview.SetRect(m.layout.Current.Preview, m.bodyHeight()-2)
+	m.resetPreviewState()
 	m.syncStatus()
 	return batch(m.syncCurrentSelection(), m.maybeLoadMoreOpenPRs())
 }
@@ -1483,7 +1479,7 @@ func (m *Model) syncPanels() {
 		m.prList = dashboard.NewPRListPanelModel()
 	}
 	if m.preview == nil {
-		m.preview = dashboard.NewPreviewPanelModel()
+		m.preview = m.newPreviewPanel()
 	}
 	if m.status == nil {
 		m.status = dashboard.NewStatusBarModel()
@@ -1586,11 +1582,22 @@ func (m *Model) resetDashboardsForRepo() {
 	m.state.Dashboard.Truncated = false
 }
 
+// newPreviewPanel builds a preview panel with the current theme, size and
+// stacks.
+func (m *Model) newPreviewPanel() *dashboard.PreviewPanelModel {
+	p := dashboard.NewPreviewPanelModel()
+	p.SetTheme(m.theme)
+	p.SetRect(m.layout.Current.Preview, m.bodyHeight()-2)
+	p.SetStacks(m.stacks)
+	return p
+}
+
 func (m *Model) resetPreviewState() {
-	m.preview = dashboard.NewPreviewPanelModel()
-	m.preview.SetTheme(m.theme)
-	m.preview.SetRect(m.layout.Current.Preview, m.bodyHeight()-2)
-	m.preview.SetStacks(m.stacks)
+	if m.preview == nil {
+		m.preview = m.newPreviewPanel()
+	} else {
+		m.preview.Reset()
+	}
 	m.state.Dashboard.Preview = nil
 	m.state.Dashboard.PreviewLoading = false
 }

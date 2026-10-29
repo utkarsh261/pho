@@ -650,3 +650,27 @@ func TestPreviewPanelBottomScrollMatchesView(t *testing.T) {
 		}
 	}
 }
+
+func TestPreviewPanelResetKeepsSettings(t *testing.T) {
+	t.Parallel()
+
+	m := NewPreviewPanelModel()
+	th := theme.Default()
+	m.SetTheme(th)
+	m.SetRect(40, 20)
+	stacks := domain.StackIndex{domain.StackKey("org/repo", 7): &domain.Stack{}}
+	m.SetStacks(stacks)
+	renderer := m.mdRenderer
+	summary := makePR(7, "Reset", "feature/reset")
+	_, _ = m.Update(SelectPRMsg{Repo: summary.Repo, Number: summary.Number, Summary: summary})
+	m.Scroll = 3
+
+	m.Reset()
+
+	if m.selectedNumber != 0 || m.summary != nil || m.preview != nil || m.Scroll != 0 || m.Loading || m.PendingFetch {
+		t.Errorf("Reset left the selection behind: %+v", m)
+	}
+	if m.theme != th || m.Width != 40 || m.Height != 20 || len(m.stacks) != 1 || m.mdRenderer != renderer {
+		t.Error("Reset should keep theme, size, stacks and renderer")
+	}
+}
