@@ -84,18 +84,13 @@ type Dependencies struct {
 	SaveTheme       func(name string) error
 	ConfiguredTheme string
 
-	// Version is pho's own version. AnnounceVersion, when set, is announced
-	// in the status bar as just upgraded to, and WhatsNewSince is the
-	// version the user upgraded from ("" when unknown).
+	// AnnounceVersion is the version just upgraded to; WhatsNewSince the one
+	// before it.
 	Version         string
 	AnnounceVersion string
 	WhatsNewSince   string
-	// FetchReleases loads pho's release notes for the W panel; nil leaves
-	// the panel showing its error state.
-	FetchReleases func(ctx context.Context, n int) ([]release.Release, error)
-	// State persists what the user has seen between runs; nil keeps it for
-	// the session only.
-	State *state.Store
+	FetchReleases   func(ctx context.Context, n int) ([]release.Release, error)
+	State           *state.Store
 }
 
 type Model struct {
@@ -128,8 +123,6 @@ type Model struct {
 	whatsNew      whatsnew.Model
 	createPR      *createpr.Model
 
-	// announce is the version announced in the status bar after an upgrade,
-	// until the user opens What's new.
 	announce        string
 	whatsNewLoading bool
 

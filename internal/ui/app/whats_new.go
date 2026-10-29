@@ -10,23 +10,18 @@ import (
 	"github.com/utkarsh261/pho/internal/state"
 )
 
-// whatsNewReleases is how many releases the panel asks GitHub for, and
-// whatsNewShown how many it shows.
 const (
 	whatsNewReleases = 20
 	whatsNewShown    = 5
 )
 
-// whatsNewTimeout bounds the release notes fetch; tests shorten it.
 var whatsNewTimeout = release.Timeout
 
-// WhatsNewLoaded carries the release notes fetched for the W panel.
 type WhatsNewLoaded struct {
 	Releases []release.Release
 	Err      error
 }
 
-// announcement is the status-bar line after an upgrade, until W is pressed.
 func (m *Model) announcement() string {
 	if m.announce == "" {
 		return ""
@@ -34,8 +29,7 @@ func (m *Model) announcement() string {
 	return fmt.Sprintf("✦ Updated to %s | W: What's new", m.announce)
 }
 
-// openWhatsNew opens the release notes panel, loading the notes the first
-// time. Opening it counts as seeing the current version's notes.
+// openWhatsNew counts as seeing the current version's notes.
 func (m *Model) openWhatsNew() tea.Cmd {
 	if m.state.Search.OverlayOpen || m.keymapOverlay.Visible ||
 		(m.createPR != nil && m.createPR.Active()) {
@@ -63,8 +57,6 @@ func (m *Model) openWhatsNew() tea.Cmd {
 	return batch(out...)
 }
 
-// fetchReleasesCmd fetches release notes in the background. A failure,
-// timeout or panic only ever becomes an error on the message.
 func fetchReleasesCmd(fetch func(context.Context, int) ([]release.Release, error)) tea.Cmd {
 	return func() (msg tea.Msg) {
 		defer func() {

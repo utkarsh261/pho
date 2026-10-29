@@ -1,5 +1,4 @@
-// Package whatsnew implements the "What's new" panel: pho's release notes in
-// a centred box the user opens with W.
+// Package whatsnew is the release notes panel opened with W.
 package whatsnew
 
 import (
@@ -20,8 +19,6 @@ const (
 	closeHint   = "j/k scroll · W / esc / q to close"
 )
 
-// Model is the panel's state. It shows a loading line until SetReleases or
-// SetError is called.
 type Model struct {
 	Visible bool
 
@@ -36,12 +33,10 @@ type Model struct {
 	md     *markdown.Renderer
 }
 
-// NewModel returns a hidden panel.
 func NewModel() Model {
 	return Model{md: markdown.New()}
 }
 
-// SetTheme applies a theme.
 func (m *Model) SetTheme(th *theme.Theme) {
 	m.theme = th
 	if th != nil && m.md != nil {
@@ -49,26 +44,21 @@ func (m *Model) SetTheme(th *theme.Theme) {
 	}
 }
 
-// SetSize updates terminal dimensions.
 func (m *Model) SetSize(w, h int) {
 	m.width = w
 	m.height = h
 	m.clampOffset()
 }
 
-// Open shows the panel scrolled to the top, keeping any notes already
-// loaded.
 func (m *Model) Open() {
 	m.Visible = true
 	m.offset = 0
 }
 
-// Loaded reports whether release notes are in hand.
 func (m Model) Loaded() bool {
 	return m.loaded
 }
 
-// SetReleases shows the given releases, newest first.
 func (m *Model) SetReleases(rs []release.Release) {
 	m.releases = rs
 	m.loaded = true
@@ -76,18 +66,15 @@ func (m *Model) SetReleases(rs []release.Release) {
 	m.offset = 0
 }
 
-// SetError shows the error state. Opening the panel again retries.
 func (m *Model) SetError() {
 	m.failed = true
 	m.loaded = false
 }
 
-// Failed reports whether the last load failed.
 func (m Model) Failed() bool {
 	return m.failed
 }
 
-// Update handles keys while the panel is open.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	key, ok := msg.(tea.KeyMsg)
 	if !ok {
@@ -113,7 +100,6 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// ViewOver composites the panel onto bg.
 func (m Model) ViewOver(bg string) string {
 	if !m.Visible {
 		return bg
@@ -153,7 +139,6 @@ func (m Model) boxSize() (int, int) {
 	return boxW, boxH
 }
 
-// bodyHeight is how many body lines fit between the header and footer.
 func (m Model) bodyHeight() int {
 	boxW, boxH := m.boxSize()
 	innerW := boxW - 2

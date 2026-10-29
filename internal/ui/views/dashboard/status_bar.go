@@ -23,8 +23,7 @@ type StatusBarModel struct {
 	HintOverride string // when non-empty, replaces focus-based hint text
 	Stacked      bool   // the selected PR is in a stack, so S has something to show
 	Mode         string // diff input mode badge ("VISUAL" or "SEARCH"); "" hides it
-	// Notice is a quiet "Text | Key: Desc" line drawn after everything
-	// else, so a narrow terminal cuts it first; "" hides it.
+	// Notice goes last so a narrow terminal cuts it first.
 	Notice  string
 	theme   *theme.Theme
 	spinner spinner.Model

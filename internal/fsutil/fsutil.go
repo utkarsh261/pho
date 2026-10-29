@@ -8,9 +8,7 @@ import (
 	"path/filepath"
 )
 
-// WriteAtomic replaces path with data through a temp file in the same
-// directory, so readers see either the old file or the new one, never a
-// partial write. The directory must already exist.
+// WriteAtomic writes via a temp file and rename. The directory must exist.
 func WriteAtomic(path string, data []byte, mode fs.FileMode) error {
 	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
 	if err != nil {

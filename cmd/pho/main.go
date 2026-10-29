@@ -276,8 +276,7 @@ func main() {
 	}
 	logger := pholog.New(cfg.Logging.File, level)
 
-	// Decided before the cache is created below, since an existing cache
-	// marks someone who used pho before this kept any state.
+	// existingUser must run before the cache below is created.
 	paths := config.ResolvePaths(configPath)
 	stateStore := state.NewStore(paths.StateFile)
 	announce := planLaunch(stateStore, version,

@@ -18,16 +18,12 @@ import (
 // changelogReleases is how many releases `pho --changelog` prints.
 const changelogReleases = 5
 
-// updatesOptedOut reports whether PHO_NO_UPDATE_CHECK turns off pho's
-// automatic release features.
 func updatesOptedOut() bool {
 	v := strings.TrimSpace(os.Getenv("PHO_NO_UPDATE_CHECK"))
 	return v != "" && v != "0" && !strings.EqualFold(v, "false")
 }
 
-// existingUser reports whether pho has run here before, judged by files an
-// earlier version leaves behind. It tells an upgrade from a version that
-// kept no state apart from a fresh install.
+// existingUser reports whether an earlier pho has run here.
 func existingUser(configFile, cacheDir string) bool {
 	for _, p := range []string{configFile, filepath.Join(cacheDir, "cache.db")} {
 		if _, err := os.Stat(p); err == nil {
@@ -37,9 +33,7 @@ func existingUser(configFile, cacheDir string) bool {
 	return false
 }
 
-// planLaunch decides whether this launch announces an upgrade, and records
-// the decision. It never fails: a state file that can't be read or written
-// only means the announcement may repeat.
+// planLaunch never fails; a bad state file only means the announcement may repeat.
 func planLaunch(store *state.Store, version string, existing, enabled bool, warn func(string, ...any)) state.Announcement {
 	var a state.Announcement
 	if err := store.Update(func(s *state.State) {
@@ -50,8 +44,7 @@ func planLaunch(store *state.Store, version string, existing, enabled bool, warn
 	return a
 }
 
-// printChangelog prints the newest release notes up to version, falling
-// back to the releases link when they can't be fetched.
+// printChangelog falls back to the releases link on any error.
 func printChangelog(w io.Writer, c *release.Client, version string, width int) {
 	rs, err := c.List(context.Background(), 20)
 	if err == nil {
@@ -66,7 +59,6 @@ func printChangelog(w io.Writer, c *release.Client, version string, width int) {
 	fmt.Fprintf(w, "\nAll releases: %s\n", release.ReleasesURL)
 }
 
-// stdoutWidth is the terminal width for --changelog, 80 when unknown.
 func stdoutWidth() int {
 	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && w > 0 {
 		return min(w, 100)

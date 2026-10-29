@@ -119,8 +119,6 @@ type Config struct {
 		Background string
 	}
 	Updates struct {
-		// WhatsNew announces a new version in the status bar after an
-		// upgrade, pointing at its release notes.
 		WhatsNew bool
 	}
 }

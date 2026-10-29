@@ -1,6 +1,4 @@
-// Package release reads pho's own releases from GitHub, for the "What's new"
-// panel and the update notice. Every call is unauthenticated and goes to
-// github.com, whichever host the user works against.
+// Package release reads pho's own releases from github.com, unauthenticated.
 package release
 
 import (
@@ -15,23 +13,18 @@ import (
 	"time"
 )
 
-// DefaultBaseURL is pho's repository on the GitHub REST API.
 const DefaultBaseURL = "https://api.github.com/repos/utkarsh261/pho"
 
-// ReleasesURL is where users can read every release's notes.
 const ReleasesURL = "https://github.com/utkarsh261/pho/releases"
 
-// Timeout bounds every request, on top of the caller's context.
 const Timeout = 3 * time.Second
 
-// Release is one published, stable release.
 type Release struct {
 	Version string // without the leading v, e.g. "1.2.0"
 	Body    string // release notes, as markdown
 	URL     string
 }
 
-// Client fetches releases. The zero value is ready to use.
 type Client struct {
 	BaseURL    string // DefaultBaseURL when empty
 	HTTPClient *http.Client
@@ -45,8 +38,7 @@ type apiRelease struct {
 	Prerelease bool   `json:"prerelease"`
 }
 
-// List returns up to n of the newest stable releases, newest first. Drafts,
-// prereleases and tags that aren't a plain version are left out.
+// List returns up to n stable releases, newest first.
 func (c *Client) List(ctx context.Context, n int) ([]Release, error) {
 	var raw []apiRelease
 	if err := c.get(ctx, fmt.Sprintf("/releases?per_page=%d", n), &raw); err != nil {
@@ -61,7 +53,6 @@ func (c *Client) List(ctx context.Context, n int) ([]Release, error) {
 	return out, nil
 }
 
-// Latest returns the newest stable release.
 func (c *Client) Latest(ctx context.Context) (Release, error) {
 	var raw apiRelease
 	if err := c.get(ctx, "/releases/latest", &raw); err != nil {
@@ -114,21 +105,17 @@ func (c *Client) get(ctx context.Context, path string, out any) error {
 
 var versionRe = regexp.MustCompile(`^v?(\d+)\.(\d+)\.(\d+)$`)
 
-// IsRelease reports whether v is a plain stable version, "1.2.3" or
-// "v1.2.3". Dev builds, pseudo-versions and prerelease or build suffixes
-// are not.
+// IsRelease reports whether v is a stable "[v]X.Y.Z".
 func IsRelease(v string) bool {
 	return versionRe.MatchString(v)
 }
 
-// Normalize drops a leading v, so GoReleaser builds ("1.2.3") and
-// go install builds ("v1.2.3") read the same.
+// Normalize drops the v that go install builds carry.
 func Normalize(v string) string {
 	return strings.TrimPrefix(v, "v")
 }
 
-// Compare orders two versions that pass IsRelease: -1 if a is older than b,
-// 0 if equal, 1 if newer. A version that doesn't parse sorts as oldest.
+// Compare returns -1, 0 or 1. Unparseable versions sort as oldest.
 func Compare(a, b string) int {
 	pa, pb := parse(a), parse(b)
 	for i := range pa {
@@ -160,9 +147,7 @@ var (
 	authorRe           = regexp.MustCompile(`(?m)\s+\(@[\w-]+\)\s*$`)
 )
 
-// CleanNotes tidies GoReleaser's release notes for reading in the terminal:
-// it drops the "## Changelog" heading, and the commit SHA and author handle
-// around each bullet.
+// CleanNotes strips GoReleaser's heading, commit SHAs and author handles.
 func CleanNotes(body string) string {
 	body = strings.ReplaceAll(body, "\r\n", "\n")
 	body = changelogHeadingRe.ReplaceAllString(body, "")
@@ -171,9 +156,8 @@ func CleanNotes(body string) string {
 	return strings.TrimSpace(body)
 }
 
-// Between returns the releases newer than since and no newer than current,
-// newest first, at most limit of them. Without a since, or on a dev build,
-// it falls back to Recent.
+// Between returns releases in (since, current], newest first. Falls back to
+// Recent when since or current isn't a release.
 func Between(releases []Release, since, current string, limit int) []Release {
 	if !IsRelease(since) || !IsRelease(current) {
 		return Recent(releases, current, limit)
@@ -190,9 +174,7 @@ func Between(releases []Release, since, current string, limit int) []Release {
 	return out
 }
 
-// Recent returns up to limit releases no newer than current, newest first,
-// for `pho --changelog` and W without a recorded upgrade. On a dev build it
-// returns the newest ones.
+// Recent returns releases up to current, or the newest on a dev build.
 func Recent(releases []Release, current string, limit int) []Release {
 	var out []Release
 	for _, r := range releases {
@@ -207,8 +189,6 @@ func Recent(releases []Release, current string, limit int) []Release {
 	return out
 }
 
-// Markdown renders releases as one markdown document, a heading per
-// release.
 func Markdown(releases []Release) string {
 	var b strings.Builder
 	for i, r := range releases {
