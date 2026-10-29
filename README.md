@@ -124,13 +124,16 @@ level = "info"             # debug, info, warn or error
 
 [updates]
 whats_new = true           # mention a new version in the status bar after an upgrade
+check = true               # look for a newer release once a day
 ```
 
 ## What's new
 
 After you upgrade, the dashboard's status bar says so for a few launches. Press `W` on the dashboard to read the release notes, at any time. `pho --changelog` prints them in the terminal.
 
-pho fetches the notes from GitHub's public API without your token. Set `[updates] whats_new = false` or `PHO_NO_UPDATE_CHECK=1` to stop the status-bar mention; `W` and `--changelog` still work. pho remembers the last version you saw in `~/.local/state/pho/state.json`.
+Once a day pho also checks whether a newer release is out and, if so, says so in the dashboard's status bar. If you installed with Homebrew, press `U` there and confirm with `Enter` to run `brew upgrade utkarsh261/tap/pho` without leaving pho; restart pho afterwards to use the new version.
+
+pho talks to GitHub's public API for both, without your token. Set `[updates] whats_new = false` or `[updates] check = false` to turn either off, or `PHO_NO_UPDATE_CHECK=1` for both; `W` and `--changelog` still work. pho remembers the last version you saw and the last check in `~/.local/state/pho/state.json`.
 
 ## Themes
 <img width="1600" height="900" alt="pho-themes" src="https://github.com/user-attachments/assets/7d452bdc-015c-43b3-bcaf-cd24e83f562c" />

@@ -81,7 +81,7 @@ func TestExistingUser(t *testing.T) {
 func TestPlanLaunch_UnwritableStateAnnouncesNothing(t *testing.T) {
 	store := state.NewStore(filepath.Join("/dev/null", "pho", "state.json"))
 	var warned bool
-	a := planLaunch(store, "1.2.0", true, true, func(string, ...any) { warned = true })
+	a, _ := planLaunch(store, "1.2.0", true, true, func(string, ...any) { warned = true })
 	if a.Version != "" || !warned {
 		t.Errorf("announcement %+v, warned %v; want none and a warning", a, warned)
 	}
@@ -93,5 +93,26 @@ func TestUpdatesOptedOut(t *testing.T) {
 		if got := updatesOptedOut(); got != want {
 			t.Errorf("PHO_NO_UPDATE_CHECK=%q: got %v, want %v", v, got, want)
 		}
+	}
+}
+
+func TestUpdateCheckEnabled(t *testing.T) {
+	t.Setenv("PHO_NO_UPDATE_CHECK", "")
+	if !updateCheckEnabled(true, "1.2.0", true) {
+		t.Error("default release build in a terminal should check")
+	}
+	for name, got := range map[string]bool{
+		"config off":     updateCheckEnabled(false, "1.2.0", true),
+		"dev build":      updateCheckEnabled(true, "dev", true),
+		"prerelease":     updateCheckEnabled(true, "1.3.0-rc.1", true),
+		"not a terminal": updateCheckEnabled(true, "1.2.0", false),
+	} {
+		if got {
+			t.Errorf("%s: check enabled, want off", name)
+		}
+	}
+	t.Setenv("PHO_NO_UPDATE_CHECK", "1")
+	if updateCheckEnabled(true, "1.2.0", true) {
+		t.Error("PHO_NO_UPDATE_CHECK=1 should turn the check off")
 	}
 }

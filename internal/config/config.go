@@ -72,6 +72,7 @@ type rawConfig struct {
 	} `toml:"ui"`
 	Updates struct {
 		WhatsNew *bool `toml:"whats_new"`
+		Check    *bool `toml:"check"`
 	} `toml:"updates"`
 }
 
@@ -120,6 +121,7 @@ type Config struct {
 	}
 	Updates struct {
 		WhatsNew bool
+		Check    bool
 	}
 	Paths Paths
 }
@@ -186,6 +188,7 @@ func defaults() Config {
 	cfg.Palette.MaxPRs = 300
 	cfg.UI.Background = "theme"
 	cfg.Updates.WhatsNew = true
+	cfg.Updates.Check = true
 	return cfg
 }
 
@@ -293,6 +296,10 @@ func Load(path string) (Config, error) {
 	cfg.Updates.WhatsNew = def.Updates.WhatsNew
 	if raw.Updates.WhatsNew != nil {
 		cfg.Updates.WhatsNew = *raw.Updates.WhatsNew
+	}
+	cfg.Updates.Check = def.Updates.Check
+	if raw.Updates.Check != nil {
+		cfg.Updates.Check = *raw.Updates.Check
 	}
 
 	// Fill zero-value fields with defaults.

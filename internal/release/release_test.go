@@ -2,6 +2,7 @@ package release
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -151,6 +152,19 @@ func TestList(t *testing.T) {
 	}
 }
 
+func TestLatest(t *testing.T) {
+	c := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/releases/latest" {
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+		w.Write([]byte(`{"tag_name":"v1.4.0"}`))
+	})
+	got, err := c.Latest(context.Background())
+	if err != nil || got.Version != "1.4.0" {
+		t.Fatalf("Latest = %+v, %v; want 1.4.0", got, err)
+	}
+}
+
 func TestFailuresReturnErrors(t *testing.T) {
 	tests := map[string]http.HandlerFunc{
 		"server error": func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusInternalServerError) },
@@ -164,6 +178,9 @@ func TestFailuresReturnErrors(t *testing.T) {
 			c := serve(t, h)
 			if _, err := c.List(context.Background(), 5); err == nil {
 				t.Error("List succeeded, want error")
+			}
+			if _, err := c.Latest(context.Background()); err == nil {
+				t.Error("Latest succeeded, want error")
 			}
 		})
 	}
@@ -193,5 +210,48 @@ func TestUnreachableServer(t *testing.T) {
 	c := &Client{BaseURL: "http://127.0.0.1:1"}
 	if _, err := c.List(context.Background(), 5); err == nil {
 		t.Fatal("List succeeded against a closed port, want error")
+	}
+}
+
+func TestDetectBrew(t *testing.T) {
+	exe := func(p string, err error) func() (string, error) {
+		return func() (string, error) { return p, err }
+	}
+	brewAt := func(p string, err error) func(string) (string, error) {
+		return func(string) (string, error) { return p, err }
+	}
+	noBrew := brewAt("", errors.New("not found"))
+	// only finds brew by the given name, as LookPath does for a path or PATH.
+	only := func(name string) func(string) (string, error) {
+		return func(n string) (string, error) {
+			if n == name {
+				return n, nil
+			}
+			return "", errors.New("not found")
+		}
+	}
+	tests := []struct {
+		name     string
+		exe      func() (string, error)
+		look     func(string) (string, error)
+		wantBrew string
+		wantOK   bool
+	}{
+		{"apple silicon", exe("/opt/homebrew/Cellar/pho/1.2.0/bin/pho", nil), brewAt("/opt/homebrew/bin/brew", nil), "/opt/homebrew/bin/brew", true},
+		{"linuxbrew", exe("/home/linuxbrew/.linuxbrew/Cellar/pho/1.2.0/bin/pho", nil), brewAt("/home/linuxbrew/.linuxbrew/bin/brew", nil), "/home/linuxbrew/.linuxbrew/bin/brew", true},
+		{"brew only in the Cellar's prefix", exe("/opt/homebrew/Cellar/pho/1.2.0/bin/pho", nil), only("/opt/homebrew/bin/brew"), "/opt/homebrew/bin/brew", true},
+		{"brew only on PATH", exe("/opt/homebrew/Cellar/pho/1.2.0/bin/pho", nil), only("brew"), "brew", true},
+		{"no brew anywhere", exe("/opt/homebrew/Cellar/pho/1.2.0/bin/pho", nil), noBrew, "", false},
+		{"go install", exe("/Users/me/go/bin/pho", nil), brewAt("/opt/homebrew/bin/brew", nil), "", false},
+		{"release download", exe("/usr/local/bin/pho", nil), brewAt("/usr/local/bin/brew", nil), "", false},
+		{"executable unknown", exe("", errors.New("no")), brewAt("/opt/homebrew/bin/brew", nil), "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			brew, ok := DetectBrew(tt.exe, tt.look)
+			if brew != tt.wantBrew || ok != tt.wantOK {
+				t.Errorf("DetectBrew = %q, %v; want %q, %v", brew, ok, tt.wantBrew, tt.wantOK)
+			}
+		})
 	}
 }

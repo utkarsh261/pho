@@ -444,3 +444,37 @@ func TestLoad_UpdatesWhatsNew(t *testing.T) {
 		}
 	})
 }
+
+func TestLoad_UpdatesCheck(t *testing.T) {
+	tests := []struct {
+		name, toml string
+		want       bool
+	}{
+		{"no updates section", "[ui]\ntheme = \"nord\"\n", true},
+		{"empty updates section", "[updates]\n", true},
+		{"other key only", "[updates]\nwhats_new = false\n", true},
+		{"explicit off", "[updates]\ncheck = false\n", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.toml")
+			if err := os.WriteFile(path, []byte(tc.toml), 0644); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := config.Load(path)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if cfg.Updates.Check != tc.want {
+				t.Errorf("Updates.Check: got %v, want %v", cfg.Updates.Check, tc.want)
+			}
+		})
+	}
+
+	t.Run("no config file", func(t *testing.T) {
+		cfg, err := config.Load(filepath.Join(t.TempDir(), "missing.toml"))
+		if err != nil || !cfg.Updates.Check {
+			t.Errorf("Updates.Check = %v, %v; want true", cfg.Updates.Check, err)
+		}
+	})
+}

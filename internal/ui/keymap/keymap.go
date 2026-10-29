@@ -80,6 +80,8 @@ func dispatchGlobal(msg tea.KeyMsg) Result {
 			return Result{Action: OpenThemePicker{}}
 		case 'W':
 			return Result{Action: OpenWhatsNew{}}
+		case 'U':
+			return Result{Action: UpdatePho{}}
 		}
 	}
 	return Result{}
@@ -310,6 +312,11 @@ func (OpenStackPicker) isAction() {}
 type OpenWhatsNew struct{}
 
 func (OpenWhatsNew) isAction() {}
+
+// UpdatePho upgrades pho in place when a newer release is available.
+type UpdatePho struct{}
+
+func (UpdatePho) isAction() {}
 
 type TriggerRefresh struct{}
 

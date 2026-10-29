@@ -33,6 +33,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
+	"golang.org/x/term"
 
 	"github.com/utkarsh261/pho/internal/application/dashboard"
 	"github.com/utkarsh261/pho/internal/application/discovery"
@@ -304,10 +305,15 @@ func main() {
 	}
 
 	// Only a launch that opens on the dashboard can show the announcement.
-	var announce state.Announcement
+	var (
+		announce state.Announcement
+		saved    state.State
+	)
 	if inv.PRNumber == 0 {
-		announce = planLaunch(stateStore, version, existing,
+		announce, saved = planLaunch(stateStore, version, existing,
 			cfg.Updates.WhatsNew && !updatesOptedOut(), logger.Warn)
+	} else if saved, err = stateStore.Load(); err != nil {
+		logger.Warn("could not read state", "path", stateStore.Path(), "err", err)
 	}
 
 	// Ensure cache directory exists
@@ -393,6 +399,11 @@ func main() {
 		WhatsNewSince:   announce.Since,
 		FetchReleases:   (&release.Client{}).List,
 		State:           stateStore,
+		CheckForUpdates: updateCheckEnabled(cfg.Updates.Check, version, term.IsTerminal(int(os.Stdout.Fd()))),
+		LatestKnown:     saved.LatestKnown,
+		LastUpdateCheck: saved.LastUpdateCheck,
+		FetchLatest:     (&release.Client{}).Latest,
+		RunUpdate:       brewUpdater(),
 	}
 	model := app.NewModel(deps)
 
