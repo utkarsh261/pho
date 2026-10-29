@@ -49,14 +49,12 @@ func planLaunch(store *state.Store, version string, existing, enabled bool, warn
 	return a
 }
 
-// updateCheckEnabled reports whether this run looks for a newer release:
-// on unless turned off, and only for release builds in a terminal.
+// updateCheckEnabled is off for dev builds and when stdout isn't a terminal.
 func updateCheckEnabled(configured bool, version string, stdoutTTY bool) bool {
 	return configured && !updatesOptedOut() && release.IsRelease(version) && stdoutTTY
 }
 
-// brewUpdater returns the in-place upgrade for Homebrew installs, nil for
-// any other install.
+// brewUpdater is nil unless pho was installed with Homebrew.
 func brewUpdater() func() tea.Cmd {
 	brew, ok := release.DetectBrew(os.Executable, exec.LookPath)
 	if !ok {

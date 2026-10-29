@@ -206,13 +206,10 @@ func Markdown(releases []Release) string {
 	return b.String()
 }
 
-// BrewFormula is pho's Homebrew formula, tap included so it can't clash
-// with another formula called pho.
+// BrewFormula includes the tap so it can't clash with another "pho".
 const BrewFormula = "utkarsh261/tap/pho"
 
-// DetectBrew reports whether the running pho was installed with Homebrew
-// and brew is on the PATH, returning brew's path. executable and lookPath
-// are os.Executable and exec.LookPath outside tests.
+// DetectBrew returns brew's path when pho runs from Homebrew's Cellar.
 func DetectBrew(executable func() (string, error), lookPath func(string) (string, error)) (string, bool) {
 	exe, err := executable()
 	if err != nil {

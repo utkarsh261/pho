@@ -121,9 +121,7 @@ type Config struct {
 	}
 	Updates struct {
 		WhatsNew bool
-		// Check looks for a newer release once a day and mentions it in
-		// the status bar.
-		Check bool
+		Check    bool
 	}
 	Paths Paths
 }

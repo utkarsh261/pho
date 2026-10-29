@@ -92,15 +92,11 @@ type Dependencies struct {
 	FetchReleases   func(ctx context.Context, n int) ([]release.Release, error)
 	State           *state.Store
 
-	// CheckForUpdates turns on the daily update check and its status-bar
-	// notice. LatestKnown and LastUpdateCheck are the last check's result;
-	// FetchLatest asks GitHub for the newest release.
 	CheckForUpdates bool
 	LatestKnown     string
 	LastUpdateCheck time.Time
 	FetchLatest     func(ctx context.Context) (release.Release, error)
-	// RunUpdate upgrades pho in place (brew upgrade); nil when pho wasn't
-	// installed with Homebrew, which leaves U off.
+	// RunUpdate is nil unless pho was installed with Homebrew.
 	RunUpdate func() tea.Cmd
 }
 
@@ -137,8 +133,6 @@ type Model struct {
 	announce        string
 	whatsNewLoading bool
 
-	// Update check: the newest release known, whether U is waiting for
-	// Enter, and the outcome of an upgrade run from U.
 	latestKnown   string
 	updateConfirm bool
 	updateTarget  string
