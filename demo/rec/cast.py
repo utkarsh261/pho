@@ -3,10 +3,15 @@
 at their times. Step times are seconds into the final video; recording starts
 `preroll` seconds earlier so pho has loaded by then.
 
+A step without "at" follows the previous one: keys and typed text wait their
+"gap" (seconds) after them, and {"sleep": s} waits. With "shell": true the take
+starts at a zsh prompt in the repos dir instead of in pho.
+
 usage: cast.py <take.json> <out.cast>
-Writes <out.cast> and <out.cast>.keys.json (when each key was sent, in video time).
+Writes <out.cast> and <out.cast>.keys.json (when each key was sent, in video
+time, and the take's steps with their times filled in).
 """
-import fcntl, json, os, pty, select, struct, sys, termios, time
+import fcntl, json, os, pty, select, struct, subprocess, sys, termios, time
 
 take_path, out = sys.argv[1:3]
 take = json.load(open(take_path))
@@ -20,23 +25,59 @@ env = dict(os.environ,
            XDG_DATA_HOME=f"{W}/xdg/d", XDG_CONFIG_HOME=f"{W}/xdg/cfg",
            TERM="xterm-256color", COLORTERM="truecolor")
 
-SEQ = {"down": "\x1b[B", "up": "\x1b[A", "enter": "\r", "esc": "\x1b", "tab": "\t",
-       "ctrl+p": "\x10", "ctrl+d": "\x04", "ctrl+u": "\x15"}
+SEQ = {"down": "\x1b[B", "up": "\x1b[A", "enter": "\r", "esc": "\x1b", "tab": "\t", "shift+tab": "\x1b[Z",
+       "space": " ", "ctrl+p": "\x10", "ctrl+d": "\x04", "ctrl+u": "\x15", "ctrl+s": "\x13"}
+
+# Bubble Tea names a read of "u" then "p" the key "up", the up arrow, and
+# pho's text fields act on it. pho can be mid-render when both arrive, so hold
+# back the second of any typed pair that spells a key name.
+HOLD = 0.3
+
+
+def char_times(text, speed):
+    times, extra = [], 0.0
+    for i, ch in enumerate(text):
+        if text[i - 1:i + 1] == "up":
+            extra += HOLD
+        times.append(i * speed + extra)
+    return times
+
+
+# give every step its time
+t = 0.0
+for s in take["steps"]:
+    t = s.setdefault("at", t)
+    if "key" in s:
+        t += s.get("gap", 0)
+    elif "type" in s:
+        t += char_times(s["type"], s["speed"])[-1] + s["speed"] + s.get("gap", 0)
+    elif "sleep" in s:
+        t += s["sleep"]
+take.setdefault("duration", round(t, 3))
 
 # (time, bytes, event) for every keystroke
 sends = []
 for s in take["steps"]:
+    cap = {} if s.get("cap", True) else {"cap": False}
     if "key" in s:
-        sends.append((s["at"], SEQ.get(s["key"], s["key"]), {"key": s["key"]}))
+        sends.append((s["at"], SEQ.get(s["key"], s["key"]), {"key": s["key"], **cap}))
     elif "type" in s:
-        for i, ch in enumerate(s["type"]):
-            sends.append((s["at"] + i * s["speed"], ch, {"char": ch, "text": s["type"]} if i == 0 else None))
+        for i, (ch, dt) in enumerate(zip(s["type"], char_times(s["type"], s["speed"]))):
+            sends.append((s["at"] + dt, ch, {"char": ch, "text": s["type"], **cap} if i == 0 else None))
 
 pid, fd = pty.fork()
 if pid == 0:
     os.chdir(f"{W}/world/repos")
+    cmd = "pho"
+    if take.get("shell"):
+        zdot = f"{W}/rec/zdot"
+        os.makedirs(zdot, exist_ok=True)
+        with open(f"{zdot}/.zshrc", "w") as f:
+            f.write("PROMPT='%F{8}~/code%f %F{141}❯%f '\nunsetopt PROMPT_SP\n")
+        env["ZDOTDIR"] = zdot
+        cmd = "zsh -i"
     os.execvpe("asciinema", ["asciinema", "rec", "--overwrite", "-q", "-f", "asciicast-v2", "--window-size",
-                             f"{cols}x{rows}", "-c", "pho", out], env)
+                             f"{cols}x{rows}", "-c", cmd, out], env)
 fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
 t0 = time.time() + pre  # video time zero
 
@@ -73,7 +114,11 @@ for at, seq, ev in sends:
     if ev:
         log.append(dict(ev, t=round(time.time() - t0, 4)))
 pump(t0 + take["duration"] + 0.5)
-os.kill(pid, 15)
+if take.get("shell"):
+    # asciinema waits for its shell, so hang that up (it takes pho with it)
+    subprocess.run(["pkill", "-HUP", "-P", str(pid)])
+else:
+    os.kill(pid, 15)
 while True:  # drain until asciinema closes the pty, or it blocks on exit
     try:
         if not os.read(fd, 65536):
@@ -81,5 +126,6 @@ while True:  # drain until asciinema closes the pty, or it blocks on exit
     except OSError:
         break
 os.waitpid(pid, 0)
-json.dump({"preroll": pre, "first_out": first_out, "keys": log}, open(out + ".keys.json", "w"), indent=1)
+json.dump({"preroll": pre, "first_out": first_out, "duration": take["duration"], "steps": take["steps"], "keys": log},
+          open(out + ".keys.json", "w"), indent=1)
 print(f"{out}: {len(log)} key events")

@@ -3,7 +3,9 @@
 // pho's own UI). Sizes are for the 4K frame.
 //
 // usage: swift chips.swift <out_dir> <spec.json>
-// spec.json: {"keys": {"name": "text", ...}, "labels": {"name": "text", ...}}
+// spec.json: {"keys": {"name": "text", ...}, "labels": {"name": "text", ...}, "opts": {"pill": "1"}}
+// With opts.pill the labels sit on a dark pill, for takes that zoom away from
+// the status bar.
 import AppKit
 import Foundation
 
@@ -44,13 +46,22 @@ for (name, text) in spec["keys"] ?? [:] {
     }
 }
 
+let pill = spec["opts"]?["pill"] != nil
 for (name, text) in spec["labels"] ?? [:] {
     let shadow = NSShadow()
     shadow.shadowColor = color(0x000000, 0.55); shadow.shadowBlurRadius = 6; shadow.shadowOffset = .zero
     let str = NSAttributedString(string: text, attributes: [.font: sans, .foregroundColor: color(0xC9C1F2), .shadow: shadow])
     let ts = str.size()
-    render("label-\(name)", width: Int(ts.width.rounded(.up)) + 16, height: 42) { _ in
-        str.draw(at: NSPoint(x: 8, y: (42 - ts.height) / 2))
+    let pad = pill ? 22 : 8
+    render("label-\(name)", width: Int(ts.width.rounded(.up)) + 2 * pad, height: pill ? 52 : 42) { _ in
+        let h: CGFloat = pill ? 52 : 42
+        if pill {
+            let path = NSBezierPath(roundedRect: NSRect(x: 1, y: 1, width: ts.width + CGFloat(2 * pad) - 2, height: h - 2),
+                                    xRadius: 25, yRadius: 25)
+            color(0x16171A, 0.92).setFill(); path.fill()
+            color(0x4A4560).setStroke(); path.lineWidth = 2; path.stroke()
+        }
+        str.draw(at: NSPoint(x: CGFloat(pad), y: (h - ts.height) / 2))
     }
 }
 print("chips -> \(outDir.path)")
