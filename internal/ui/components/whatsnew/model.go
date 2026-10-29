@@ -135,7 +135,7 @@ func (m Model) ViewOver(bg string) string {
 
 // boxSize keeps the box on screen; it is 0×0 when the terminal is too small.
 func (m Model) boxSize() (int, int) {
-	boxW := max(min(80, m.width-4), min(30, m.width))
+	boxW := m.boxWidth()
 	if boxW < 3 {
 		return 0, 0
 	}
@@ -180,6 +180,10 @@ func (m Model) bodyLinesAt(innerW int) []string {
 	}
 }
 
+func (m Model) boxWidth() int {
+	return max(min(80, m.width-4), min(30, m.width))
+}
+
 // render caches the notes at the box's current width, so drawing and
 // scrolling don't run markdown again.
 func (m *Model) render() {
@@ -187,8 +191,8 @@ func (m *Model) render() {
 	if !m.loaded || len(m.releases) == 0 {
 		return
 	}
-	boxW, _ := m.boxSize()
-	if boxW <= 0 {
+	boxW := m.boxWidth()
+	if boxW < 3 {
 		return
 	}
 	m.notesW = boxW - 2
