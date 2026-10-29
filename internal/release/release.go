@@ -209,7 +209,8 @@ func Markdown(releases []Release) string {
 // BrewFormula includes the tap so it can't clash with another "pho".
 const BrewFormula = "utkarsh261/tap/pho"
 
-// DetectBrew returns brew's path when pho runs from Homebrew's Cellar.
+// DetectBrew returns brew's path when pho runs from Homebrew's Cellar,
+// preferring the brew of that Homebrew install over the one on PATH.
 func DetectBrew(executable func() (string, error), lookPath func(string) (string, error)) (string, bool) {
 	exe, err := executable()
 	if err != nil {
@@ -218,12 +219,14 @@ func DetectBrew(executable func() (string, error), lookPath func(string) (string
 	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
 		exe = resolved
 	}
-	if !strings.Contains(filepath.ToSlash(exe), "/Cellar/pho/") {
+	prefix, _, ok := strings.Cut(filepath.ToSlash(exe), "/Cellar/pho/")
+	if !ok {
 		return "", false
 	}
-	brew, err := lookPath("brew")
-	if err != nil {
-		return "", false
+	for _, name := range []string{filepath.Join(filepath.FromSlash(prefix), "bin", "brew"), "brew"} {
+		if brew, err := lookPath(name); err == nil {
+			return brew, true
+		}
 	}
-	return brew, true
+	return "", false
 }

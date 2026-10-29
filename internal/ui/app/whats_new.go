@@ -17,6 +17,13 @@ const (
 
 var whatsNewTimeout = release.Timeout
 
+// stateSaveFailed carries a background state write's error back to the
+// update loop, which logs it.
+type stateSaveFailed struct {
+	what string
+	err  error
+}
+
 type WhatsNewLoaded struct {
 	Releases []release.Release
 	Err      error
@@ -43,7 +50,7 @@ func (m *Model) openWhatsNew() tea.Cmd {
 	if store, version := m.deps.State, m.deps.Version; store != nil && release.IsRelease(version) {
 		out = append(out, func() tea.Msg {
 			if err := store.Update(func(s *state.State) { s.MarkSeen(version) }); err != nil {
-				m.logWarn("could not record the version seen", "err", err)
+				return stateSaveFailed{what: "version seen", err: err}
 			}
 			return nil
 		})

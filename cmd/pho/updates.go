@@ -36,17 +36,22 @@ func existingUser(configFile, cacheDir string) bool {
 	return false
 }
 
-// planLaunch never fails. A launch it can't record announces nothing, so an
-// unwritable state file can't repeat the notice forever.
-func planLaunch(store *state.Store, version string, existing, enabled bool, warn func(string, ...any)) state.Announcement {
-	var a state.Announcement
+// planLaunch never fails, and returns the state it read. A launch it can't
+// record announces nothing, so an unwritable state file can't repeat the
+// notice forever.
+func planLaunch(store *state.Store, version string, existing, enabled bool, warn func(string, ...any)) (state.Announcement, state.State) {
+	var (
+		a  state.Announcement
+		st state.State
+	)
 	if err := store.Update(func(s *state.State) {
 		a = s.PlanLaunch(version, existing, enabled)
+		st = *s
 	}); err != nil {
 		warn("could not save state", "path", store.Path(), "err", err)
-		return state.Announcement{}
+		return state.Announcement{}, st
 	}
-	return a
+	return a, st
 }
 
 // updateCheckEnabled is off for dev builds and when stdout isn't a terminal.

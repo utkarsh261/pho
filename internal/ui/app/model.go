@@ -133,11 +133,12 @@ type Model struct {
 	announce        string
 	whatsNewLoading bool
 
-	latestKnown   string
-	updateConfirm bool
-	updateTarget  string
-	updateResult  string
-	updated       bool
+	latestKnown     string
+	lastUpdateCheck time.Time
+	updateConfirm   bool
+	updateTarget    string
+	updateResult    string
+	updated         bool
 
 	focus         domain.FocusTarget
 	previousFocus domain.FocusTarget
@@ -218,6 +219,7 @@ func NewModel(deps Dependencies) *Model {
 		whatsNew:          whatsnew.NewModel(),
 		announce:          deps.AnnounceVersion,
 		latestKnown:       deps.LatestKnown,
+		lastUpdateCheck:   deps.LastUpdateCheck,
 		createPR:          createpr.NewModel(),
 		focus:             domain.FocusRepoPanel,
 		previousFocus:     domain.FocusRepoPanel,
@@ -360,7 +362,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.handleWhatsNewLoaded(msg)
 		return m, nil
 	case UpdateChecked:
-		m.handleUpdateChecked(msg)
+		return m, m.handleUpdateChecked(msg)
+	case updateCheckDue:
+		return m, m.checkForUpdatesCmd()
+	case stateSaveFailed:
+		m.logWarn("could not save state", "what", msg.what, "err", msg.err)
 		return m, nil
 	case UpdateFinished:
 		m.handleUpdateFinished(msg)
@@ -740,6 +746,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			case "W":
 				return m, m.openWhatsNew()
+			case "U":
+				return m, m.startUpdate()
 			}
 		}
 		m.keymapOverlay, _ = m.keymapOverlay.Update(msg)
@@ -1587,10 +1595,7 @@ func (m *Model) syncStatus() {
 	m.status.Notice = ""
 	if m.currentView() == domain.PrimaryViewDashboard && m.status.HintOverride == "" &&
 		m.focus != domain.FocusCmdPalette {
-		m.status.Notice = m.announcement()
-		if m.status.Notice == "" {
-			m.status.Notice = m.updateNotice()
-		}
+		m.status.Notice = m.notice()
 	}
 	m.syncPRDetailSearchStatus()
 }

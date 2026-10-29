@@ -81,7 +81,7 @@ func TestExistingUser(t *testing.T) {
 func TestPlanLaunch_UnwritableStateAnnouncesNothing(t *testing.T) {
 	store := state.NewStore(filepath.Join("/dev/null", "pho", "state.json"))
 	var warned bool
-	a := planLaunch(store, "1.2.0", true, true, func(string, ...any) { warned = true })
+	a, _ := planLaunch(store, "1.2.0", true, true, func(string, ...any) { warned = true })
 	if a.Version != "" || !warned {
 		t.Errorf("announcement %+v, warned %v; want none and a warning", a, warned)
 	}

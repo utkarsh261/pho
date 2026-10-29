@@ -363,6 +363,7 @@ func buildDashboardBindings(ctx Context) []Group {
 			{Key: "q", Description: "Quit"},
 			{Key: "T", Description: "Theme", Direct: true},
 			{Key: "W", Description: "What's new", Direct: true},
+			{Key: "U", Description: "Update pho", Direct: true},
 			{Key: "?", Description: "Keybindings"},
 		},
 	})

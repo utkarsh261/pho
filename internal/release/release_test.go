@@ -221,6 +221,15 @@ func TestDetectBrew(t *testing.T) {
 		return func(string) (string, error) { return p, err }
 	}
 	noBrew := brewAt("", errors.New("not found"))
+	// only finds brew by the given name, as LookPath does for a path or PATH.
+	only := func(name string) func(string) (string, error) {
+		return func(n string) (string, error) {
+			if n == name {
+				return n, nil
+			}
+			return "", errors.New("not found")
+		}
+	}
 	tests := []struct {
 		name     string
 		exe      func() (string, error)
@@ -230,7 +239,9 @@ func TestDetectBrew(t *testing.T) {
 	}{
 		{"apple silicon", exe("/opt/homebrew/Cellar/pho/1.2.0/bin/pho", nil), brewAt("/opt/homebrew/bin/brew", nil), "/opt/homebrew/bin/brew", true},
 		{"linuxbrew", exe("/home/linuxbrew/.linuxbrew/Cellar/pho/1.2.0/bin/pho", nil), brewAt("/home/linuxbrew/.linuxbrew/bin/brew", nil), "/home/linuxbrew/.linuxbrew/bin/brew", true},
-		{"brew missing from PATH", exe("/opt/homebrew/Cellar/pho/1.2.0/bin/pho", nil), noBrew, "", false},
+		{"brew only in the Cellar's prefix", exe("/opt/homebrew/Cellar/pho/1.2.0/bin/pho", nil), only("/opt/homebrew/bin/brew"), "/opt/homebrew/bin/brew", true},
+		{"brew only on PATH", exe("/opt/homebrew/Cellar/pho/1.2.0/bin/pho", nil), only("brew"), "brew", true},
+		{"no brew anywhere", exe("/opt/homebrew/Cellar/pho/1.2.0/bin/pho", nil), noBrew, "", false},
 		{"go install", exe("/Users/me/go/bin/pho", nil), brewAt("/opt/homebrew/bin/brew", nil), "", false},
 		{"release download", exe("/usr/local/bin/pho", nil), brewAt("/usr/local/bin/brew", nil), "", false},
 		{"executable unknown", exe("", errors.New("no")), brewAt("/opt/homebrew/bin/brew", nil), "", false},

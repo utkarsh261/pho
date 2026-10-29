@@ -305,13 +305,14 @@ func main() {
 	}
 
 	// Only a launch that opens on the dashboard can show the announcement.
-	var announce state.Announcement
+	var (
+		announce state.Announcement
+		saved    state.State
+	)
 	if inv.PRNumber == 0 {
-		announce = planLaunch(stateStore, version, existing,
+		announce, saved = planLaunch(stateStore, version, existing,
 			cfg.Updates.WhatsNew && !updatesOptedOut(), logger.Warn)
-	}
-	saved, err := stateStore.Load()
-	if err != nil {
+	} else if saved, err = stateStore.Load(); err != nil {
 		logger.Warn("could not read state", "path", stateStore.Path(), "err", err)
 	}
 
