@@ -33,13 +33,15 @@ func existingUser(configFile, cacheDir string) bool {
 	return false
 }
 
-// planLaunch never fails; a bad state file only means the announcement may repeat.
+// planLaunch never fails. A launch it can't record announces nothing, so an
+// unwritable state file can't repeat the notice forever.
 func planLaunch(store *state.Store, version string, existing, enabled bool, warn func(string, ...any)) state.Announcement {
 	var a state.Announcement
 	if err := store.Update(func(s *state.State) {
 		a = s.PlanLaunch(version, existing, enabled)
 	}); err != nil {
 		warn("could not save state", "path", store.Path(), "err", err)
+		return state.Announcement{}
 	}
 	return a
 }

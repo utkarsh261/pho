@@ -111,11 +111,32 @@ func TestScroll(t *testing.T) {
 }
 
 func TestFitsSmallTerminal(t *testing.T) {
-	m := open(40, 14)
-	m.SetError()
-	for i, line := range strings.Split(m.ViewOver(bg(40, 14)), "\n") {
-		if w := ansi.StringWidth(line); w != 40 {
-			t.Errorf("row %d is %d wide, want 40", i, w)
+	for _, size := range [][2]int{{40, 14}, {20, 14}, {40, 8}, {12, 6}, {2, 2}} {
+		w, h := size[0], size[1]
+		m := open(w, h)
+		m.SetError()
+		bw, bh := m.boxSize()
+		if bw > w || bh > h {
+			t.Errorf("%dx%d: box is %dx%d", w, h, bw, bh)
 		}
+		lines := strings.Split(m.ViewOver(bg(w, h)), "\n")
+		if len(lines) != h {
+			t.Errorf("%dx%d: %d rows", w, h, len(lines))
+		}
+		for i, line := range lines {
+			if lw := ansi.StringWidth(line); lw != w {
+				t.Errorf("%dx%d: row %d is %d wide", w, h, i, lw)
+			}
+		}
+	}
+}
+
+func TestOpenAfterFailureShowsLoading(t *testing.T) {
+	m := open(100, 30)
+	m.SetError()
+	m.Visible = false
+	m.Open()
+	if out := ansi.Strip(m.ViewOver(bg(100, 30))); !strings.Contains(out, loadingText) || strings.Contains(out, errorText) {
+		t.Errorf("reopened panel should be loading:\n%s", out)
 	}
 }

@@ -142,9 +142,9 @@ func parse(v string) [3]int {
 }
 
 var (
-	changelogHeadingRe = regexp.MustCompile(`(?m)^#{1,6}\s*Changelog\s*\n+`)
-	shaBulletRe        = regexp.MustCompile(`(?m)^(\s*[*-]\s+)[0-9a-f]{7,40}:?\s+`)
-	authorRe           = regexp.MustCompile(`(?m)\s+\(@[\w-]+\)\s*$`)
+	changelogHeadingRe = regexp.MustCompile(`(?m)^#{1,6}[ \t]*Changelog[ \t]*\n+`)
+	shaBulletRe        = regexp.MustCompile(`(?m)^([ \t]*[*-][ \t]+)[0-9a-f]{7,40}:?[ \t]+`)
+	authorRe           = regexp.MustCompile(`(?m)[ \t]+\(@[\w-]+\)[ \t]*$`)
 )
 
 // CleanNotes strips GoReleaser's heading, commit SHAs and author handles.

@@ -277,11 +277,8 @@ func main() {
 	logger := pholog.New(cfg.Logging.File, level)
 
 	// existingUser must run before the cache below is created.
-	paths := config.ResolvePaths(configPath)
-	stateStore := state.NewStore(paths.StateFile)
-	announce := planLaunch(stateStore, version,
-		existingUser(paths.ConfigFile, cfg.Cache.Dir),
-		cfg.Updates.WhatsNew && !updatesOptedOut(), logger.Warn)
+	existing := existingUser(cfg.Paths.ConfigFile, cfg.Cache.Dir)
+	stateStore := state.NewStore(cfg.Paths.StateFile)
 
 	if reset {
 		if err := clearCaches(); err != nil {
@@ -304,6 +301,13 @@ func main() {
 		logger.Error("no authenticated hosts found")
 		fmt.Fprintf(os.Stderr, "pho: no authenticated GitHub hosts found.\n  [auth]\nRun 'gh auth login' to authenticate.\n")
 		os.Exit(1)
+	}
+
+	// Only a launch that opens on the dashboard can show the announcement.
+	var announce state.Announcement
+	if inv.PRNumber == 0 {
+		announce = planLaunch(stateStore, version, existing,
+			cfg.Updates.WhatsNew && !updatesOptedOut(), logger.Warn)
 	}
 
 	// Ensure cache directory exists

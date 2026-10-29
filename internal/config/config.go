@@ -121,6 +121,7 @@ type Config struct {
 	Updates struct {
 		WhatsNew bool
 	}
+	Paths Paths
 }
 
 type Paths struct {
@@ -240,6 +241,7 @@ func Load(path string) (Config, error) {
 	resolved := paths.ConfigFile
 
 	def := defaults()
+	def.Paths = paths
 
 	data, err := os.ReadFile(resolved)
 	if err != nil {
@@ -264,6 +266,7 @@ func Load(path string) (Config, error) {
 
 	// Map raw → Config.
 	var cfg Config
+	cfg.Paths = paths
 	cfg.Discovery.MaxRepos = raw.Discovery.MaxRepos
 	cfg.Discovery.ExcludeDirs = raw.Discovery.ExcludeDirs
 	cfg.Repos.Pin = raw.Repos.Pin

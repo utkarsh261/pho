@@ -323,6 +323,20 @@ func TestResolvePaths_XDGOverrides(t *testing.T) {
 	}
 }
 
+func TestLoad_KeepsResolvedPaths(t *testing.T) {
+	stateDir := t.TempDir()
+	setEnv(t, "XDG_STATE_HOME", stateDir)
+	path := filepath.Join(t.TempDir(), "config.toml")
+
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Paths != config.ResolvePaths(path) {
+		t.Errorf("Paths = %+v, want %+v", cfg.Paths, config.ResolvePaths(path))
+	}
+}
+
 func TestLoad_DiffLimits(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")

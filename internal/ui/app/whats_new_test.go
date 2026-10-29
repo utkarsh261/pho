@@ -132,9 +132,6 @@ func TestWhatsNew_FetchFailuresStayInThePanel(t *testing.T) {
 			if len(m.state.Errors.Errors) != 0 {
 				t.Errorf("fetch failure reached the status bar: %+v", m.state.Errors.Errors)
 			}
-			if !m.whatsNew.Failed() {
-				t.Error("panel isn't in its error state")
-			}
 			view := ansi.Strip(m.View())
 			if !strings.Contains(view, "Couldn't load release notes.") || !strings.Contains(view, "github.com/utkarsh261/pho/releases") {
 				t.Errorf("error panel missing message or link:\n%s", view)
@@ -152,10 +149,14 @@ func TestWhatsNew_FetchFailuresStayInThePanel(t *testing.T) {
 				t.Error("error text left on the dashboard after closing")
 			}
 
-			// Opening again retries.
+			// Opening again shows the loading line, then retries.
 			m.deps.FetchReleases = fetchOK
-			drainCmds(m, key(m, keyW))
-			if m.whatsNew.Failed() || !strings.Contains(ansi.Strip(m.View()), "Add the W panel") {
+			cmd := key(m, keyW)
+			if view := ansi.Strip(m.View()); !strings.Contains(view, "Loading release notes") || strings.Contains(view, "Couldn't load") {
+				t.Errorf("reopening still shows the old error:\n%s", view)
+			}
+			drainCmds(m, cmd)
+			if !strings.Contains(ansi.Strip(m.View()), "Add the W panel") {
 				t.Error("reopening didn't retry the fetch")
 			}
 		})

@@ -31,6 +31,10 @@ type Model struct {
 	height int
 	theme  *theme.Theme
 	md     *markdown.Renderer
+
+	// Rendered notes and the width they were rendered at.
+	notes  []string
+	notesW int
 }
 
 func NewModel() Model {
@@ -42,17 +46,22 @@ func (m *Model) SetTheme(th *theme.Theme) {
 	if th != nil && m.md != nil {
 		m.md.SetStyle(th.Markdown)
 	}
+	m.render()
 }
 
 func (m *Model) SetSize(w, h int) {
 	m.width = w
 	m.height = h
+	m.render()
 	m.clampOffset()
 }
 
+// Open shows the loading line again when a previous load failed, since the
+// caller fetches again.
 func (m *Model) Open() {
 	m.Visible = true
 	m.offset = 0
+	m.failed = false
 }
 
 func (m Model) Loaded() bool {
@@ -64,15 +73,12 @@ func (m *Model) SetReleases(rs []release.Release) {
 	m.loaded = true
 	m.failed = false
 	m.offset = 0
+	m.render()
 }
 
 func (m *Model) SetError() {
 	m.failed = true
 	m.loaded = false
-}
-
-func (m Model) Failed() bool {
-	return m.failed
 }
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
@@ -127,37 +133,44 @@ func (m Model) ViewOver(bg string) string {
 	return strings.Join(bgLines, "\n")
 }
 
+// boxSize keeps the box on screen; it is 0×0 when the terminal is too small.
 func (m Model) boxSize() (int, int) {
-	if m.width <= 0 || m.height <= 0 {
+	boxW := max(min(80, m.width-4), min(30, m.width))
+	if boxW < 3 {
 		return 0, 0
 	}
-	boxW := min(80, m.width-4)
-	boxW = max(boxW, 30)
 	boxH := len(m.bodyLinesAt(boxW-2)) + len(m.header(boxW-2)) + len(m.footer(boxW-2)) + 2
-	boxH = min(boxH, m.height-4)
-	boxH = max(boxH, 10)
+	boxH = max(min(boxH, m.height-4), min(10, m.height))
+	if boxH < 3 {
+		return 0, 0
+	}
 	return boxW, boxH
 }
 
 func (m Model) bodyHeight() int {
 	boxW, boxH := m.boxSize()
+	if boxW <= 0 {
+		return 1
+	}
 	innerW := boxW - 2
 	return max(1, boxH-2-len(m.header(innerW))-len(m.footer(innerW)))
 }
 
 func (m Model) bodyLines() []string {
 	boxW, _ := m.boxSize()
+	if boxW <= 0 {
+		return nil
+	}
 	return m.bodyLinesAt(boxW - 2)
 }
 
 func (m Model) bodyLinesAt(innerW int) []string {
 	switch {
 	case m.loaded && len(m.releases) > 0:
-		md := release.Markdown(m.releases)
-		if m.md == nil {
-			return strings.Split(md, "\n")
+		if innerW != m.notesW || m.notes == nil {
+			return m.renderNotes(innerW)
 		}
-		return m.md.Render(md, innerW)
+		return m.notes
 	case m.loaded:
 		return []string{m.muted(" No release notes yet.")}
 	case m.failed:
@@ -167,6 +180,29 @@ func (m Model) bodyLinesAt(innerW int) []string {
 	}
 }
 
+// render caches the notes at the box's current width, so drawing and
+// scrolling don't run markdown again.
+func (m *Model) render() {
+	m.notes, m.notesW = nil, 0
+	if !m.loaded || len(m.releases) == 0 {
+		return
+	}
+	boxW, _ := m.boxSize()
+	if boxW <= 0 {
+		return
+	}
+	m.notesW = boxW - 2
+	m.notes = m.renderNotes(m.notesW)
+}
+
+func (m Model) renderNotes(innerW int) []string {
+	md := release.Markdown(m.releases)
+	if m.md == nil {
+		return strings.Split(md, "\n")
+	}
+	return m.md.Render(md, innerW)
+}
+
 func (m *Model) clampOffset() {
 	maxOff := max(0, len(m.bodyLines())-m.bodyHeight())
 	m.offset = min(max(0, m.offset), maxOff)
@@ -174,7 +210,7 @@ func (m *Model) clampOffset() {
 
 func (m Model) header(innerW int) []string {
 	if m.theme == nil {
-		return []string{centre("What's new in pho", innerW), strings.Repeat("─", innerW)}
+		return []string{lipgloss.PlaceHorizontal(innerW, lipgloss.Center, "What's new in pho"), strings.Repeat("─", innerW)}
 	}
 	title := lipgloss.PlaceHorizontal(innerW, lipgloss.Center, m.theme.BoxTitle.Render("What's new in pho"))
 	return []string{title, m.theme.BoxDiv.Render(strings.Repeat("─", innerW))}
@@ -241,8 +277,4 @@ func (m Model) renderBox(boxW, boxH int) string {
 	}
 	lines = append(lines, "└"+strings.Repeat("─", innerW)+"┘")
 	return strings.Join(lines, "\n")
-}
-
-func centre(s string, w int) string {
-	return lipgloss.PlaceHorizontal(w, lipgloss.Center, s)
 }

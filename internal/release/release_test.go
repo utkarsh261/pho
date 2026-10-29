@@ -57,6 +57,13 @@ func TestCleanNotes(t *testing.T) {
 	if got := CleanNotes(body); got != want {
 		t.Errorf("CleanNotes =\n%q\nwant\n%q", got, want)
 	}
+
+	// A handle at the end of a list keeps the blank line before the next paragraph.
+	body = "* abc1234 Fix it (@bob)\n\nThanks to everyone.\n"
+	want = "* Fix it\n\nThanks to everyone."
+	if got := CleanNotes(body); got != want {
+		t.Errorf("CleanNotes =\n%q\nwant\n%q", got, want)
+	}
 }
 
 func rels(versions ...string) []Release {
