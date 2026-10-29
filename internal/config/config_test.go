@@ -318,6 +318,23 @@ func TestResolvePaths_XDGOverrides(t *testing.T) {
 	if paths.LogFile != filepath.Join(stateDir, "pho", "debug.log") {
 		t.Errorf("LogFile: got %q", paths.LogFile)
 	}
+	if paths.StateFile != filepath.Join(stateDir, "pho", "state.json") {
+		t.Errorf("StateFile: got %q", paths.StateFile)
+	}
+}
+
+func TestLoad_KeepsResolvedPaths(t *testing.T) {
+	stateDir := t.TempDir()
+	setEnv(t, "XDG_STATE_HOME", stateDir)
+	path := filepath.Join(t.TempDir(), "config.toml")
+
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Paths != config.ResolvePaths(path) {
+		t.Errorf("Paths = %+v, want %+v", cfg.Paths, config.ResolvePaths(path))
+	}
 }
 
 func TestLoad_DiffLimits(t *testing.T) {
@@ -392,4 +409,38 @@ func TestLoad_Background(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLoad_UpdatesWhatsNew(t *testing.T) {
+	tests := []struct {
+		name, toml string
+		want       bool
+	}{
+		{"no updates section", "[ui]\ntheme = \"nord\"\n", true},
+		{"empty updates section", "[updates]\n", true},
+		{"explicit on", "[updates]\nwhats_new = true\n", true},
+		{"explicit off", "[updates]\nwhats_new = false\n", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.toml")
+			if err := os.WriteFile(path, []byte(tc.toml), 0644); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := config.Load(path)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if cfg.Updates.WhatsNew != tc.want {
+				t.Errorf("Updates.WhatsNew: got %v, want %v", cfg.Updates.WhatsNew, tc.want)
+			}
+		})
+	}
+
+	t.Run("no config file", func(t *testing.T) {
+		cfg, err := config.Load(filepath.Join(t.TempDir(), "missing.toml"))
+		if err != nil || !cfg.Updates.WhatsNew {
+			t.Errorf("Updates.WhatsNew = %v, %v; want true", cfg.Updates.WhatsNew, err)
+		}
+	})
 }

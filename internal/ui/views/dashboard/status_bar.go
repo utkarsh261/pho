@@ -23,8 +23,10 @@ type StatusBarModel struct {
 	HintOverride string // when non-empty, replaces focus-based hint text
 	Stacked      bool   // the selected PR is in a stack, so S has something to show
 	Mode         string // diff input mode badge ("VISUAL" or "SEARCH"); "" hides it
-	theme        *theme.Theme
-	spinner      spinner.Model
+	// Notice goes last so a narrow terminal cuts it first.
+	Notice  string
+	theme   *theme.Theme
+	spinner spinner.Model
 
 	searchActive bool
 	searchQuery  string
@@ -134,6 +136,13 @@ func (m *StatusBarModel) View() string {
 			err = m.theme.StatusError.Render(err)
 		}
 		parts = append(parts, err)
+	}
+
+	if notice := strings.TrimSpace(m.Notice); notice != "" {
+		if m.theme != nil {
+			notice = m.theme.RenderHints(notice)
+		}
+		parts = append(parts, notice)
 	}
 
 	sep := " | "

@@ -17,10 +17,13 @@ import (
 	achdashboard "github.com/utkarsh261/pho/internal/application/dashboard"
 	"github.com/utkarsh261/pho/internal/domain"
 	pholog "github.com/utkarsh261/pho/internal/log"
+	"github.com/utkarsh261/pho/internal/release"
+	"github.com/utkarsh261/pho/internal/state"
 	"github.com/utkarsh261/pho/internal/ui/components/createpr"
 	"github.com/utkarsh261/pho/internal/ui/components/keymapoverlay"
 	"github.com/utkarsh261/pho/internal/ui/components/overlay"
 	"github.com/utkarsh261/pho/internal/ui/components/stackmap"
+	"github.com/utkarsh261/pho/internal/ui/components/whatsnew"
 	"github.com/utkarsh261/pho/internal/ui/keymap"
 	"github.com/utkarsh261/pho/internal/ui/layout"
 	"github.com/utkarsh261/pho/internal/ui/theme"
@@ -80,6 +83,14 @@ type Dependencies struct {
 	// config has it, so the picker saves only choices that change it.
 	SaveTheme       func(name string) error
 	ConfiguredTheme string
+
+	// AnnounceVersion is the version just upgraded to; WhatsNewSince the one
+	// before it.
+	Version         string
+	AnnounceVersion string
+	WhatsNewSince   string
+	FetchReleases   func(ctx context.Context, n int) ([]release.Release, error)
+	State           *state.Store
 }
 
 type Model struct {
@@ -109,7 +120,11 @@ type Model struct {
 	status        *dashboard.StatusBarModel
 	palette       overlay.Model
 	keymapOverlay keymapoverlay.Model
+	whatsNew      whatsnew.Model
 	createPR      *createpr.Model
+
+	announce        string
+	whatsNewLoading bool
 
 	focus         domain.FocusTarget
 	previousFocus domain.FocusTarget
@@ -187,6 +202,8 @@ func NewModel(deps Dependencies) *Model {
 		status:            dashboard.NewStatusBarModel(),
 		palette:           overlay.NewModel(deps.Search),
 		keymapOverlay:     keymapoverlay.NewModel(),
+		whatsNew:          whatsnew.NewModel(),
+		announce:          deps.AnnounceVersion,
 		createPR:          createpr.NewModel(),
 		focus:             domain.FocusRepoPanel,
 		previousFocus:     domain.FocusRepoPanel,
@@ -248,6 +265,7 @@ func (m *Model) SetTheme(th *theme.Theme) {
 	m.status.SetTheme(th)
 	m.palette.SetTheme(th)
 	m.keymapOverlay.SetTheme(th)
+	m.whatsNew.SetTheme(th)
 	m.createPR.SetTheme(th)
 	if m.prDetail != nil {
 		m.prDetail.SetTheme(th)
@@ -322,6 +340,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.handleLabelsApplied(msg)
 	case ThemeSaved:
 		return m, m.handleThemeSaved(msg)
+	case WhatsNewLoaded:
+		m.handleWhatsNewLoaded(msg)
+		return m, nil
 	case prdetail.OpenBrowserFile:
 		url := fileBrowserURL(m.selectedRepoForURL(msg.Repo), msg)
 		return m, func() tea.Msg {
@@ -617,6 +638,9 @@ func (m *Model) viewFrame() string {
 	if m.keymapOverlay.Visible {
 		return m.keymapOverlay.ViewOver(bg)
 	}
+	if m.whatsNew.Visible {
+		return m.whatsNew.ViewOver(bg)
+	}
 	return bg
 }
 
@@ -692,9 +716,16 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					return m, m.forwardKey(msg)
 				}
 				return m, nil
+			case "W":
+				return m, m.openWhatsNew()
 			}
 		}
 		m.keymapOverlay, _ = m.keymapOverlay.Update(msg)
+		return m, nil
+	}
+
+	if m.whatsNew.Visible {
+		m.whatsNew, _ = m.whatsNew.Update(msg)
 		return m, nil
 	}
 
@@ -776,6 +807,8 @@ func (m *Model) handleRootAction(action keymap.Action) tea.Cmd {
 		return m.openThemePicker()
 	case keymap.OpenStackPicker:
 		return m.openStackPicker()
+	case keymap.OpenWhatsNew:
+		return m.openWhatsNew()
 	default:
 		return nil
 	}
@@ -786,7 +819,7 @@ func (m *Model) toggleKeymapOverlay() tea.Cmd {
 		m.keymapOverlay.Visible = false
 		return nil
 	}
-	if m.themePicking() {
+	if m.themePicking() || m.whatsNew.Visible {
 		return nil // ? from PR detail can arrive after T opened the picker
 	}
 	ctx := keymapoverlay.Context{
@@ -1467,6 +1500,7 @@ func (m *Model) applyWindowSize(msg tea.WindowSizeMsg) {
 	m.palette, _ = m.palette.Update(msg)
 	m.keymapOverlay.SetSize(msg.Width, msg.Height)
 	m.stackPicker.SetSize(msg.Width, msg.Height)
+	m.whatsNew.SetSize(msg.Width, msg.Height)
 	m.syncPaletteStats()
 	m.syncStatus()
 }
@@ -1519,6 +1553,11 @@ func (m *Model) syncStatus() {
 		m.status.HintOverride = m.commitDetail.StatusHint()
 	} else {
 		m.status.HintOverride = ""
+	}
+	m.status.Notice = ""
+	if m.currentView() == domain.PrimaryViewDashboard && m.status.HintOverride == "" &&
+		m.focus != domain.FocusCmdPalette {
+		m.status.Notice = m.announcement()
 	}
 	m.syncPRDetailSearchStatus()
 }

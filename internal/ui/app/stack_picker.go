@@ -12,7 +12,7 @@ const stackPickHint = "j/k: Move | Enter: Open | Esc: Close"
 // openStackPicker shows the stack of the PR on screen: the open PR in
 // detail, or the selected one on the dashboard.
 func (m *Model) openStackPicker() tea.Cmd {
-	if m.state.Search.OverlayOpen || m.keymapOverlay.Visible ||
+	if m.state.Search.OverlayOpen || m.keymapOverlay.Visible || m.whatsNew.Visible ||
 		(m.createPR != nil && m.createPR.Active()) {
 		return nil
 	}

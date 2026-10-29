@@ -49,7 +49,7 @@ func (m *Model) diffViewBody() string {
 // the key, so it stays shut if another overlay opened in between, or if the
 // diff hasn't loaded.
 func (m *Model) openFilePicker() tea.Cmd {
-	if m.state.Search.OverlayOpen || m.keymapOverlay.Visible ||
+	if m.state.Search.OverlayOpen || m.keymapOverlay.Visible || m.whatsNew.Visible ||
 		(m.createPR != nil && m.createPR.Active()) {
 		return nil
 	}

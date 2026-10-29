@@ -67,6 +67,11 @@ func TestParseInvocation(t *testing.T) {
 			want: invocation{Version: true, RootDir: "."},
 		},
 		{
+			name: "changelog flag",
+			args: []string{"-changelog"},
+			want: invocation{Changelog: true, RootDir: "."},
+		},
+		{
 			name:    "missing number",
 			args:    []string{"pr"},
 			wantErr: "`pho pr` requires a pull request number",
