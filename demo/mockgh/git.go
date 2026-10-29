@@ -39,7 +39,7 @@ func (s *Server) loadGit(pr *PR) {
 			continue
 		}
 		t, _ := time.Parse(time.RFC3339, f[3])
-		pr.commits = append(pr.commits, GitCommit{f[0], f[1], f[2], f[4], strings.TrimSpace(f[5]), t})
+		pr.commits = append(pr.commits, GitCommit{f[0], f[1], f[2], f[4], strings.TrimSpace(f[5]), t.Add(s.shift)})
 	}
 }
 
@@ -110,4 +110,43 @@ func (p *PR) additions() (a, d int) {
 		d += f.Deletions
 	}
 	return
+}
+
+// compare answers GitHub's compare API from git: the status of head relative
+// to base, the commits in base..head, and the diff from base to head.
+func (s *Server) compare(repo, base, head string) (status string, commits []M, diff string, ok bool) {
+	dir := s.repoPath(repo)
+	b, err1 := git(dir, "rev-parse", base)
+	h, err2 := git(dir, "rev-parse", head)
+	if err1 != nil || err2 != nil {
+		return "", nil, "", false
+	}
+	b, h = strings.TrimSpace(b), strings.TrimSpace(h)
+	mb, _ := git(dir, "merge-base", b, h)
+	mb = strings.TrimSpace(mb)
+	switch {
+	case b == h:
+		status = "identical"
+	case mb == b:
+		status = "ahead"
+	case mb == h:
+		status = "behind"
+	default:
+		status = "diverged"
+	}
+	out, _ := git(dir, "log", "--reverse", "--format=%H %P", b+".."+h)
+	commits = []M{}
+	for _, l := range strings.Split(strings.TrimSpace(out), "\n") {
+		f := strings.Fields(l)
+		if len(f) == 0 {
+			continue
+		}
+		ps := []M{}
+		for _, p := range f[1:] {
+			ps = append(ps, M{"sha": p})
+		}
+		commits = append(commits, M{"sha": f[0], "parents": ps})
+	}
+	diff, _ = git(dir, append(append([]string{}, diffFlags...), b+"..."+h)...)
+	return status, commits, diff, true
 }

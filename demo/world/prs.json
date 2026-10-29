@@ -1280,6 +1280,28 @@
      "state": "MERGED",
      "updated": "-152d"
     }
+   ],
+   "labels": [
+    {
+     "name": "needs-tests",
+     "color": "d93f0b"
+    },
+    {
+     "name": "ready to merge",
+     "color": "0e8a16"
+    },
+    {
+     "name": "performance",
+     "color": "c5def5"
+    },
+    {
+     "name": "breaking-change",
+     "color": "b60205"
+    },
+    {
+     "name": "good first issue",
+     "color": "7057ff"
+    }
    ]
   },
   "tidepool-dev/tidepool-web": {
@@ -2046,6 +2068,13 @@
    ],
    "reviews": [
     {
+     "author": "kmiller",
+     "state": "COMMENTED",
+     "body": "Mostly good. The refill math reads wall-clock time, so an NTP step can hand a tenant a full bucket; worth switching to the monotonic clock.",
+     "at": "-1d2h",
+     "commit": "feat/tenant-rate-limits~1"
+    },
+    {
      "author": "jcole",
      "state": "COMMENTED",
      "body": "Left a few comments, mostly around the refill clock and what a token represents.",
@@ -2119,7 +2148,10 @@
     },
     {
      "name": "test (macos-latest, go1.25)",
-     "conclusion": "SUCCESS"
+     "conclusion": "FAILURE",
+     "log": "2026-10-05T13:52:04.1180000Z ##[group]Run go test -race -count=1 ./...\n2026-10-05T13:52:04.1181000Z go test -race -count=1 ./...\n2026-10-05T13:52:04.1190000Z shell: /bin/bash -e {0}\n2026-10-05T13:52:04.1191000Z ##[endgroup]\n2026-10-05T13:52:11.4021000Z ok  \tgithub.com/tidepool-dev/tidepool/internal/config\t1.204s\n2026-10-05T13:52:13.8812000Z ok  \tgithub.com/tidepool-dev/tidepool/internal/ingest\t3.611s\n2026-10-05T13:52:15.0377000Z --- FAIL: TestLimiterRefillAfterIdle (0.31s)\n2026-10-05T13:52:15.0378000Z     limiter_test.go:88: Remaining = 9, want 10 after 1s idle\n2026-10-05T13:52:15.0379000Z     limiter_test.go:89: refill used the wall clock; macOS runner stepped it by -12ms\n2026-10-05T13:52:15.0402000Z FAIL\n2026-10-05T13:52:15.0411000Z FAIL\tgithub.com/tidepool-dev/tidepool/internal/ratelimit\t2.087s\n2026-10-05T13:52:16.2209000Z ok  \tgithub.com/tidepool-dev/tidepool/internal/router\t1.950s\n2026-10-05T13:52:17.0140000Z ok  \tgithub.com/tidepool-dev/tidepool/internal/sink/kafka\t0.811s\n2026-10-05T13:52:17.6623000Z ok  \tgithub.com/tidepool-dev/tidepool/internal/wal\t0.508s\n2026-10-05T13:52:17.6630000Z FAIL\n2026-10-05T13:52:17.6701000Z ##[error]Process completed with exit code 1.\n2026-10-05T13:52:17.6810000Z Post job cleanup.",
+     "rerunLog": "2026-10-05T15:02:11.0000000Z ok  \tgithub.com/tidepool-dev/tidepool/internal/ratelimit\t1.902s\n2026-10-05T15:02:12.0000000Z Post job cleanup.",
+     "rerunTakes": 10
     },
     {
      "name": "build",
@@ -2742,6 +2774,82 @@
      "conclusion": "SUCCESS"
     }
    ]
+  },
+  {
+   "repo": "tidepool-dev/tidepool",
+   "author": "sarahhill",
+   "state": "OPEN",
+   "checks": [
+    {
+     "name": "lint",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "test (ubuntu-latest, go1.25)",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "build",
+     "conclusion": "SUCCESS"
+    }
+   ],
+   "number": 499,
+   "branch": "feat/rate-limit-metrics",
+   "base": "feat/tenant-rate-limits",
+   "title": "Export per-tenant rate limit metrics",
+   "created": "-1d",
+   "updated": "-2h",
+   "labels": [
+    {
+     "name": "enhancement",
+     "color": "a2eeef"
+    },
+    {
+     "name": "area/metrics",
+     "color": "0e8a16"
+    }
+   ],
+   "reviewRequests": [
+    "kmiller"
+   ],
+   "body": "Stacked on #482.\n\nAdds two gauges so we can see who is close to being throttled:\n\n- `tidepool_ratelimit_tokens{tenant}`: whole tokens left after the tenant's last request\n- `tidepool_ratelimit_tenants`: live buckets\n\nEvicted tenants are dropped from the gauge so the series don't pile up."
+  },
+  {
+   "repo": "tidepool-dev/tidepool",
+   "author": "sarahhill",
+   "state": "OPEN",
+   "checks": [
+    {
+     "name": "lint",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "test (ubuntu-latest, go1.25)",
+     "conclusion": "SUCCESS"
+    },
+    {
+     "name": "build",
+     "conclusion": "SUCCESS"
+    }
+   ],
+   "number": 500,
+   "branch": "feat/rate-limit-admin-api",
+   "base": "feat/rate-limit-metrics",
+   "title": "Add admin endpoint to override a tenant's rate limit",
+   "created": "-6h",
+   "updated": "-1h",
+   "isDraft": true,
+   "labels": [
+    {
+     "name": "enhancement",
+     "color": "a2eeef"
+    },
+    {
+     "name": "area/admin",
+     "color": "fbca04"
+    }
+   ],
+   "body": "Stacked on #499.\n\n`PUT /admin/tenants/{id}/rate-limit` sets an override that wins over the plan default; `DELETE` clears it. The tenant starts on a fresh bucket under the new limit.\n\nDraft until the admin listener lands."
   }
  ]
 }

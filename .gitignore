@@ -31,3 +31,4 @@ coverage.html
 *.log
 demo/.work/
 demo/out/
+demo/rec/__pycache__/

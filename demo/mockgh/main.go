@@ -31,6 +31,7 @@ type RepoFix struct {
 	Dir           string     `json:"dir"` // dir name under reposDir
 	DefaultBranch string     `json:"defaultBranch"`
 	Extra         []*ExtraPR `json:"extraPRs"`
+	Labels        []Label    `json:"labels"` // repo labels beyond the ones PRs use
 }
 
 type ExtraPR struct {
@@ -56,7 +57,9 @@ type Review struct {
 	State  string `json:"state"` // APPROVED | CHANGES_REQUESTED | COMMENTED
 	Body   string `json:"body"`
 	At     string `json:"at"`
+	Commit string `json:"commit"` // git rev reviewed (default: the PR head)
 	t      time.Time
+	oid    string
 }
 
 type Thread struct {
@@ -78,6 +81,12 @@ type Check struct {
 	Status            string `json:"status"`     // COMPLETED | IN_PROGRESS | QUEUED
 	Conclusion        string `json:"conclusion"` // SUCCESS | FAILURE | ...
 	TurnsSuccessAfter int    `json:"turnsSuccessAfter"`
+	Log               string `json:"log"`        // job log served for this check
+	RerunLog          string `json:"rerunLog"`   // log once a re-run has passed
+	RerunTakes        int    `json:"rerunTakes"` // seconds a re-run stays in progress (default 8)
+
+	runID, jobID int64
+	rerunAt      time.Time
 }
 
 type PR struct {
@@ -134,6 +143,8 @@ type Server struct {
 	start    time.Time
 	reposDir string
 	idSeq    int
+	jobSeq   int64
+	shift    time.Duration     // git dates are moved by this, so they line up with "now"
 	cdiffs   map[string]string // repo/sha -> diff
 }
 
@@ -150,6 +161,9 @@ func main() {
 	}
 	log.SetFlags(log.Ltime | log.Lmicroseconds)
 	s := &Server{start: time.Now(), cdiffs: map[string]string{}}
+	// The fake repos' commits are dated up to 2026-10-05 15:00 UTC, the
+	// world's "now"; move them so they keep their age relative to today.
+	s.shift = s.start.Sub(time.Date(2026, 10, 5, 15, 0, 0, 0, time.UTC)).Truncate(time.Hour)
 	if err := s.load(*flagFixture); err != nil {
 		log.Fatalf("load fixture: %v", err)
 	}
@@ -244,6 +258,18 @@ func (s *Server) load(path string) error {
 			}
 		}
 		s.loadGit(pr)
+		for _, r := range pr.Reviews {
+			r.oid = pr.headOid
+			if r.Commit != "" {
+				if oid, err := git(s.repoPath(pr.Repo), "rev-parse", r.Commit); err == nil {
+					r.oid = strings.TrimSpace(oid)
+				}
+			}
+		}
+		for _, c := range pr.Checks {
+			s.jobSeq++
+			c.runID, c.jobID = 11000000000+int64(pr.Number)*10, 31000000000+s.jobSeq*7
+		}
 		log.Printf("loaded %s#%d branch=%s files=%d commits=%d head=%.7s", pr.Repo, pr.Number, pr.Branch, len(pr.files), len(pr.commits), pr.headOid)
 	}
 	return nil

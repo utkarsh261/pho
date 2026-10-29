@@ -29,6 +29,10 @@ to a tenant.
 ### tidepool
 - #482 `feat/tenant-rate-limits` — "Add per-tenant rate limiting to ingest API" — sarahhill — HERO PR.
   Review requested: kmiller, jcole. ~8–10 files, roughly +380/−40, 4–5 commits.
+  kmiller reviewed one commit back, so "changes since your last review" shows bucket.go.
+  CI: `test (macos-latest, go1.25)` fails with a job log; a re-run passes.
+- #499 `feat/rate-limit-metrics` — "Export per-tenant rate limit metrics" — sarahhill — stacked on #482.
+- #500 `feat/rate-limit-admin-api` — "Add admin endpoint to override a tenant's rate limit" — sarahhill — draft, stacked on #499.
 - #497 `chore/proto-v2-regen` — "Regenerate protobufs for v2 event schema" — tbaker — ~1,240 changed files.
 - #489 `fix/wal-fsync-on-rotate` — "Fix WAL segment fsync on rotation" — kmiller
 - #491 `feat/otel-trace-propagation` — "Propagate W3C trace context through router" — jcole

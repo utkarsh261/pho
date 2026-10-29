@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -54,6 +56,36 @@ func (s *Server) rest(w *rec, r *http.Request) {
 			w.note = "UNSUPPORTED"
 			jsonOut(w, 404, M{"message": "mockgh: unsupported pulls route"})
 		}
+	case len(rest) == 4 && rest[0] == "actions" && rest[1] == "jobs":
+		s.actionsJob(w, r, full, rest[2], rest[3])
+	case len(rest) == 1 && rest[0] == "labels" && r.Method == "GET":
+		w.note = "repo labels"
+		jsonOut(w, 200, s.repoLabels(full))
+	case len(rest) == 1 && rest[0] == "labels" && r.Method == "POST":
+		var in Label
+		json.NewDecoder(r.Body).Decode(&in)
+		rf := s.repoFix(full)
+		rf.Labels = append(rf.Labels, in)
+		w.note = "create label " + in.Name
+		jsonOut(w, 201, M{"name": in.Name, "color": in.Color})
+	case len(rest) >= 3 && rest[0] == "issues" && rest[2] == "labels":
+		s.issueLabels(w, r, full, rest)
+	case len(rest) == 2 && rest[0] == "compare" && r.Method == "GET":
+		base, head, _ := strings.Cut(rest[1], "...")
+		st, commits, d, ok := s.compare(full, base, head)
+		if !ok {
+			w.note = "compare not found"
+			jsonOut(w, 404, M{"message": "Not Found"})
+			return
+		}
+		if wantDiff {
+			w.note = "compare diff"
+			w.Header().Set("Content-Type", "text/plain")
+			fmt.Fprint(w, d)
+			return
+		}
+		w.note = "compare " + st
+		jsonOut(w, 200, M{"status": st, "ahead_by": len(commits), "total_commits": len(commits), "commits": commits, "files": parseFiles(d)})
 	case len(rest) == 2 && rest[0] == "commits" && r.Method == "GET":
 		d, ok := s.commitDiff(full, rest[1])
 		if !ok {
@@ -144,4 +176,143 @@ func (s *Server) createPR(w *rec, r *http.Request, full string) {
 		"html_url": fmt.Sprintf("https://github.com/%s/pull/%d", full, p.Number),
 		"head":     M{"ref": p.Branch}, "base": M{"ref": p.Base}, "created_at": ts(p.created), "updated_at": ts(p.updated),
 		"user": M{"login": p.Author}})
+}
+
+func (s *Server) findCheck(full, jobID string) *Check {
+	for _, p := range s.fx.PRs {
+		if !strings.EqualFold(p.Repo, full) {
+			continue
+		}
+		for _, c := range p.Checks {
+			if strconv.FormatInt(c.jobID, 10) == jobID {
+				return c
+			}
+		}
+	}
+	return nil
+}
+
+// actionsJob serves a job's log and re-runs it. A re-run gets a new job ID in
+// the same run, as on GitHub.
+func (s *Server) actionsJob(w *rec, r *http.Request, full, jobID, action string) {
+	c := s.findCheck(full, jobID)
+	if c == nil {
+		w.note = "job not found"
+		jsonOut(w, 404, M{"message": "Not Found"})
+		return
+	}
+	switch {
+	case action == "logs" && r.Method == "GET":
+		st, _ := c.state(s.start)
+		log := c.Log
+		if !c.rerunAt.IsZero() {
+			log = c.RerunLog
+		}
+		if st != "COMPLETED" || log == "" {
+			w.note = "job log (none)"
+			jsonOut(w, 404, M{"message": "Not Found"})
+			return
+		}
+		w.note = "job log"
+		w.Header().Set("Content-Type", "text/plain")
+		fmt.Fprint(w, log)
+	case action == "rerun" && r.Method == "POST":
+		s.jobSeq++
+		c.jobID, c.rerunAt = 31000000000+s.jobSeq*7, time.Now()
+		w.note = "rerun job"
+		jsonOut(w, 201, M{})
+	default:
+		w.note = "UNSUPPORTED"
+		jsonOut(w, 404, M{"message": "mockgh: unsupported actions route"})
+	}
+}
+
+func labelJSON(ls []Label) []M {
+	out := []M{}
+	for _, l := range ls {
+		out = append(out, M{"name": l.Name, "color": l.Color, "description": ""})
+	}
+	return out
+}
+
+// repoLabels is every label a PR in the repo uses plus the repo's own list.
+func (s *Server) repoLabels(full string) []M {
+	seen := map[string]bool{}
+	var ls []Label
+	add := func(l Label) {
+		if k := strings.ToLower(l.Name); !seen[k] {
+			seen[k] = true
+			ls = append(ls, l)
+		}
+	}
+	for _, l := range s.repoFix(full).Labels {
+		add(l)
+	}
+	for _, p := range s.fx.PRs {
+		if strings.EqualFold(p.Repo, full) {
+			for _, l := range p.Labels {
+				add(l)
+			}
+		}
+	}
+	sort.Slice(ls, func(i, j int) bool { return strings.ToLower(ls[i].Name) < strings.ToLower(ls[j].Name) })
+	return labelJSON(ls)
+}
+
+func (s *Server) issueLabels(w *rec, r *http.Request, full string, rest []string) {
+	n, _ := strconv.Atoi(rest[1])
+	p := s.findPR(full, n)
+	if p == nil {
+		w.note = "pr not found"
+		jsonOut(w, 404, M{"message": "Not Found"})
+		return
+	}
+	switch {
+	case len(rest) == 3 && r.Method == "GET":
+		w.note = "issue labels"
+	case len(rest) == 3 && r.Method == "POST":
+		var in struct{ Labels []string }
+		json.NewDecoder(r.Body).Decode(&in)
+		for _, name := range in.Labels {
+			if !hasLabel(p, name) {
+				p.Labels = append(p.Labels, s.labelByName(full, name))
+			}
+		}
+		p.updated = time.Now()
+		w.note = "add labels " + strings.Join(in.Labels, ",")
+	case len(rest) == 4 && r.Method == "DELETE":
+		name, _ := url.PathUnescape(rest[3])
+		var keep []Label
+		for _, l := range p.Labels {
+			if !strings.EqualFold(l.Name, name) {
+				keep = append(keep, l)
+			}
+		}
+		p.Labels = keep
+		p.updated = time.Now()
+		w.note = "remove label " + name
+	default:
+		w.note = "UNSUPPORTED"
+		jsonOut(w, 404, M{"message": "mockgh: unsupported labels route"})
+		return
+	}
+	jsonOut(w, 200, labelJSON(p.Labels))
+}
+
+func hasLabel(p *PR, name string) bool {
+	for _, l := range p.Labels {
+		if strings.EqualFold(l.Name, name) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) labelByName(full, name string) Label {
+	for _, l := range s.repoLabels(full) {
+		if strings.EqualFold(l["name"].(string), name) {
+			return Label{Name: l["name"].(string), Color: l["color"].(string)}
+		}
+	}
+	return Label{Name: name, Color: "ededed"}
 }

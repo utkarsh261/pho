@@ -208,7 +208,7 @@ func (s *Server) graphql(w *rec, r *http.Request) {
 		if state == "" {
 			state = "COMMENTED"
 		}
-		rv := &Review{ID: s.nextID("PRR"), Author: s.fx.Viewer, State: state, Body: str("body"), t: time.Now()}
+		rv := &Review{ID: s.nextID("PRR"), Author: s.fx.Viewer, State: state, Body: str("body"), t: time.Now(), oid: p.headOid}
 		p.Reviews = append(p.Reviews, rv)
 		if ths, _ := v["threads"].([]any); ths != nil {
 			for _, x := range ths {
@@ -331,10 +331,7 @@ func (s *Server) rollup(p *PR) (string, []M) {
 	state := "SUCCESS"
 	var nodes []M
 	for _, c := range p.Checks {
-		status, concl := c.Status, c.Conclusion
-		if c.TurnsSuccessAfter > 0 && time.Since(s.start) >= time.Duration(c.TurnsSuccessAfter)*time.Second {
-			status, concl = "COMPLETED", "SUCCESS"
-		}
+		status, concl := c.state(s.start)
 		if status == "" {
 			status = "COMPLETED"
 		}
@@ -347,9 +344,42 @@ func (s *Server) rollup(p *PR) (string, []M) {
 			state = "FAILURE"
 		}
 		nodes = append(nodes, M{"__typename": "CheckRun", "name": c.Name, "status": status, "conclusion": concl,
-			"detailsUrl": "https://github.com/" + p.Repo + "/actions/runs/1"})
+			"detailsUrl": c.url(p.Repo)})
 	}
 	return state, nodes
+}
+
+// state is the check's status and conclusion now: a re-run stays in progress
+// for RerunTakes seconds, then passes.
+func (c *Check) state(start time.Time) (status, concl string) {
+	if !c.rerunAt.IsZero() {
+		takes := time.Duration(c.RerunTakes) * time.Second
+		if takes == 0 {
+			takes = 8 * time.Second
+		}
+		switch since := time.Since(c.rerunAt); {
+		case since < 2*time.Second:
+			return "QUEUED", ""
+		case since < takes:
+			return "IN_PROGRESS", ""
+		}
+		return "COMPLETED", "SUCCESS"
+	}
+	status, concl = c.Status, c.Conclusion
+	if status == "" {
+		status = "COMPLETED"
+	}
+	if c.TurnsSuccessAfter > 0 && time.Since(start) >= time.Duration(c.TurnsSuccessAfter)*time.Second {
+		status, concl = "COMPLETED", "SUCCESS"
+	}
+	return status, concl
+}
+
+func (c *Check) url(repo string) string {
+	if strings.Contains(c.Name, "/") { // codecov/patch and friends aren't Actions jobs
+		return "https://app.codecov.io/gh/" + repo
+	}
+	return fmt.Sprintf("https://github.com/%s/actions/runs/%d/job/%d", repo, c.runID, c.jobID)
 }
 
 func (s *Server) mergeState(p *PR) string {
@@ -429,10 +459,10 @@ func (s *Server) prNode(p *PR) M {
 	lat := []M{}
 	revs := []M{}
 	for _, r := range latestReviews(p) {
-		lat = append(lat, M{"state": r.State, "submittedAt": ts(r.t), "author": actor(r.Author), "commit": M{"oid": p.headOid}})
+		lat = append(lat, M{"state": r.State, "submittedAt": ts(r.t), "author": actor(r.Author), "commit": M{"oid": r.oid}})
 	}
 	for _, r := range p.Reviews {
-		revs = append(revs, M{"author": actor(r.Author), "state": r.State, "submittedAt": ts(r.t), "body": r.Body})
+		revs = append(revs, M{"author": actor(r.Author), "state": r.State, "submittedAt": ts(r.t), "body": r.Body, "commit": M{"oid": r.oid}})
 	}
 	thr := []M{}
 	for _, t := range p.Threads {
@@ -465,9 +495,9 @@ func (s *Server) prNode(p *PR) M {
 		"additions": adds, "deletions": dels, "changedFiles": len(p.files),
 		"comments": M{"totalCount": len(p.Comments), "nodes": cms}, "reviewThreads": M{"totalCount": len(p.Threads), "nodes": thr},
 		"author": actor(p.Author), "assignees": M{"nodes": asg}, "reviewRequests": M{"nodes": rr},
-		"latestOpinionatedReviews": M{"nodes": lat}, "reviews": M{"nodes": revs},
+		"latestOpinionatedReviews": M{"nodes": lat}, "latestReviews": M{"nodes": lat}, "reviews": M{"nodes": revs},
 		"reviewDecision": s.reviewDecision(p), "mergeable": p.Mergeable, "mergeStateStatus": s.mergeState(p),
-		"labels": M{"nodes": lab}, "files": M{"nodes": top},
+		"labels": M{"totalCount": len(lab), "nodes": lab}, "files": M{"nodes": top},
 		"timelineItems":     M{"nodes": s.timeline(p)},
 		"statusCheckRollup": rollup,
 		"repository":        M{"nameWithOwner": p.Repo},
