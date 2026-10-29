@@ -135,10 +135,12 @@ type Model struct {
 
 	latestKnown     string
 	lastUpdateCheck time.Time
-	updateConfirm   bool
-	updateTarget    string
-	updateResult    string
-	updated         bool
+	// updateCheckFailing is set while checks keep failing.
+	updateCheckFailing bool
+	updateConfirm      bool
+	updateTarget       string
+	updateResult       string
+	updated            bool
 
 	focus         domain.FocusTarget
 	previousFocus domain.FocusTarget

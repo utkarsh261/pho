@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/utkarsh261/pho/internal/domain"
+	pholog "github.com/utkarsh261/pho/internal/log"
 	"github.com/utkarsh261/pho/internal/release"
 	"github.com/utkarsh261/pho/internal/state"
 )
@@ -331,5 +332,23 @@ func TestUpdate_UNoOpWithoutNewerRelease(t *testing.T) {
 	key(m, keyU)
 	if m.updateConfirm {
 		t.Error("U asked to confirm with nothing to update to")
+	}
+}
+
+func TestUpdateCheck_WarnsOncePerFailingStreak(t *testing.T) {
+	m, _, _ := newUpdateModel(t, updateSetup{version: "1.2.0"})
+	logFile := filepath.Join(t.TempDir(), "debug.log")
+	m.log = pholog.New(logFile, "warn")
+
+	offline := UpdateChecked{Err: errors.New("offline"), At: fixedNow()}
+	for range 3 {
+		m.Update(offline)
+	}
+	m.Update(UpdateChecked{Latest: "1.2.0", At: fixedNow()})
+	m.Update(offline)
+
+	data, _ := os.ReadFile(logFile)
+	if n := strings.Count(string(data), "update check failed"); n != 2 {
+		t.Errorf("%d warnings, want one per failing streak:\n%s", n, data)
 	}
 }

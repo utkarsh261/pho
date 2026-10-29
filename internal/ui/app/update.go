@@ -90,9 +90,17 @@ func fetchLatest(ctx context.Context, fetch func(context.Context) (release.Relea
 
 func (m *Model) handleUpdateChecked(msg UpdateChecked) tea.Cmd {
 	if msg.Err != nil {
-		m.logWarn("update check failed", "err", msg.Err)
+		// Only the first failure in a row is a warning, so a day offline
+		// doesn't log one every hour.
+		if m.updateCheckFailing {
+			m.logDebug("update check failed", "err", msg.Err)
+		} else {
+			m.logWarn("update check failed", "err", msg.Err)
+		}
+		m.updateCheckFailing = true
 		return scheduleUpdateCheck(updateRetryEvery)
 	}
+	m.updateCheckFailing = false
 	if msg.SaveErr != nil {
 		m.logWarn("could not save the update check", "err", msg.SaveErr)
 	}
