@@ -1,0 +1,678 @@
+{
+ "cols": 200,
+ "rows": 53,
+ "preroll": 2.0,
+ "shell": true,
+ "steps": [
+  {
+   "sleep": 0.8
+  },
+  {
+   "type": "pho",
+   "speed": 0.11,
+   "gap": 0.3
+  },
+  {
+   "key": "enter",
+   "gap": 1.8
+  },
+  {
+   "label": "every open PR in this repo"
+  },
+  {
+   "key": "tab",
+   "gap": 0.6
+  },
+  {
+   "key": "j",
+   "gap": 0.55
+  },
+  {
+   "key": "j",
+   "gap": 0.9
+  },
+  {
+   "label": "live preview as you move"
+  },
+  {
+   "key": "j",
+   "gap": 1.1
+  },
+  {
+   "label": "yours \u00b7 review requests \u00b7 involving \u00b7 all \u00b7 recent"
+  },
+  {
+   "key": "l",
+   "gap": 1.1
+  },
+  {
+   "key": "l",
+   "gap": 1.1
+  },
+  {
+   "key": "l",
+   "gap": 1.1
+  },
+  {
+   "key": "l",
+   "gap": 1.1
+  },
+  {
+   "key": "h",
+   "gap": 0.4
+  },
+  {
+   "key": "h",
+   "gap": 0.4
+  },
+  {
+   "key": "h",
+   "gap": 0.4
+  },
+  {
+   "key": "h",
+   "gap": 0.4
+  },
+  {
+   "sleep": 0.4
+  },
+  {
+   "label": "stacked PRs travel together"
+  },
+  {
+   "key": "l",
+   "gap": 1.4
+  },
+  {
+   "key": "j",
+   "gap": 1.0
+  },
+  {
+   "key": "S",
+   "gap": 2.2
+  },
+  {
+   "key": "esc",
+   "gap": 0.6
+  },
+  {
+   "key": "h",
+   "gap": 0.8
+  },
+  {
+   "label": "every repo you have cloned"
+  },
+  {
+   "key": "shift+tab",
+   "gap": 0.6
+  },
+  {
+   "key": "j",
+   "gap": 0.5
+  },
+  {
+   "key": "enter",
+   "gap": 1.8
+  },
+  {
+   "key": "shift+tab",
+   "gap": 0.5
+  },
+  {
+   "key": "j",
+   "gap": 0.5
+  },
+  {
+   "key": "enter",
+   "gap": 1.6
+  },
+  {
+   "key": "shift+tab",
+   "gap": 0.5
+  },
+  {
+   "key": "k",
+   "gap": 0.4
+  },
+  {
+   "key": "k",
+   "gap": 0.5
+  },
+  {
+   "key": "enter",
+   "gap": 1.2
+  },
+  {
+   "label": "every key, one press away"
+  },
+  {
+   "key": "?",
+   "gap": 2.2
+  },
+  {
+   "key": "?",
+   "gap": 0.6
+  },
+  {
+   "label": "jump to any PR"
+  },
+  {
+   "key": "ctrl+p",
+   "gap": 0.5
+  },
+  {
+   "type": "ingest",
+   "speed": 0.12,
+   "gap": 0.6
+  },
+  {
+   "key": "enter",
+   "gap": 2.2
+  },
+  {
+   "label": "description, CI and labels at a glance"
+  },
+  {
+   "key": "j",
+   "gap": 0.3,
+   "cap": false
+  },
+  {
+   "key": "j",
+   "gap": 0.3,
+   "cap": false
+  },
+  {
+   "key": "j",
+   "gap": 0.3,
+   "cap": false
+  },
+  {
+   "key": "j",
+   "gap": 1.2
+  },
+  {
+   "label": "walk the stack with { and }"
+  },
+  {
+   "key": "}",
+   "gap": 1.8
+  },
+  {
+   "key": "}",
+   "gap": 1.8
+  },
+  {
+   "key": "S",
+   "gap": 1.0
+  },
+  {
+   "key": "j",
+   "gap": 0.4
+  },
+  {
+   "key": "j",
+   "gap": 0.6
+  },
+  {
+   "key": "enter",
+   "gap": 2.0
+  },
+  {
+   "label": "read CI failure logs inline"
+  },
+  {
+   "key": "tab",
+   "gap": 0.4
+  },
+  {
+   "key": "tab",
+   "gap": 0.5
+  },
+  {
+   "key": "j",
+   "gap": 0.4
+  },
+  {
+   "key": "j",
+   "gap": 0.6
+  },
+  {
+   "key": "enter",
+   "gap": 2.4
+  },
+  {
+   "key": "n",
+   "gap": 1.0
+  },
+  {
+   "key": "n",
+   "gap": 1.4
+  },
+  {
+   "label": "re-run the flaky job"
+  },
+  {
+   "key": "r",
+   "gap": 1.0
+  },
+  {
+   "key": "y",
+   "gap": 2.6
+  },
+  {
+   "label": "only what changed since your review"
+  },
+  {
+   "key": "2",
+   "gap": 2.0
+  },
+  {
+   "key": "s",
+   "gap": 3.0
+  },
+  {
+   "key": "s",
+   "gap": 1.0
+  },
+  {
+   "label": "vim keybindings in the diff"
+  },
+  {
+   "key": "j",
+   "gap": 0.25
+  },
+  {
+   "key": "j",
+   "gap": 0.25
+  },
+  {
+   "key": "j",
+   "gap": 0.25
+  },
+  {
+   "key": "ctrl+d",
+   "gap": 0.7
+  },
+  {
+   "key": "ctrl+d",
+   "gap": 0.7
+  },
+  {
+   "key": "g",
+   "gap": 0.2
+  },
+  {
+   "key": "g",
+   "gap": 0.7
+  },
+  {
+   "label": "search the diff"
+  },
+  {
+   "key": "/",
+   "gap": 0.3
+  },
+  {
+   "type": "burst",
+   "speed": 0.09,
+   "gap": 0
+  },
+  {
+   "key": "enter",
+   "gap": 0.8
+  },
+  {
+   "key": "n",
+   "gap": 0.6
+  },
+  {
+   "key": "n",
+   "gap": 0.8
+  },
+  {
+   "key": "esc",
+   "gap": 0.5
+  },
+  {
+   "label": "jump to any file"
+  },
+  {
+   "key": "ctrl+p",
+   "gap": 0.5
+  },
+  {
+   "type": "bucket",
+   "speed": 0.11,
+   "gap": 0.5
+  },
+  {
+   "key": "enter",
+   "gap": 1.0
+  },
+  {
+   "label": "inline review comments"
+  },
+  {
+   "key": "/",
+   "gap": 0.3
+  },
+  {
+   "type": "type Bucket",
+   "speed": 0.08,
+   "gap": 0.3
+  },
+  {
+   "key": "enter",
+   "gap": 0.5
+  },
+  {
+   "key": "esc",
+   "gap": 0.5
+  },
+  {
+   "key": "space",
+   "gap": 0.4
+  },
+  {
+   "key": "j",
+   "gap": 0.3
+  },
+  {
+   "key": "j",
+   "gap": 0.3
+  },
+  {
+   "key": "j",
+   "gap": 0.5
+  },
+  {
+   "key": "c",
+   "gap": 0.5
+  },
+  {
+   "type": "nit: worth a comment on why tokens is float64; fractional refill is not obvious.",
+   "speed": 0.028,
+   "gap": 0.4,
+   "cap": false
+  },
+  {
+   "key": "enter",
+   "gap": 1.2
+  },
+  {
+   "label": "review and approve"
+  },
+  {
+   "key": "v",
+   "gap": 0.6
+  },
+  {
+   "type": "Looks solid. One nit inline, happy to ship after.",
+   "speed": 0.03,
+   "gap": 0,
+   "cap": false
+  },
+  {
+   "key": "enter",
+   "gap": 2.4
+  },
+  {
+   "key": "a",
+   "gap": 0.6
+  },
+  {
+   "type": "Ship it",
+   "speed": 0.06,
+   "gap": 0,
+   "cap": false
+  },
+  {
+   "key": "enter",
+   "gap": 1.6
+  },
+  {
+   "label": "reply and resolve threads"
+  },
+  {
+   "key": "3",
+   "gap": 1.2
+  },
+  {
+   "key": "g",
+   "gap": 0.2
+  },
+  {
+   "key": "g",
+   "gap": 0.5
+  },
+  {
+   "key": "j",
+   "gap": 0.4
+  },
+  {
+   "key": "j",
+   "gap": 0.4
+  },
+  {
+   "key": "j",
+   "gap": 0.8
+  },
+  {
+   "key": "r",
+   "gap": 0.5
+  },
+  {
+   "type": "Fair. Request-based limits for v1 work for me.",
+   "speed": 0.03,
+   "gap": 0,
+   "cap": false
+  },
+  {
+   "key": "enter",
+   "gap": 1.3
+  },
+  {
+   "key": "m",
+   "gap": 1.6
+  },
+  {
+   "label": "every commit, its own diff"
+  },
+  {
+   "key": "4",
+   "gap": 1.2
+  },
+  {
+   "key": "enter",
+   "gap": 1.8
+  },
+  {
+   "key": "q",
+   "gap": 0.9
+  },
+  {
+   "label": "label it without leaving the PR"
+  },
+  {
+   "key": "L",
+   "gap": 1.2
+  },
+  {
+   "type": "ready",
+   "speed": 0.1,
+   "gap": 0.6
+  },
+  {
+   "key": "enter",
+   "gap": 0.8
+  },
+  {
+   "key": "esc",
+   "gap": 1.8
+  },
+  {
+   "label": "merge without leaving the terminal"
+  },
+  {
+   "key": "M",
+   "gap": 0.9
+  },
+  {
+   "key": "s",
+   "gap": 0.8
+  },
+  {
+   "key": "y",
+   "gap": 3.0
+  },
+  {
+   "key": "q",
+   "gap": 0.9
+  },
+  {
+   "label": "open a PR in another repo"
+  },
+  {
+   "key": "shift+tab",
+   "gap": 0.6
+  },
+  {
+   "key": "j",
+   "gap": 0.5
+  },
+  {
+   "key": "enter",
+   "gap": 1.6
+  },
+  {
+   "key": "l",
+   "gap": 1.0
+  },
+  {
+   "key": "enter",
+   "gap": 2.0
+  },
+  {
+   "key": "2",
+   "gap": 1.2
+  },
+  {
+   "key": "ctrl+d",
+   "gap": 0.9
+  },
+  {
+   "key": "ctrl+d",
+   "gap": 1.2
+  },
+  {
+   "key": "q",
+   "gap": 0.9
+  },
+  {
+   "key": "shift+tab",
+   "gap": 0.5
+  },
+  {
+   "key": "k",
+   "gap": 0.5
+  },
+  {
+   "key": "enter",
+   "gap": 1.2
+  },
+  {
+   "label": "open a PR from your branch"
+  },
+  {
+   "key": "n",
+   "gap": 1.4
+  },
+  {
+   "key": "tab",
+   "gap": 0.3
+  },
+  {
+   "key": "tab",
+   "gap": 0.3
+  },
+  {
+   "key": "tab",
+   "gap": 0.4
+  },
+  {
+   "key": "ctrl+u",
+   "gap": 0.3
+  },
+  {
+   "type": "Add multipart upload to the S3 sink",
+   "speed": 0.045,
+   "gap": 0,
+   "cap": false
+  },
+  {
+   "key": "tab",
+   "gap": 0.3
+  },
+  {
+   "type": "Objects over 64 MiB now upload in parts; failed uploads are aborted.",
+   "speed": 0.03,
+   "gap": 0.4,
+   "cap": false
+  },
+  {
+   "key": "tab",
+   "gap": 0.4
+  },
+  {
+   "key": "ctrl+s",
+   "gap": 2.4
+  },
+  {
+   "key": "q",
+   "gap": 1.0
+  },
+  {
+   "label": "even 1,241-file PRs"
+  },
+  {
+   "key": "ctrl+p",
+   "gap": 0.5
+  },
+  {
+   "type": "proto",
+   "speed": 0.11,
+   "gap": 0.5
+  },
+  {
+   "key": "enter",
+   "gap": 2.2
+  },
+  {
+   "label": "check out any PR locally"
+  },
+  {
+   "key": "b",
+   "gap": 1.8
+  },
+  {
+   "label": "generated files stay collapsed"
+  },
+  {
+   "key": "2",
+   "gap": 1.2
+  },
+  {
+   "key": "ctrl+d",
+   "gap": 0.6
+  },
+  {
+   "key": "ctrl+d",
+   "gap": 0.6
+  },
+  {
+   "key": "ctrl+d",
+   "gap": 2.0
+  }
+ ]
+}

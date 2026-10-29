@@ -1,0 +1,18 @@
+{
+  "cols": 200,
+  "rows": 53,
+  "preroll": 2.5,
+  "duration": 10,
+  "steps": [
+    {"at": 0.3, "label": "stacked PRs travel together"},
+    {"at": 0.6, "key": "tab"},
+    {"at": 1.4, "key": "l"},
+    {"at": 2.4, "key": "j"},
+    {"at": 3.2, "key": "S"},
+    {"at": 4.8, "key": "esc"},
+    {"at": 5.1, "label": "walk the stack with { and }"},
+    {"at": 5.4, "key": "enter"},
+    {"at": 7.0, "key": "}"},
+    {"at": 8.5, "key": "{"}
+  ]
+}

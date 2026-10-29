@@ -1,0 +1,1185 @@
+{
+ "cols": 200,
+ "rows": 53,
+ "preroll": 2.0,
+ "shell": true,
+ "autocam": true,
+ "poster": 12,
+ "open": {
+  "tagline": "A TUI for GitHub pull requests.",
+  "version": "v1.0.4",
+  "theme": "pho-default"
+ },
+ "end": {
+  "cmd": "brew install utkarsh261/tap/pho",
+  "url": "github.com/utkarsh261/pho",
+  "theme": "tokyo-night"
+ },
+ "steps": [
+  {
+   "section": {
+    "tab": "Dashboard",
+    "title": "Every PR, one screen",
+    "sub": "yours, review requests, and everything you're in",
+    "hints": [
+     [
+      "h/l",
+      "Tabs"
+     ],
+     [
+      "Tab",
+      "Repos"
+     ],
+     [
+      "?",
+      "Keymap"
+     ]
+    ],
+    "theme": "pho-default"
+   },
+   "sleep": 0.45
+  },
+  {
+   "sleep": 0.48
+  },
+  {
+   "type": "pho",
+   "speed": 0.085,
+   "gap": 0.18
+  },
+  {
+   "key": "enter",
+   "gap": 1.26
+  },
+  {
+   "label": "every open PR in this repo"
+  },
+  {
+   "key": "tab",
+   "gap": 0.36,
+   "cam": [
+    49,
+    0,
+    199,
+    44
+   ]
+  },
+  {
+   "key": "j",
+   "gap": 0.33
+  },
+  {
+   "key": "j",
+   "gap": 0.54
+  },
+  {
+   "label": "live preview as you move"
+  },
+  {
+   "key": "j",
+   "gap": 0.66,
+   "cam": [
+    49,
+    0,
+    199,
+    44
+   ]
+  },
+  {
+   "label": "yours \u00b7 review requests \u00b7 involving \u00b7 all \u00b7 recent"
+  },
+  {
+   "key": "l",
+   "gap": 0.66,
+   "cam": [
+    49,
+    0,
+    137,
+    20
+   ]
+  },
+  {
+   "key": "l",
+   "gap": 0.66,
+   "cam": "hold"
+  },
+  {
+   "key": "l",
+   "gap": 0.66,
+   "cam": "hold"
+  },
+  {
+   "key": "l",
+   "gap": 0.66,
+   "cam": "hold"
+  },
+  {
+   "key": "h",
+   "gap": 0.24,
+   "cam": "hold"
+  },
+  {
+   "key": "h",
+   "gap": 0.24,
+   "cam": "hold"
+  },
+  {
+   "key": "h",
+   "gap": 0.24,
+   "cam": "hold"
+  },
+  {
+   "key": "h",
+   "gap": 0.24,
+   "cam": "hold"
+  },
+  {
+   "sleep": 0.24
+  },
+  {
+   "label": "every repo you have cloned"
+  },
+  {
+   "key": "shift+tab",
+   "gap": 0.36,
+   "cam": [
+    0,
+    0,
+    99,
+    26
+   ]
+  },
+  {
+   "key": "j",
+   "gap": 0.3
+  },
+  {
+   "key": "enter",
+   "gap": 1.26
+  },
+  {
+   "key": "shift+tab",
+   "gap": 0.3,
+   "cam": [
+    0,
+    0,
+    99,
+    26
+   ]
+  },
+  {
+   "key": "j",
+   "gap": 0.3
+  },
+  {
+   "key": "enter",
+   "gap": 1.12
+  },
+  {
+   "key": "shift+tab",
+   "gap": 0.3,
+   "cam": [
+    0,
+    0,
+    99,
+    26
+   ]
+  },
+  {
+   "key": "k",
+   "gap": 0.24
+  },
+  {
+   "key": "k",
+   "gap": 0.3
+  },
+  {
+   "key": "enter",
+   "gap": 0.9
+  },
+  {
+   "label": "every key, one press away"
+  },
+  {
+   "key": "?",
+   "gap": 1.32
+  },
+  {
+   "key": "?",
+   "gap": 0.36
+  },
+  {
+   "sleep": 0.35
+  },
+  {
+   "section": {
+    "tab": "Stacks",
+    "title": "Stacked PRs",
+    "sub": "see the whole stack, walk it with { and }",
+    "hints": [
+     [
+      "S",
+      "Stack"
+     ],
+     [
+      "{ }",
+      "Walk"
+     ],
+     [
+      "Ctrl+P",
+      "Jump"
+     ]
+    ],
+    "theme": "pho-default"
+   },
+   "sleep": 0.45
+  },
+  {
+   "label": "stacked PRs travel together"
+  },
+  {
+   "key": "l",
+   "gap": 0.84,
+   "cam": [
+    45,
+    0,
+    140,
+    14
+   ]
+  },
+  {
+   "key": "j",
+   "gap": 0.6,
+   "cam": "hold"
+  },
+  {
+   "key": "S",
+   "gap": 1.54
+  },
+  {
+   "key": "esc",
+   "gap": 0.36
+  },
+  {
+   "key": "h",
+   "gap": 0.48,
+   "cam": "full"
+  },
+  {
+   "label": "jump to any PR"
+  },
+  {
+   "key": "ctrl+p",
+   "gap": 0.3,
+   "cam": [
+    56,
+    6,
+    144,
+    30
+   ]
+  },
+  {
+   "type": "ingest",
+   "speed": 0.085,
+   "gap": 0.36,
+   "cam": "hold"
+  },
+  {
+   "key": "enter",
+   "gap": 1.54
+  },
+  {
+   "label": "description, CI and labels at a glance"
+  },
+  {
+   "key": "j",
+   "gap": 0.22,
+   "cap": false,
+   "cam": [
+    [
+     0,
+     [
+      100,
+      0,
+      199,
+      8
+     ]
+    ],
+    [
+     1.2,
+     [
+      0,
+      36,
+      90,
+      52
+     ]
+    ]
+   ]
+  },
+  {
+   "key": "j",
+   "gap": 0.22,
+   "cap": false,
+   "cam": "hold"
+  },
+  {
+   "key": "j",
+   "gap": 0.22,
+   "cap": false,
+   "cam": "hold"
+  },
+  {
+   "key": "j",
+   "gap": 0.72,
+   "cam": "hold"
+  },
+  {
+   "sleep": 1.0
+  },
+  {
+   "label": "walk the stack with { and }"
+  },
+  {
+   "key": "}",
+   "gap": 1.08,
+   "cam": [
+    0,
+    0,
+    95,
+    10
+   ]
+  },
+  {
+   "key": "}",
+   "gap": 1.08,
+   "cam": "hold"
+  },
+  {
+   "key": "S",
+   "gap": 0.9
+  },
+  {
+   "key": "j",
+   "gap": 0.24,
+   "cam": "hold"
+  },
+  {
+   "key": "j",
+   "gap": 0.36,
+   "cam": "hold"
+  },
+  {
+   "key": "enter",
+   "gap": 1.4,
+   "cam": [
+    [
+     0.3,
+     [
+      0,
+      0,
+      95,
+      10
+     ]
+    ]
+   ]
+  },
+  {
+   "sleep": 0.35
+  },
+  {
+   "section": {
+    "tab": "CI",
+    "title": "CI logs, inline",
+    "sub": "read the failure in the PR, then re-run it",
+    "hints": [
+     [
+      "Enter",
+      "Log"
+     ],
+     [
+      "n/N",
+      "Errors"
+     ],
+     [
+      "r",
+      "Re-run"
+     ]
+    ],
+    "theme": "pho-default"
+   },
+   "sleep": 0.45
+  },
+  {
+   "label": "read CI failure logs inline"
+  },
+  {
+   "key": "tab",
+   "gap": 0.24,
+   "cam": [
+    0,
+    36,
+    90,
+    52
+   ]
+  },
+  {
+   "key": "tab",
+   "gap": 0.3,
+   "cam": "hold"
+  },
+  {
+   "key": "j",
+   "gap": 0.24,
+   "cam": "hold"
+  },
+  {
+   "key": "j",
+   "gap": 0.36,
+   "cam": "hold"
+  },
+  {
+   "key": "enter",
+   "gap": 1.68,
+   "cam": [
+    [
+     0.4,
+     [
+      44,
+      3,
+      199,
+      26
+     ]
+    ]
+   ]
+  },
+  {
+   "key": "n",
+   "gap": 0.9,
+   "cam": "hold"
+  },
+  {
+   "key": "n",
+   "gap": 0.98,
+   "cam": "hold"
+  },
+  {
+   "label": "re-run the flaky job"
+  },
+  {
+   "key": "r",
+   "gap": 0.6,
+   "cam": [
+    0,
+    38,
+    112,
+    52
+   ]
+  },
+  {
+   "key": "y",
+   "gap": 2.4,
+   "cam": "hold"
+  },
+  {
+   "sleep": 0.35
+  },
+  {
+   "section": {
+    "tab": "Since review",
+    "title": "Since your last review",
+    "sub": "only what changed after you looked",
+    "hints": [
+     [
+      "s",
+      "Since review"
+     ]
+    ],
+    "theme": "pho-default"
+   },
+   "sleep": 0.45
+  },
+  {
+   "label": "only what changed since your review"
+  },
+  {
+   "key": "2",
+   "gap": 1.4
+  },
+  {
+   "key": "s",
+   "gap": 1.8,
+   "cam": [
+    [
+     0.3,
+     [
+      44,
+      2,
+      199,
+      22
+     ]
+    ]
+   ]
+  },
+  {
+   "key": "s",
+   "gap": 0.6,
+   "cam": "full"
+  },
+  {
+   "sleep": 0.35
+  },
+  {
+   "section": {
+    "tab": "Themes",
+    "title": "Seven themes",
+    "sub": "preview them live, switch any time",
+    "hints": [
+     [
+      "T",
+      "Theme"
+     ]
+    ],
+    "theme": "pho-default"
+   },
+   "sleep": 0.45
+  },
+  {
+   "label": "switch themes any time, even mid-review"
+  },
+  {
+   "key": "T",
+   "gap": 0.9,
+   "cam": [
+    56,
+    14,
+    145,
+    36
+   ]
+  },
+  {
+   "key": "down",
+   "gap": 0.45,
+   "cam": "hold"
+  },
+  {
+   "key": "down",
+   "gap": 0.45,
+   "cam": "hold"
+  },
+  {
+   "key": "down",
+   "gap": 0.45,
+   "cam": "hold"
+  },
+  {
+   "key": "down",
+   "gap": 0.45,
+   "cam": "hold"
+  },
+  {
+   "key": "down",
+   "gap": 0.45,
+   "cam": "hold"
+  },
+  {
+   "key": "down",
+   "gap": 0.66,
+   "cam": "hold"
+  },
+  {
+   "key": "enter",
+   "gap": 0.98,
+   "cam": [
+    [
+     0.3,
+     "full"
+    ]
+   ]
+  },
+  {
+   "sleep": 0.35
+  },
+  {
+   "section": {
+    "tab": "Review",
+    "title": "Review in the terminal",
+    "sub": "comment inline, approve, reply and resolve",
+    "hints": [
+     [
+      "Space",
+      "Select"
+     ],
+     [
+      "c",
+      "Comment"
+     ],
+     [
+      "v",
+      "Review"
+     ]
+    ],
+    "theme": "tokyo-night"
+   },
+   "sleep": 0.45
+  },
+  {
+   "label": "vim keybindings in the diff"
+  },
+  {
+   "key": "j",
+   "gap": 0.22,
+   "cam": "hold"
+  },
+  {
+   "key": "j",
+   "gap": 0.22,
+   "cam": "hold"
+  },
+  {
+   "key": "j",
+   "gap": 0.22,
+   "cam": "hold"
+  },
+  {
+   "key": "ctrl+d",
+   "gap": 0.42
+  },
+  {
+   "key": "ctrl+d",
+   "gap": 0.42
+  },
+  {
+   "key": "g",
+   "gap": 0.22
+  },
+  {
+   "key": "g",
+   "gap": 0.42
+  },
+  {
+   "label": "search the diff"
+  },
+  {
+   "key": "/",
+   "gap": 0.22,
+   "cam": [
+    0,
+    38,
+    112,
+    52
+   ]
+  },
+  {
+   "type": "burst",
+   "speed": 0.085,
+   "gap": 0.0,
+   "cam": "hold"
+  },
+  {
+   "key": "enter",
+   "gap": 0.48
+  },
+  {
+   "key": "n",
+   "gap": 0.36
+  },
+  {
+   "key": "n",
+   "gap": 0.48
+  },
+  {
+   "key": "esc",
+   "gap": 0.3
+  },
+  {
+   "label": "jump to any file"
+  },
+  {
+   "key": "ctrl+p",
+   "gap": 0.3,
+   "cam": [
+    56,
+    6,
+    144,
+    30
+   ]
+  },
+  {
+   "type": "bucket",
+   "speed": 0.085,
+   "gap": 0.3,
+   "cam": "hold"
+  },
+  {
+   "key": "enter",
+   "gap": 0.9,
+   "cam": "full"
+  },
+  {
+   "label": "inline review comments"
+  },
+  {
+   "key": "/",
+   "gap": 0.22,
+   "cam": "hold"
+  },
+  {
+   "type": "type Bucket",
+   "speed": 0.085,
+   "gap": 0.18,
+   "cam": "hold"
+  },
+  {
+   "key": "enter",
+   "gap": 0.3,
+   "cam": "hold"
+  },
+  {
+   "key": "esc",
+   "gap": 0.3,
+   "cam": "hold"
+  },
+  {
+   "key": "space",
+   "gap": 0.24
+  },
+  {
+   "key": "j",
+   "gap": 0.22
+  },
+  {
+   "key": "j",
+   "gap": 0.22
+  },
+  {
+   "key": "j",
+   "gap": 0.3
+  },
+  {
+   "key": "c",
+   "gap": 0.3,
+   "cam": [
+    0,
+    24,
+    115,
+    52
+   ]
+  },
+  {
+   "type": "nit: say why tokens is float64; fractional refill isn't obvious.",
+   "speed": 0.045,
+   "gap": 0.24,
+   "cap": false,
+   "cam": "hold"
+  },
+  {
+   "key": "enter",
+   "gap": 0.9
+  },
+  {
+   "label": "review and approve"
+  },
+  {
+   "key": "v",
+   "gap": 0.36,
+   "cam": [
+    0,
+    36,
+    110,
+    52
+   ]
+  },
+  {
+   "type": "Looks solid, one nit inline.",
+   "speed": 0.045,
+   "gap": 0.0,
+   "cap": false,
+   "cam": "hold"
+  },
+  {
+   "key": "enter",
+   "gap": 1.68
+  },
+  {
+   "key": "a",
+   "gap": 0.36,
+   "cam": "hold"
+  },
+  {
+   "type": "Ship it",
+   "speed": 0.085,
+   "gap": 0.0,
+   "cap": false,
+   "cam": "hold"
+  },
+  {
+   "key": "enter",
+   "gap": 1.12
+  },
+  {
+   "label": "reply and resolve threads"
+  },
+  {
+   "key": "3",
+   "gap": 0.9
+  },
+  {
+   "key": "g",
+   "gap": 0.22
+  },
+  {
+   "key": "g",
+   "gap": 0.3
+  },
+  {
+   "key": "j",
+   "gap": 0.24
+  },
+  {
+   "key": "j",
+   "gap": 0.24
+  },
+  {
+   "key": "j",
+   "gap": 0.48
+  },
+  {
+   "key": "r",
+   "gap": 0.3
+  },
+  {
+   "type": "Fair, request-based is fine for v1.",
+   "speed": 0.045,
+   "gap": 0.0,
+   "cap": false
+  },
+  {
+   "key": "enter",
+   "gap": 0.91
+  },
+  {
+   "key": "m",
+   "gap": 0.96
+  },
+  {
+   "label": "every commit, its own diff"
+  },
+  {
+   "key": "4",
+   "gap": 0.9
+  },
+  {
+   "key": "enter",
+   "gap": 1.26
+  },
+  {
+   "key": "q",
+   "gap": 0.54
+  },
+  {
+   "sleep": 0.35
+  },
+  {
+   "section": {
+    "tab": "Ship",
+    "title": "Label it, merge it",
+    "sub": "without leaving the PR",
+    "hints": [
+     [
+      "L",
+      "Labels"
+     ],
+     [
+      "M",
+      "Merge"
+     ]
+    ],
+    "theme": "tokyo-night"
+   },
+   "sleep": 0.45
+  },
+  {
+   "label": "label it without leaving the PR"
+  },
+  {
+   "key": "L",
+   "gap": 0.9,
+   "cam": [
+    50,
+    4,
+    150,
+    24
+   ]
+  },
+  {
+   "type": "ready",
+   "speed": 0.085,
+   "gap": 0.36,
+   "cam": "hold"
+  },
+  {
+   "key": "enter",
+   "gap": 0.48,
+   "cam": "hold"
+  },
+  {
+   "key": "esc",
+   "gap": 1.08,
+   "cam": [
+    [
+     0.2,
+     [
+      100,
+      0,
+      199,
+      8
+     ]
+    ]
+   ]
+  },
+  {
+   "label": "merge without leaving the terminal"
+  },
+  {
+   "key": "M",
+   "gap": 0.54,
+   "cam": [
+    0,
+    38,
+    112,
+    52
+   ]
+  },
+  {
+   "key": "s",
+   "gap": 0.48,
+   "cam": "hold"
+  },
+  {
+   "key": "y",
+   "gap": 2.4,
+   "cam": [
+    [
+     0,
+     [
+      0,
+      38,
+      112,
+      52
+     ]
+    ],
+    [
+     1.0,
+     [
+      0,
+      0,
+      95,
+      8
+     ]
+    ]
+   ]
+  },
+  {
+   "key": "q",
+   "gap": 0.54
+  },
+  {
+   "sleep": 0.35
+  },
+  {
+   "section": {
+    "tab": "Any repo",
+    "title": "Any repo, any size",
+    "sub": "open PRs from your branch; 1,241 files is fine",
+    "hints": [
+     [
+      "n",
+      "New PR"
+     ],
+     [
+      "Ctrl+P",
+      "Jump"
+     ],
+     [
+      "b",
+      "Checkout"
+     ]
+    ],
+    "theme": "tokyo-night"
+   },
+   "sleep": 0.45
+  },
+  {
+   "label": "open a PR in another repo"
+  },
+  {
+   "key": "shift+tab",
+   "gap": 0.36
+  },
+  {
+   "key": "j",
+   "gap": 0.3
+  },
+  {
+   "key": "enter",
+   "gap": 1.12
+  },
+  {
+   "key": "l",
+   "gap": 0.6
+  },
+  {
+   "key": "enter",
+   "gap": 1.4
+  },
+  {
+   "key": "2",
+   "gap": 0.9
+  },
+  {
+   "key": "ctrl+d",
+   "gap": 0.54
+  },
+  {
+   "key": "ctrl+d",
+   "gap": 0.72
+  },
+  {
+   "key": "q",
+   "gap": 0.54
+  },
+  {
+   "key": "shift+tab",
+   "gap": 0.3
+  },
+  {
+   "key": "k",
+   "gap": 0.3
+  },
+  {
+   "key": "enter",
+   "gap": 0.9
+  },
+  {
+   "label": "open a PR from your branch"
+  },
+  {
+   "key": "n",
+   "gap": 0.98,
+   "cam": [
+    49,
+    0,
+    140,
+    25
+   ]
+  },
+  {
+   "key": "tab",
+   "gap": 0.22
+  },
+  {
+   "key": "tab",
+   "gap": 0.22
+  },
+  {
+   "key": "tab",
+   "gap": 0.24
+  },
+  {
+   "key": "ctrl+u",
+   "gap": 0.22
+  },
+  {
+   "type": "Add multipart upload to the S3 sink",
+   "speed": 0.045,
+   "gap": 0.0,
+   "cap": false
+  },
+  {
+   "key": "tab",
+   "gap": 0.22
+  },
+  {
+   "type": "Objects over 64 MiB go in parts; a failed part aborts the upload.",
+   "speed": 0.045,
+   "gap": 0.24,
+   "cap": false
+  },
+  {
+   "key": "tab",
+   "gap": 0.24
+  },
+  {
+   "key": "ctrl+s",
+   "gap": 2.0,
+   "cam": [
+    [
+     0.4,
+     "full"
+    ]
+   ]
+  },
+  {
+   "key": "q",
+   "gap": 0.9
+  },
+  {
+   "label": "even 1,241-file PRs"
+  },
+  {
+   "key": "ctrl+p",
+   "gap": 0.3,
+   "cam": [
+    56,
+    6,
+    144,
+    30
+   ]
+  },
+  {
+   "type": "proto",
+   "speed": 0.085,
+   "gap": 0.3,
+   "cam": "hold"
+  },
+  {
+   "key": "enter",
+   "gap": 1.54
+  },
+  {
+   "label": "check out any PR locally"
+  },
+  {
+   "key": "b",
+   "gap": 1.5,
+   "cam": [
+    0,
+    38,
+    112,
+    52
+   ]
+  },
+  {
+   "label": "generated files stay collapsed"
+  },
+  {
+   "key": "2",
+   "gap": 0.9
+  },
+  {
+   "key": "ctrl+d",
+   "gap": 0.36,
+   "cam": "hold"
+  },
+  {
+   "key": "ctrl+d",
+   "gap": 0.36,
+   "cam": "hold"
+  },
+  {
+   "key": "ctrl+d",
+   "gap": 1.2,
+   "cam": "hold"
+  }
+ ]
+}
