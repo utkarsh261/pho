@@ -44,6 +44,7 @@ import (
 	sqlitecache "github.com/utkarsh261/pho/internal/cache/sqlite"
 	"github.com/utkarsh261/pho/internal/config"
 	"github.com/utkarsh261/pho/internal/domain"
+	githubpkg "github.com/utkarsh261/pho/internal/github"
 	"github.com/utkarsh261/pho/internal/github/auth"
 	"github.com/utkarsh261/pho/internal/github/graphql"
 	"github.com/utkarsh261/pho/internal/github/rest"
@@ -316,57 +317,98 @@ func main() {
 		logger.Warn("could not read state", "path", stateStore.Path(), "err", err)
 	}
 
+	lipgloss.SetColorProfile(termenv.NewOutput(os.Stderr).Profile)
+	model := buildModel(launch{
+		cfg:        cfg,
+		inv:        inv,
+		configPath: configPath,
+		rootDir:    rootDir,
+		profiles:   profiles,
+		logger:     logger,
+		state:      stateStore,
+		announce:   announce,
+		saved:      saved,
+		stdoutTTY:  term.IsTerminal(int(os.Stdout.Fd())),
+	})
+
+	defer logger.Timer("total session")()
+	stopProfiling := startProfiling(logger.Warn)
+	p := tea.NewProgram(model, tea.WithAltScreen())
+	_, err = p.Run()
+	stopProfiling()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// launch is everything buildModel needs that main resolves first.
+type launch struct {
+	cfg        config.Config
+	inv        invocation
+	configPath string
+	rootDir    string
+	profiles   []githubpkg.GitHubHostProfile
+	logger     *pholog.Logger
+	state      *state.Store
+	announce   state.Announcement
+	saved      state.State
+	stdoutTTY  bool
+}
+
+// buildModel wires caches, clients and services into the root model.
+func buildModel(l launch) *app.Model {
 	// Ensure cache directory exists
-	if err := os.MkdirAll(cfg.Cache.Dir, 0o700); err != nil {
-		logger.Warn("failed to create cache directory", "dir", cfg.Cache.Dir, "err", err)
+	if err := os.MkdirAll(l.cfg.Cache.Dir, 0o700); err != nil {
+		l.logger.Warn("failed to create cache directory", "dir", l.cfg.Cache.Dir, "err", err)
 	}
 
-	cacheDone := logger.Timer("cache init")
-	l1 := memory.NewJSONStore(cfg.Cache.MaxMemoryMB * 1024 * 1024)
+	cacheDone := l.logger.Timer("cache init")
+	l1 := memory.NewJSONStore(l.cfg.Cache.MaxMemoryMB * 1024 * 1024)
 
-	l2, err := sqlitecache.New(filepath.Join(cfg.Cache.Dir, "cache.db"), 1)
+	l2, err := sqlitecache.New(filepath.Join(l.cfg.Cache.Dir, "cache.db"), 1)
 	var l2Store cache.Store
 	var viewedHistoryStore domain.ViewedHistoryStore
 	if err != nil {
-		logger.Warn("sqlite cache unavailable, using memory-only cache", "err", err)
+		l.logger.Warn("sqlite cache unavailable, using memory-only cache", "err", err)
 		l2Store = l1
 	} else {
 		l2Store = l2
 		viewedHistoryStore = l2
 	}
 
-	coordinator := cache.NewCoordinator(l1, l2Store, logger)
+	coordinator := cache.NewCoordinator(l1, l2Store, l.logger)
 
-	ghClient := graphql.NewClient(profiles, &http.Client{Timeout: 30 * time.Second}, logger)
+	ghClient := graphql.NewClient(l.profiles, &http.Client{Timeout: 30 * time.Second}, l.logger)
 	cacheDone()
 
-	wireDone := logger.Timer("service wiring")
+	wireDone := l.logger.Timer("service wiring")
 	discoverySvc := discovery.New(discovery.Config{
-		Pin:     cfg.Repos.Pin,
-		Exclude: cfg.Repos.Exclude,
+		Pin:     l.cfg.Repos.Pin,
+		Exclude: l.cfg.Repos.Exclude,
 	})
-	discoverySvc.Log = logger
+	discoverySvc.Log = l.logger
 	dashboardSvc := dashboard.NewService(coordinator, ghClient)
-	dashboardSvc.Log = logger
+	dashboardSvc.Log = l.logger
 	searchSvc := search.New()
-	searchSvc.Log = logger
+	searchSvc.Log = l.logger
 
 	// REST client for raw diff fetching (one per primary host).
-	restClient := rest.NewClient(profiles[0].RESTURL, profiles[0].Token, logger)
+	restClient := rest.NewClient(l.profiles[0].RESTURL, l.profiles[0].Token, l.logger)
 	restClient.HTTPClient = &http.Client{Timeout: 30 * time.Second}
 
 	// Per-host REST clients so mutations route to the right GitHub host
 	// (e.g. a GHES PR's update-branch lands on the GHES instance, not github.com).
-	restByHost := make(map[string]*rest.Client, len(profiles))
-	for _, p := range profiles {
-		c := rest.NewClient(p.RESTURL, p.Token, logger)
+	restByHost := make(map[string]*rest.Client, len(l.profiles))
+	for _, p := range l.profiles {
+		c := rest.NewClient(p.RESTURL, p.Token, l.logger)
 		c.HTTPClient = &http.Client{Timeout: 30 * time.Second}
 		restByHost[p.Host] = c
 	}
 
 	// PR detail service: loads PR metadata (GraphQL) and diffs (REST).
 	prSvc := apppr.NewService(coordinator, ghClient, restClient, restByHost)
-	prSvc.Log = logger
+	prSvc.Log = l.logger
 
 	deps := app.Dependencies{
 		Viewer:          ghClient,
@@ -375,55 +417,48 @@ func main() {
 		Search:          searchSvc,
 		PR:              prSvc,
 		ViewedHistory:   viewedHistoryStore,
-		Root:            rootDir,
-		Host:            profiles[0].Host,
-		MaxJumpPRs:      cfg.Palette.MaxPRs,
-		MaxDashboardPRs: cfg.Dashboard.MaxPRs,
-		NoStackGrouping: !cfg.Dashboard.GroupStacks,
+		Root:            l.rootDir,
+		Host:            l.profiles[0].Host,
+		MaxJumpPRs:      l.cfg.Palette.MaxPRs,
+		MaxDashboardPRs: l.cfg.Dashboard.MaxPRs,
+		NoStackGrouping: !l.cfg.Dashboard.GroupStacks,
 		DiffLimits: prdetail.DiffLimits{
-			CollapseLines:     cfg.Diff.CollapseLines,
-			CollapseLineWidth: cfg.Diff.CollapseLineWidth,
-			MaxLines:          cfg.Diff.MaxLines,
-			MaxLineWidth:      cfg.Diff.MaxLineWidth,
-			RowBudget:         cfg.Diff.RowBudget,
+			CollapseLines:     l.cfg.Diff.CollapseLines,
+			CollapseLineWidth: l.cfg.Diff.CollapseLineWidth,
+			MaxLines:          l.cfg.Diff.MaxLines,
+			MaxLineWidth:      l.cfg.Diff.MaxLineWidth,
+			RowBudget:         l.cfg.Diff.RowBudget,
 		},
-		InitialPRNumber:    inv.PRNumber,
-		Logger:             logger,
-		TerminalBackground: cfg.UI.Background == "terminal",
+		InitialPRNumber:    l.inv.PRNumber,
+		Logger:             l.logger,
+		TerminalBackground: l.cfg.UI.Background == "terminal",
 		SaveTheme: func(name string) error {
-			return config.SaveTheme(configPath, name)
+			return config.SaveTheme(l.configPath, name)
 		},
-		ConfiguredTheme: cfg.UI.Theme,
+		ConfiguredTheme: l.cfg.UI.Theme,
 		Version:         version,
-		AnnounceVersion: announce.Version,
-		WhatsNewSince:   announce.Since,
+		AnnounceVersion: l.announce.Version,
+		WhatsNewSince:   l.announce.Since,
 		FetchReleases:   (&release.Client{}).List,
-		State:           stateStore,
-		CheckForUpdates: updateCheckEnabled(cfg.Updates.Check, version, term.IsTerminal(int(os.Stdout.Fd()))),
-		LatestKnown:     saved.LatestKnown,
-		LastUpdateCheck: saved.LastUpdateCheck,
+		State:           l.state,
+		CheckForUpdates: updateCheckEnabled(l.cfg.Updates.Check, version, l.stdoutTTY),
+		LatestKnown:     l.saved.LatestKnown,
+		LastUpdateCheck: l.saved.LastUpdateCheck,
 		FetchLatest:     (&release.Client{}).Latest,
 		RunUpdate:       brewUpdater(),
 	}
 	model := app.NewModel(deps)
 
-	lipgloss.SetColorProfile(termenv.NewOutput(os.Stderr).Profile)
-	th, err := selectTheme(cfg.UI.Theme, inv.Theme)
+	th, err := selectTheme(l.cfg.UI.Theme, l.inv.Theme)
 	model.SetTheme(th)
 	if err != nil {
-		logger.Warn("unknown theme in config, using the default", "err", err)
-		model.ReportUnknownTheme(cfg.UI.Theme)
+		l.logger.Warn("unknown theme in config, using the default", "err", err)
+		model.ReportUnknownTheme(l.cfg.UI.Theme)
 	}
-	if bg := cfg.UI.Background; bg != "theme" && bg != "terminal" {
-		logger.Warn("unknown [ui] background, painting the theme's", "background", bg)
+	if bg := l.cfg.UI.Background; bg != "theme" && bg != "terminal" {
+		l.logger.Warn("unknown [ui] background, painting the theme's", "background", bg)
 		model.ReportConfigProblem(fmt.Errorf("unknown [ui] background %q, painting the theme's", bg))
 	}
 	wireDone()
-
-	defer logger.Timer("total session")()
-	p := tea.NewProgram(model, tea.WithAltScreen())
-	if _, err := p.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
+	return model
 }
