@@ -6,16 +6,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 // FrameBudget is one 60Hz frame.
 const FrameBudget = 16 * time.Millisecond
 
-// cmdWait bounds how long a follow-up command may take before it counts as
-// background work (a tick, a debounce) and is dropped, as a real program
-// would paint without it.
+// cmdWait bounds how long a follow-up command may run before it counts as
+// background work (a tick, a debounce) that a real program would paint
+// without. Waiting for it is not part of the frame.
 const cmdWait = 5 * time.Millisecond
 
 // Model is the part of tea.Model the driver needs.
@@ -24,9 +23,10 @@ type Model interface {
 	View() string
 }
 
-// Driver feeds messages to a model the way Bubble Tea does and records how
-// long each input takes to reach a settled frame, plus the bytes a
-// line-diffing renderer would write for it.
+// Driver feeds messages to a model the way Bubble Tea does and records the
+// work each input costs until its frame settles: every Update, every
+// follow-up command that completes, and the View. Plus the bytes a
+// line-diffing renderer would write for that frame.
 type Driver struct {
 	M       Model
 	lat     []time.Duration
@@ -55,50 +55,75 @@ func (d *Driver) Press(keys ...string) {
 	}
 }
 
-// Measure times one input to its settled frame.
+// Measure records the work one input costs up to its settled frame.
 func (d *Driver) Measure(msg tea.Msg) {
-	start := time.Now()
-	d.settle(msg, 0)
+	work := d.settle(msg, 0)
+	t0 := time.Now()
 	view := d.M.View()
-	d.lat = append(d.lat, time.Since(start))
+	d.lat = append(d.lat, work+time.Since(t0))
 	lines := strings.Split(view, "\n")
 	d.written = append(d.written, changedBytes(d.prev, lines))
 	d.prev = lines
 }
 
-func (d *Driver) settle(msg tea.Msg, depth int) {
+// settle applies msg and, recursively, whatever its commands produce within
+// cmdWait, returning the time spent in Update and in completed commands.
+func (d *Driver) settle(msg tea.Msg, depth int) time.Duration {
 	if depth > 20 {
-		return
+		return 0
 	}
+	t0 := time.Now()
 	_, cmd := d.M.Update(msg)
-	for _, next := range runCmd(cmd) {
-		d.settle(next, depth+1)
+	work := time.Since(t0)
+	results := runCmds([]tea.Cmd{cmd}, time.Now().Add(cmdWait))
+	for _, r := range results {
+		work += r.took
 	}
+	for _, r := range results {
+		work += d.settle(r.msg, depth+1)
+	}
+	return work
 }
 
-func runCmd(cmd tea.Cmd) []tea.Msg {
-	if cmd == nil {
-		return nil
-	}
-	ch := make(chan tea.Msg, 1)
-	go func() { ch <- cmd() }()
-	var msg tea.Msg
-	select {
-	case msg = <-ch:
-	case <-time.After(cmdWait):
-		return nil
-	}
-	switch m := msg.(type) {
-	case nil, spinner.TickMsg:
-		return nil
-	case tea.BatchMsg:
-		var out []tea.Msg
-		for _, c := range m {
-			out = append(out, runCmd(c)...)
+type cmdResult struct {
+	msg  tea.Msg
+	took time.Duration
+}
+
+// runCmds runs cmds concurrently, flattening batches, and keeps the
+// messages that arrive before deadline with each command's own run time.
+func runCmds(cmds []tea.Cmd, deadline time.Time) []cmdResult {
+	ch := make(chan cmdResult, len(cmds))
+	n := 0
+	for _, c := range cmds {
+		if c == nil {
+			continue
 		}
-		return out
+		n++
+		go func() {
+			t0 := time.Now()
+			msg := c()
+			ch <- cmdResult{msg, time.Since(t0)}
+		}()
 	}
-	return []tea.Msg{msg}
+	var out []cmdResult
+	timeout := time.NewTimer(time.Until(deadline))
+	defer timeout.Stop()
+	for ; n > 0; n-- {
+		select {
+		case r := <-ch:
+			switch m := r.msg.(type) {
+			case nil:
+			case tea.BatchMsg:
+				out = append(out, runCmds(m, deadline)...)
+			default:
+				out = append(out, r)
+			}
+		case <-timeout.C:
+			return out
+		}
+	}
+	return out
 }
 
 // changedBytes approximates the standard renderer, which rewrites only the

@@ -1,11 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -22,20 +22,21 @@ import (
 	"github.com/utkarsh261/pho/internal/testutil/fakegh"
 )
 
-var ansiSeq = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07`)
-
-// screen records what the program writes and when a marker first shows up.
+// screen records what the program writes, minus escape sequences, and when
+// marker first shows up. Write does work proportional to the chunk, since it
+// runs on the renderer's path.
 type screen struct {
 	mu     sync.Mutex
 	start  time.Time
 	first  time.Duration
-	text   strings.Builder
-	wants  map[string]chan time.Duration
-	closed map[string]bool
+	text   []byte
+	esc    escState
+	marker []byte
+	found  chan time.Duration
 }
 
-func newScreen() *screen {
-	return &screen{start: time.Now(), wants: map[string]chan time.Duration{}, closed: map[string]bool{}}
+func newScreen(marker string) *screen {
+	return &screen{start: time.Now(), marker: []byte(marker), found: make(chan time.Duration, 1)}
 }
 
 func (s *screen) Write(p []byte) (int, error) {
@@ -45,47 +46,79 @@ func (s *screen) Write(p []byte) (int, error) {
 	if s.first == 0 {
 		s.first = at
 	}
-	s.text.WriteString(ansiSeq.ReplaceAllString(string(p), ""))
-	s.check(at)
+	old := len(s.text)
+	s.text = s.esc.strip(s.text, p)
+	// only text that this chunk could have completed
+	if s.marker != nil && bytes.Contains(s.text[max(0, old-len(s.marker)+1):], s.marker) {
+		s.found <- at
+		s.marker = nil
+	}
 	return len(p), nil
 }
 
-func (s *screen) check(at time.Duration) {
-	text := s.text.String()
-	for m, ch := range s.wants {
-		if !s.closed[m] && strings.Contains(text, m) {
-			s.closed[m] = true
-			ch <- at
-		}
-	}
-}
-
-// since resets the stream so a marker counts only from now on.
-func (s *screen) since() time.Time {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.text.Reset()
-	return time.Now()
-}
-
-func (s *screen) wait(tb testing.TB, marker string, timeout time.Duration) time.Duration {
+func (s *screen) wait(tb testing.TB, timeout time.Duration) time.Duration {
 	tb.Helper()
-	ch := make(chan time.Duration, 1)
-	s.mu.Lock()
-	s.wants[marker] = ch
-	s.closed[marker] = false
-	s.check(time.Since(s.start))
-	s.mu.Unlock()
 	select {
-	case at := <-ch:
+	case at := <-s.found:
 		return at
 	case <-time.After(timeout):
 		s.mu.Lock()
-		tail := s.text.String()
+		tail := string(s.text[max(0, len(s.text)-2000):])
 		s.mu.Unlock()
-		tb.Fatalf("%q not on screen after %v; last output:\n%s", marker, timeout, tail[max(0, len(tail)-2000):])
+		tb.Fatalf("marker not on screen after %v; last output:\n%s", timeout, tail)
 		return 0
 	}
+}
+
+// escState strips CSI, OSC and short escape sequences, carrying state across
+// writes so a sequence split between two chunks is still removed.
+type escState int
+
+const (
+	escNone escState = iota
+	escStart
+	escCSI
+	escOSC
+	escOSCEsc
+	escCharset
+)
+
+func (st *escState) strip(dst, p []byte) []byte {
+	for _, c := range p {
+		switch *st {
+		case escNone:
+			if c == 0x1b {
+				*st = escStart
+			} else {
+				dst = append(dst, c)
+			}
+		case escStart:
+			switch c {
+			case '[':
+				*st = escCSI
+			case ']':
+				*st = escOSC
+			case '(', ')':
+				*st = escCharset
+			default:
+				*st = escNone
+			}
+		case escCSI:
+			if c >= 0x40 && c <= 0x7e {
+				*st = escNone
+			}
+		case escOSC:
+			switch c {
+			case 0x07:
+				*st = escNone
+			case 0x1b:
+				*st = escOSCEsc
+			}
+		case escOSCEsc, escCharset:
+			*st = escNone
+		}
+	}
+	return dst
 }
 
 type launchRun struct {
@@ -103,9 +136,11 @@ func isolate(tb testing.TB, dir string) {
 }
 
 // start launches pho against the fake server in dir, the way main does
-// after auth.
-func (r launchRun) start(tb testing.TB) (*tea.Program, *screen, chan struct{}) {
+// after auth. The screen's clock starts before config and wiring, so their
+// cost counts toward the launch.
+func (r launchRun) start(tb testing.TB, marker string) (*tea.Program, *screen, chan struct{}) {
 	tb.Helper()
+	scr := newScreen(marker)
 	cfg, err := config.Load(filepath.Join(r.dir, "config.toml"))
 	if err != nil {
 		tb.Fatal(err)
@@ -122,7 +157,6 @@ func (r launchRun) start(tb testing.TB) (*tea.Program, *screen, chan struct{}) {
 		logger:   pholog.New(cfg.Logging.File, "info"),
 		state:    state.NewStore(cfg.Paths.StateFile),
 	})
-	scr := newScreen()
 	in, _ := io.Pipe()
 	p := tea.NewProgram(model, tea.WithInput(in), tea.WithOutput(scr), tea.WithoutSignalHandler())
 	done := make(chan struct{})
@@ -160,15 +194,6 @@ func dirSizeKB(dir string) float64 {
 	return float64(n) / 1024
 }
 
-func ts64457Diff() string {
-	for _, f := range difftest.RawDiffs() {
-		if f.Name == "ts64457" {
-			return f.Raw
-		}
-	}
-	panic("ts64457 fixture missing")
-}
-
 type launchScenario struct {
 	name     string
 	repos    int
@@ -183,7 +208,7 @@ var launchScenarios = []launchScenario{
 	{name: "dashboard-5-repos", repos: 5, perRepo: 20, marker: "feature/"},
 	{name: "dashboard-40-repos", repos: 40, perRepo: 50, marker: "feature/"},
 	{name: "pr-small", repos: 1, perRepo: 5, prNumber: 3, diff: func() string { return bench.SynthSmall(5, 48) }, marker: "pkg/mod4/file4.go"},
-	{name: "pr-ts64457", repos: 1, perRepo: 5, prNumber: 3, diff: ts64457Diff, files: "ts64457", marker: "generate-options.ts"},
+	{name: "pr-ts64457", repos: 1, perRepo: 5, prNumber: 3, diff: func() string { return difftest.Raw("ts64457") }, files: "ts64457", marker: "generate-options.ts"},
 }
 
 // BenchmarkLaunch measures a whole launch against an in-process GitHub:
@@ -233,8 +258,8 @@ func runLaunch(b *testing.B, sc launchScenario, lat fakegh.Latency, warm bool) {
 		}
 		run := launchRun{srv: srv, dir: dir, prNumber: sc.prNumber, root: root}
 		if warm {
-			p, scr, done := run.start(b)
-			scr.wait(b, sc.marker, 30*time.Second)
+			p, scr, done := run.start(b, sc.marker)
+			scr.wait(b, 30*time.Second)
 			quiesce(srv, 300*time.Millisecond, 30*time.Second)
 			p.Quit()
 			<-done
@@ -242,8 +267,8 @@ func runLaunch(b *testing.B, sc launchScenario, lat fakegh.Latency, warm bool) {
 		srv.Reset()
 		b.StartTimer()
 
-		p, scr, done := run.start(b)
-		at := scr.wait(b, sc.marker, 60*time.Second)
+		p, scr, done := run.start(b, sc.marker)
+		at := scr.wait(b, 60*time.Second)
 
 		b.StopTimer()
 		quiesce(srv, 300*time.Millisecond, 30*time.Second)

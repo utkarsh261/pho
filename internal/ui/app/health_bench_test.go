@@ -13,6 +13,7 @@ import (
 	"github.com/utkarsh261/pho/internal/application/search"
 	"github.com/utkarsh261/pho/internal/application/stack"
 	"github.com/utkarsh261/pho/internal/bench"
+	"github.com/utkarsh261/pho/internal/diff/difftest"
 	"github.com/utkarsh261/pho/internal/diff/parse"
 	"github.com/utkarsh261/pho/internal/domain"
 )
@@ -43,10 +44,9 @@ func TestScaling(t *testing.T) {
 			return func() { stack.Build(prs) }
 		}},
 		{"dashboard-load", []int{250, 500, 1_000, 2_000}, func(n int) func() {
-			m, d := benchDashboard(t, 1, 1, nil)
+			_, d := benchDashboard(t, 1, 1, nil)
 			r := bench.Repos(1)[0]
 			snap := dashboardSnapshot(r, bench.PRs(r.FullName, n, 1)...)
-			_ = m
 			return func() { d.Measure(cmdsDashboardLoaded(r.FullName, snap, false, nil)) }
 		}},
 		{"comments-render", []int{10, 20, 40, 80}, func(n int) func() {
@@ -81,7 +81,7 @@ func heapInuseMB() float64 {
 func TestHeapPlateau(t *testing.T) {
 	m, d := benchDashboard(t, 1, 60, nil)
 	detail := deeplinkPreviewFixture()
-	dm := benchDiff(t, ts64457())
+	dm := benchDiff(t, difftest.Raw("ts64457"))
 	m.deps.PR = &stubPRService{detailResult: detail, diffResult: dm}
 	m.focus = domain.FocusPRListPanel
 	var samples []float64
@@ -109,16 +109,20 @@ func TestHeapPlateau(t *testing.T) {
 	t.Logf("HEAP open-close-50 samples-MB=%.1f growth-MB=%.1f", samples, growth)
 }
 
-// TestMonkeySoak walks a seeded random key path; a later window much slower
+// TestMonkeySoak walks a seeded random key path through one PR; a later window much slower
 // than the first means something accumulates per keypress.
 func TestMonkeySoak(t *testing.T) {
+	// Every key keeps the walk in PR detail, so windows compare like with like.
 	keys := []string{"j", "j", "j", "k", "k", "h", "l", "tab", "gg", "G", "ctrl+d", "ctrl+u",
-		"1", "2", "3", "4", "n", "N", "esc", "?", "{", "}", "space", "enter"}
+		"1", "2", "3", "4", "n", "N"}
 	r := rand.New(rand.NewPCG(42, 42))
-	_, d := benchPRDetail(t, benchDiff(t, ts64457()), bench.Comments(20, 1), "2")
+	m, d := benchPRDetail(t, benchDiff(t, difftest.Raw("ts64457")), bench.Comments(20, 1), "2")
 	const total, window = 20_000, 1_000
-	for range total {
+	for i := range total {
 		d.Press(keys[r.IntN(len(keys))])
+		if m.currentView() != domain.PrimaryViewPRDetail {
+			t.Fatalf("key %d left PR detail for %s", i, m.currentView())
+		}
 	}
 	lat := d.Latencies()
 	var p99s []time.Duration

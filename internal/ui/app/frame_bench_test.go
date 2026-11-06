@@ -28,15 +28,6 @@ func benchDiff(tb testing.TB, raw string) diffmodel.DiffModel {
 	return *dm
 }
 
-func ts64457() string {
-	for _, f := range difftest.RawDiffs() {
-		if f.Name == "ts64457" {
-			return f.Raw
-		}
-	}
-	panic("ts64457 fixture missing")
-}
-
 // benchPRDetail opens PR #123 straight into its detail view at 200x50.
 func benchPRDetail(tb testing.TB, dm diffmodel.DiffModel, comments []domain.PreviewComment, tab string) (*Model, *bench.Driver) {
 	tb.Helper()
@@ -62,7 +53,7 @@ func benchPRDetail(tb testing.TB, dm diffmodel.DiffModel, comments []domain.Prev
 
 func BenchmarkFrameScroll(b *testing.B) {
 	for _, fx := range []struct{ name, raw string }{
-		{"ts64457", ts64457()},
+		{"ts64457", difftest.Raw("ts64457")},
 		{"synth-200k", bench.SynthDiff(400, 500)},
 	} {
 		b.Run(fx.name, func(b *testing.B) {
@@ -99,7 +90,7 @@ func BenchmarkFrameTabHop(b *testing.B) {
 	for _, n := range []int{30, 300} {
 		b.Run(fmt.Sprintf("comments-%d", n), func(b *testing.B) {
 			b.ReportAllocs()
-			_, d := benchPRDetail(b, benchDiff(b, ts64457()), bench.Comments(n, 1), "1")
+			_, d := benchPRDetail(b, benchDiff(b, difftest.Raw("ts64457")), bench.Comments(n, 1), "1")
 			d.Reset()
 			for b.Loop() {
 				d.Press("2", "3", "4", "1")
@@ -156,11 +147,10 @@ func BenchmarkFramePalette(b *testing.B) {
 		b.Run(fmt.Sprintf("prs-%d", n), func(b *testing.B) {
 			b.ReportAllocs()
 			srch := search.New()
-			m, d := benchDashboard(b, 1, 20, srch)
+			_, d := benchDashboard(b, 1, 20, srch)
 			repo := bench.Repos(1)[0].FullName
 			srch.AppendJumpPRs(repo, bench.PRs(repo, n, 7))
 			srch.SetJumpIndexComplete(repo)
-			_ = m
 			d.Reset()
 			for b.Loop() {
 				d.Press("ctrl+p", "cache parser", "esc")
@@ -185,7 +175,7 @@ func BenchmarkFrameThemePreview(b *testing.B) {
 
 func BenchmarkFrameResize(b *testing.B) {
 	b.ReportAllocs()
-	_, d := benchPRDetail(b, benchDiff(b, ts64457()), bench.Comments(30, 1), "2")
+	_, d := benchPRDetail(b, benchDiff(b, difftest.Raw("ts64457")), bench.Comments(30, 1), "2")
 	d.Reset()
 	for b.Loop() {
 		for w := 60; w <= 240; w += 6 {

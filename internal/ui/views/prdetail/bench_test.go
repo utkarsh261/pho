@@ -21,23 +21,12 @@ func benchDiff(b *testing.B, raw string) *diffmodel.DiffModel {
 	return dm
 }
 
-func benchTS(b *testing.B) string {
-	b.Helper()
-	for _, f := range difftest.RawDiffs() {
-		if f.Name == "ts64457" {
-			return f.Raw
-		}
-	}
-	b.Fatal("ts64457 fixture missing")
-	return ""
-}
-
 func BenchmarkIntraLineChanges(b *testing.B) {
 	for _, c := range []struct {
 		name string
 		dm   *diffmodel.DiffModel
 	}{
-		{"ts64457", benchDiff(b, benchTS(b))},
+		{"ts64457", benchDiff(b, difftest.Raw("ts64457"))},
 		{"synth-100k", benchDiff(b, bench.SynthDiff(200, 500))},
 	} {
 		b.Run(c.name, func(b *testing.B) {

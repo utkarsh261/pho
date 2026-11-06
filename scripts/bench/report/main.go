@@ -26,7 +26,8 @@ type run struct {
 }
 
 var (
-	benchLine  = regexp.MustCompile(`^(Benchmark\S+?)(?:-\d+)?\s+\d+\s+(.*)$`)
+	benchLine  = regexp.MustCompile(`^Benchmark(\S+)\s+\d+\s+(.*)$`)
+	procSuffix = regexp.MustCompile(`-\d+$`)
 	healthLine = regexp.MustCompile(`\b(SCALING|HEAP|SOAK) (\S+) (.*)$`)
 )
 
@@ -42,18 +43,36 @@ func parse(path string) (*run, error) {
 	defer f.Close()
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 1<<20), 1<<20)
+	var lines [][]string
 	for sc.Scan() {
 		line := sc.Text()
 		if m := healthLine.FindStringSubmatch(line); m != nil {
 			r.health[m[1]+" "+m[2]] = m[3]
 			continue
 		}
-		m := benchLine.FindStringSubmatch(line)
-		if m == nil {
-			continue
+		if m := benchLine.FindStringSubmatch(line); m != nil {
+			lines = append(lines, m[1:])
 		}
-		name := strings.TrimPrefix(m[1], "Benchmark")
-		fields := strings.Fields(m[2])
+	}
+	if err := sc.Err(); err != nil {
+		return nil, err
+	}
+	// go test appends -GOMAXPROCS to every name only when it is above 1, so
+	// a trailing -N is that suffix only if every line ends in the same one;
+	// otherwise it is part of the name (comments-300).
+	suffix := ""
+	for i, l := range lines {
+		sfx := procSuffix.FindString(l[0])
+		if i == 0 {
+			suffix = sfx
+		} else if sfx != suffix {
+			suffix = ""
+			break
+		}
+	}
+	for _, l := range lines {
+		name := strings.TrimSuffix(l[0], suffix)
+		fields := strings.Fields(l[1])
 		if r.samples[name] == nil {
 			r.samples[name] = map[string][]float64{}
 			r.order = append(r.order, name)
@@ -66,7 +85,7 @@ func parse(path string) (*run, error) {
 			r.samples[name][fields[i+1]] = append(r.samples[name][fields[i+1]], v)
 		}
 	}
-	return r, sc.Err()
+	return r, nil
 }
 
 func median(xs []float64) float64 {
@@ -306,10 +325,6 @@ func write(w io.Writer, base, head *run, baseRef, headRef string, compared bool)
 			row("| API requests · %s | %s |\n", strings.Replace(strings.TrimPrefix(n, "Launch/"), "/local/", " ", 1), cols(c, num, c.exactVerdict()))
 		}
 	}
-	for _, n := range names(head, "Frame") {
-		c := compare(base, head, n, "B/frame")
-		row("| terminal bytes/frame · %s | %s |\n", strings.TrimPrefix(n, "Frame"), cols(c, num, c.exactVerdict()))
-	}
 	var allocRows []string
 	allocBase := false
 	for _, n := range head.order {
@@ -333,16 +348,23 @@ func write(w io.Writer, base, head *run, baseRef, headRef string, compared bool)
 	p("\n")
 
 	flush()
-	p("**How it feels**: keypress → settled frame (p95 · p99 · frames over 16ms per run)\n\n")
+	p("**How it feels**: work per keypress up to its settled frame (p95 · p99 · frames over 16ms per run · terminal bytes per frame)\n\n")
 	header("scenario", "")
 	for _, n := range names(head, "Frame") {
 		p95, p99 := compare(base, head, n, "p95-µs"), compare(base, head, n, "p99-µs")
 		slow := compare(base, head, n, "slowframes/op")
-		f := func(a, b, c float64) string { return fmt.Sprintf("%s · %s · %s", ms(a), ms(b), num(c)) }
+		bpf := compare(base, head, n, "B/frame")
+		f := func(a, b, c, d float64) string {
+			return fmt.Sprintf("%s · %s · %s · %s", ms(a), ms(b), num(c), num(d))
+		}
 		if compared {
-			row("| %s | %s | %s | %s | |\n", strings.TrimPrefix(n, "Frame"), f(p95.base, p99.base, slow.base), f(p95.head, p99.head, slow.head), "p99 "+p99.verdict())
+			v := "p99 " + p99.verdict()
+			if bpf.have && bpf.p < alpha {
+				v += ", bytes " + bpf.verdict()
+			}
+			row("| %s | %s | %s | %s | |\n", strings.TrimPrefix(n, "Frame"), f(p95.base, p99.base, slow.base, bpf.base), f(p95.head, p99.head, slow.head, bpf.head), v)
 		} else {
-			row("| %s | %s | |\n", strings.TrimPrefix(n, "Frame"), f(p95.head, p99.head, slow.head))
+			row("| %s | %s | |\n", strings.TrimPrefix(n, "Frame"), f(p95.head, p99.head, slow.head, bpf.head))
 		}
 	}
 	p("\n")

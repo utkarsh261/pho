@@ -14,6 +14,7 @@ import (
 	"github.com/utkarsh261/pho/internal/bench"
 	sqlite "github.com/utkarsh261/pho/internal/cache/sqlite"
 	"github.com/utkarsh261/pho/internal/diff/anchor"
+	"github.com/utkarsh261/pho/internal/diff/difftest"
 	diffmodel "github.com/utkarsh261/pho/internal/diff/model"
 	"github.com/utkarsh261/pho/internal/diff/parse"
 	"github.com/utkarsh261/pho/internal/domain"
@@ -35,7 +36,7 @@ func BenchmarkLargeDiffLoad(b *testing.B) {
 		raw  string
 	}
 	var fxs []fixture
-	fxs = append(fxs, fixture{"ts64457", ts64457()})
+	fxs = append(fxs, fixture{"ts64457", difftest.Raw("ts64457")})
 	for _, sz := range []int{20000, 100000, 200000} {
 		fxs = append(fxs, fixture{fmt.Sprintf("big-%dk", sz/1000), bench.SynthDiff(sz/500, 500)})
 	}

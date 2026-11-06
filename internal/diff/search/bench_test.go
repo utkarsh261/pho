@@ -12,20 +12,13 @@ import (
 func benchModels(b *testing.B) map[string]*model.DiffModel {
 	b.Helper()
 	out := map[string]*model.DiffModel{}
-	for _, f := range difftest.RawDiffs() {
-		if f.Name == "ts64457" {
-			dm, err := parse.Parse(f.Raw)
-			if err != nil {
-				b.Fatal(err)
-			}
-			out["ts64457"] = dm
+	for name, raw := range map[string]string{"ts64457": difftest.Raw("ts64457"), "synth-100k": bench.SynthDiff(200, 500)} {
+		dm, err := parse.Parse(raw)
+		if err != nil {
+			b.Fatal(err)
 		}
+		out[name] = dm
 	}
-	dm, err := parse.Parse(bench.SynthDiff(200, 500))
-	if err != nil {
-		b.Fatal(err)
-	}
-	out["synth-100k"] = dm
 	return out
 }
 

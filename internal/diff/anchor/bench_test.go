@@ -17,17 +17,11 @@ func BenchmarkGenerate(b *testing.B) {
 		}
 		return dm
 	}
-	var ts string
-	for _, f := range difftest.RawDiffs() {
-		if f.Name == "ts64457" {
-			ts = f.Raw
-		}
-	}
 	cases := []struct {
 		name string
 		dm   *model.DiffModel
 	}{
-		{"ts64457", mustParse(ts)},
+		{"ts64457", mustParse(difftest.Raw("ts64457"))},
 		{"synth-100k", mustParse(bench.SynthDiff(200, 500))},
 	}
 	for _, c := range cases {

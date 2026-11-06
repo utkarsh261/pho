@@ -27,6 +27,16 @@ func RawDiffs() []Fixture {
 	}
 }
 
+// Raw returns the raw-diff fixture called name, e.g. "ts64457".
+func Raw(name string) string {
+	for _, f := range RawDiffs() {
+		if f.Name == name {
+			return f.Raw
+		}
+	}
+	panic("difftest: no raw diff fixture " + name)
+}
+
 // LongLineDiff returns a diff whose second hunk follows a line longer than
 // bufio.Scanner's default 64KB token limit.
 func LongLineDiff() Fixture {
