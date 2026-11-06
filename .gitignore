@@ -29,3 +29,4 @@ coverage.html
 # Temporary files
 *.tmp
 *.log
+bench-out/

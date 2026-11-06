@@ -1,0 +1,82 @@
+name: Bench
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: bench-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    # numbers are reported, never enforced
+    continue-on-error: true
+    timeout-minutes: 45
+    env:
+      GOMAXPROCS: "2"
+      COUNT: "6"
+      BENCHTIME: 300ms
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Compare with base
+        if: github.event_name == 'pull_request'
+        run: scripts/bench/compare.sh --base origin/${{ github.base_ref }}
+
+      - name: Benchmark main
+        if: github.event_name == 'push'
+        run: scripts/bench/compare.sh
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          marker='<!-- pho-bench -->'
+          { echo "$marker"; head -c 60000 bench-out/report.md; } > body.md
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+            --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -1)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@body.md >/dev/null
+          else
+            gh pr comment "$PR" --body-file body.md
+          fi
+
+      - name: Record history
+        if: github.event_name == 'push'
+        run: |
+          sha=$(git rev-parse --short HEAD)
+          cp bench-out/head.json "$RUNNER_TEMP/$sha.json"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git fetch origin bench-data; then
+            git switch bench-data
+          else
+            git switch --orphan bench-data
+          fi
+          mkdir -p runs
+          cp "$RUNNER_TEMP/$sha.json" "runs/$(date -u +%Y%m%dT%H%M%SZ)-$sha.json"
+          git add runs
+          git commit -m "Benchmarks for $sha"
+          git push origin bench-data
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bench-out
+          path: bench-out/*.txt
