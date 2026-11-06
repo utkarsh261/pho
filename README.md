@@ -20,9 +20,10 @@
 - **Stacked PRs** - PRs built on another open PR's branch, and GitHub's native stacks, are listed together with a rail joining them, and the preview maps the whole stack with each PR's CI and review state. In a PR, `{`/`}` step down/up the stack on the same tab and `S` lists it.
 - **CI logs** - `Enter` on a GitHub Actions check shows the end of its job log with error lines highlighted; `n`/`N` jumps between errors and `r` re-runs the job.
 - **Diff navigation** - Line-by-line cursor, `gg`/`G`, `Ctrl+d`/`Ctrl+u`, visual mode for selecting ranges.
+- **Open in your editor** - `e` on a diff line opens the file at that line in `$VISUAL`/`$EDITOR`. If your local checkout isn't on the PR's head commit, pho offers to check out the branch first.
 - **Inline reviews** - Draft inline comments on diff lines, edit, discard, and batch-submit with a review event. Just like Github web UI.
 - **Comments & approvals** - Post top-level comments, review comments, or approve directly.
-- **PR actions** - Edit title/body, merge (with method selection), close/reopen, and checkout the branch locally.
+- **PR actions** - Edit title/body (`E`), merge (with method selection), close/reopen, and checkout the branch locally.
 - **Commit view** - Inspect individual commits and their diffs.
 - **Search** - `/` to search within diffs and descriptions; `n`/`N` to jump between matches.
 - **Themes** - Catppuccin Mocha, Tokyo Night, Gruvbox, Nord, Dracula and Rosé Pine. Press `T` to preview them live.

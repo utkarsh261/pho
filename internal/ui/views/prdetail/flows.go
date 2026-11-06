@@ -105,6 +105,9 @@ func (m *PRDetailModel) StatusHint() string {
 	if m.editPrompt != "" {
 		return m.editPrompt
 	}
+	if m.editorPrompt != "" {
+		return m.editorPrompt
+	}
 	if m.editPosting {
 		return "Updating PR..."
 	}
@@ -287,6 +290,7 @@ func (m *PRDetailModel) isAnyActionInProgress() bool {
 		m.checkoutInFlight ||
 		m.editPosting ||
 		m.editPrompt != "" ||
+		m.editorPrompt != "" ||
 		m.confirmDiscardAll ||
 		m.ciRerun.confirm ||
 		m.pendingToggle.active() ||

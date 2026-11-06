@@ -435,7 +435,7 @@ func buildPRDetailBindings(ctx Context) []Group {
 					{Key: "C", Description: "Comment"},
 					{Key: "a", Description: "Approve"},
 					{Key: "v", Description: "Review"},
-					{Key: "e", Description: "Edit title/body"},
+					{Key: "E", Description: "Edit title/body"},
 					{Key: "M", Description: "Merge"},
 				}
 				if ctx.PRState == domain.PRStateOpen {
@@ -479,6 +479,7 @@ func buildPRDetailBindings(ctx Context) []Group {
 			{Key: "ctrl+d/u", Description: "Half page"},
 			{Key: "z / Z", Description: "Collapse file / all"},
 			{Key: "O", Description: "Open file on GitHub"},
+			{Key: "e", Description: "Open line in $EDITOR"},
 		}
 		if ctx.HasLastReview {
 			b = append(b, Binding{Key: "s", Description: "Since your review / all"})
