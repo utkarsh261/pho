@@ -311,17 +311,19 @@ func write(w io.Writer, base, head *run, baseRef, headRef string, compared bool)
 		row("| terminal bytes/frame · %s | %s |\n", strings.TrimPrefix(n, "Frame"), cols(c, num, c.exactVerdict()))
 	}
 	var allocRows []string
+	allocBase := false
 	for _, n := range head.order {
 		c := compare(base, head, n, "allocs/op")
 		if !micro(n) || math.IsNaN(c.head) {
 			continue
 		}
+		allocBase = allocBase || c.have
 		if !compared || (c.have && c.base != 0 && math.Abs(c.delta()) >= 0.02) {
 			allocRows = append(allocRows, fmt.Sprintf("| allocs/op · %s | %s |\n", n, cols(c, num, c.exactVerdict())))
 		}
 	}
 	if compared {
-		if len(allocRows) == 0 {
+		if len(allocRows) == 0 && allocBase {
 			row("| allocs/op · micro benchmarks | unchanged within 2%% | | |\n")
 		}
 		for _, r := range allocRows {
