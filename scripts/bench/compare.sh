@@ -118,9 +118,9 @@ fi
 args=(-head "$out/head.txt" -head-ref "$head_ref" -json "$out/head.json")
 if [ -n "$base" ]; then
 	args+=(-base "$out/base.txt" -base-ref "$base@$(git -C "$root" rev-parse --short "$base")")
-	(cd "$out" && go run "$BENCHSTAT" base=base.txt head=head.txt) >"$out/benchstat.txt" 2>/dev/null || true
+	(cd "$out" && GOTOOLCHAIN=auto go run "$BENCHSTAT" base=base.txt head=head.txt) >"$out/benchstat.txt" 2>/dev/null || true
 else
-	(cd "$out" && go run "$BENCHSTAT" head=head.txt) >"$out/benchstat.txt" 2>/dev/null || true
+	(cd "$out" && GOTOOLCHAIN=auto go run "$BENCHSTAT" head=head.txt) >"$out/benchstat.txt" 2>/dev/null || true
 fi
 (cd "$root" && go run ./scripts/bench/report "${args[@]}") >"$out/report.md"
 {

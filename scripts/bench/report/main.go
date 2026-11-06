@@ -212,6 +212,10 @@ func ms(us float64) string {
 	return fmt.Sprintf("%.2fµs", us)
 }
 
+// micro excludes the frame and launch benchmarks, whose async work makes
+// their allocation counts vary run to run.
+func micro(n string) bool { return !strings.HasPrefix(n, "Frame") && !strings.HasPrefix(n, "Launch/") }
+
 func names(r *run, prefix string) []string {
 	var out []string
 	for _, n := range r.order {
@@ -309,7 +313,7 @@ func write(w io.Writer, base, head *run, baseRef, headRef string, compared bool)
 	var allocRows []string
 	for _, n := range head.order {
 		c := compare(base, head, n, "allocs/op")
-		if math.IsNaN(c.head) {
+		if !micro(n) || math.IsNaN(c.head) {
 			continue
 		}
 		if !compared || (c.have && c.base != 0 && math.Abs(c.delta()) >= 0.02) {
@@ -318,7 +322,7 @@ func write(w io.Writer, base, head *run, baseRef, headRef string, compared bool)
 	}
 	if compared {
 		if len(allocRows) == 0 {
-			row("| allocs/op · all %d benchmarks | unchanged within 2%% | | |\n", len(head.order))
+			row("| allocs/op · micro benchmarks | unchanged within 2%% | | |\n")
 		}
 		for _, r := range allocRows {
 			row("%s", r)
@@ -421,14 +425,19 @@ func write(w io.Writer, base, head *run, baseRef, headRef string, compared bool)
 			c    cmp
 		}
 		var changes []change
+		total := 0
 		for _, n := range head.order {
+			if !micro(n) {
+				continue
+			}
+			total++
 			c := compare(base, head, n, "ns/op")
 			if c.have && c.p < alpha && math.Abs(c.delta()) >= 0.03 {
 				changes = append(changes, change{n, c})
 			}
 		}
 		sort.Slice(changes, func(i, j int) bool { return math.Abs(changes[i].c.delta()) > math.Abs(changes[j].c.delta()) })
-		row("**Micro benchmarks**: %d of %d changed significantly (p<%.2f, ≥3%%)\n\n", len(changes), len(head.order), alpha)
+		row("**Micro benchmarks**: %d of %d changed significantly (p<%.2f, ≥3%%)\n\n", len(changes), total, alpha)
 		if len(changes) > 0 {
 			p("| benchmark | %s | %s | Δ |\n|---|---|---|---|\n", baseRef, headRef)
 			for i, ch := range changes {
@@ -444,7 +453,7 @@ func write(w io.Writer, base, head *run, baseRef, headRef string, compared bool)
 	if !compared {
 		p("**Micro benchmarks**\n\n| benchmark | time/op | allocs/op |\n|---|---|---|\n")
 		for _, n := range head.order {
-			if strings.HasPrefix(n, "Frame") || strings.HasPrefix(n, "Launch/") {
+			if !micro(n) {
 				continue
 			}
 			u := head.samples[n]
