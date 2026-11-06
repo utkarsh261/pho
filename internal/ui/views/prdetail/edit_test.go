@@ -124,7 +124,7 @@ func newEditModel() *PRDetailModel {
 func TestEditKeyShowsPrompt(t *testing.T) {
 	t.Parallel()
 	m := newEditModel()
-	m, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	m, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'E'}})
 	if m.editPrompt == "" {
 		t.Fatal("expected editPrompt to be set")
 	}
@@ -138,7 +138,7 @@ func TestEditKeyBlockedDuringMerge(t *testing.T) {
 	t.Parallel()
 	m := newEditModel()
 	m.mergeStep = mergeStepSelectMethod
-	m, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	m, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'E'}})
 	if m.editPrompt != "" {
 		t.Fatal("expected editPrompt to be empty during merge")
 	}
@@ -149,7 +149,7 @@ func TestEditKeyBlockedDuringClose(t *testing.T) {
 	m := newEditModel()
 	m.closeStep = closeStepConfirm
 	m.closeTarget = "CLOSE"
-	m, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	m, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'E'}})
 	if m.editPrompt != "" {
 		t.Fatal("expected editPrompt to be empty during close")
 	}
@@ -306,7 +306,7 @@ func TestEditPostingBlocksOtherActions(t *testing.T) {
 	t.Parallel()
 	m := newEditModel()
 	m.editPosting = true
-	m, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	m, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'E'}})
 	if m.editPrompt != "" {
 		t.Fatal("expected editPrompt empty while posting")
 	}

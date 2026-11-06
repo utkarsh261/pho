@@ -399,6 +399,7 @@ func (m *PRDetailModel) switchTab(tab ContentTab) {
 	if m.activeTab == tab {
 		return
 	}
+	m.cancelEditorLookup()
 	// Save current scroll.
 	switch m.activeTab {
 	case TabDescription:

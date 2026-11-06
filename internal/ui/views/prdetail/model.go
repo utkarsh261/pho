@@ -253,6 +253,18 @@ type PRDetailModel struct {
 	checkoutStatus   string
 	checkoutErr      string
 
+	// Open-in-editor state (editor.go). editorReq is the in-flight HEAD
+	// lookup; pendingEditor waits on a checkout started from the prompt.
+	editorSeq    uint64
+	editorReq    uint64
+	editorTarget editorTarget
+	editorPrompt string
+	editorNotice string
+	// editorCanCheckout: the prompt offers b (PR mode, before any checkout).
+	editorCanCheckout bool
+	pendingEditor     *editorTarget
+	editorLaunching   bool
+
 	// Edit title/body state
 	editPrompt  string // "Edit: [t]itle or [b]ody?" when waiting for choice
 	editPosting bool
@@ -824,12 +836,11 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		return m, tea.Batch(spinCmd, composeCmd, cmds.ApprovePRCmd(m.PRService, m.Repo, m.Summary.ID, msg.body))
 
 	case openEditorComposeMsg:
-		editor := os.Getenv("VISUAL")
-		if editor == "" {
-			editor = os.Getenv("EDITOR")
-		}
-		if editor == "" {
-			editor = "vi"
+		argv, err := resolveEditor(os.Getenv)
+		if err != nil {
+			m.compose.status = composeStatusError
+			m.compose.errMsg = "Can't parse " + err.Error()
+			return m, tea.Batch(spinCmd, composeCmd)
 		}
 		tmpFile, err := os.CreateTemp("", "pho-comment-*.md")
 		if err != nil {
@@ -843,7 +854,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		}
 		tmpFile.Close()
 		return m, tea.Batch(spinCmd, composeCmd, tea.ExecProcess(
-			exec.Command(editor, tmpPath),
+			exec.Command(argv[0], append(argv[1:], tmpPath)...),
 			func(err error) tea.Msg { return editorDoneMsg{path: tmpPath, err: err} },
 		))
 
@@ -1115,6 +1126,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 
 	case checkoutResultMsg:
 		m.checkoutInFlight = false
+		editorCmd := m.resumeEditorAfterCheckout(msg.err == nil, msg.stashed)
 		if msg.err != nil {
 			m.checkoutErr = msg.err.Error()
 			return m, tea.Batch(spinCmd, composeCmd, tea.Tick(3*time.Second, func(time.Time) tea.Msg {
@@ -1125,9 +1137,16 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		if msg.stashed {
 			m.checkoutStatus += " (changes stashed — git stash pop to restore)"
 		}
-		return m, tea.Batch(spinCmd, composeCmd, tea.Tick(2*time.Second, func(time.Time) tea.Msg {
+		return m, tea.Batch(spinCmd, composeCmd, editorCmd, tea.Tick(2*time.Second, func(time.Time) tea.Msg {
 			return checkoutClearMsg{}
 		}))
+
+	case localHeadMsg:
+		return m, tea.Batch(spinCmd, composeCmd, m.handleLocalHead(msg))
+
+	case editorExitedMsg:
+		m.handleEditorExited(msg)
+		return m, tea.Batch(spinCmd, composeCmd)
 
 	case checkoutClearMsg:
 		m.checkoutStatus = ""

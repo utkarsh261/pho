@@ -41,6 +41,10 @@ func (m *PRDetailModel) StatusHint() string {
 	if hint := m.ciRerunPrompt(); hint != "" {
 		return hint
 	}
+	// The prompt takes the next key, so nothing may hide it.
+	if m.editorPrompt != "" {
+		return m.editorPrompt
+	}
 	switch m.mergeStep {
 	case mergeStepSelectMethod:
 		return fmt.Sprintf("Merge #%d: [s]quash [r]ebase [M]erge [esc]cancel", m.Summary.Number)
@@ -287,6 +291,7 @@ func (m *PRDetailModel) isAnyActionInProgress() bool {
 		m.checkoutInFlight ||
 		m.editPosting ||
 		m.editPrompt != "" ||
+		m.editorPrompt != "" ||
 		m.confirmDiscardAll ||
 		m.ciRerun.confirm ||
 		m.pendingToggle.active() ||

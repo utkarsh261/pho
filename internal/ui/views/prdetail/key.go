@@ -116,6 +116,12 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		return m, cmd
 	}
 
+	if m.editorPrompt != "" {
+		cmd := m.handleEditorPromptKey(msg)
+		m.LastKey = ""
+		return m, cmd
+	}
+
 	// Edit prompt state — waiting for t/b/esc.
 	if m.editPrompt != "" {
 		switch msg.String() {
@@ -190,6 +196,11 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 		}
 		return m, m.handleCloseStart()
 	case "e":
+		if m.isInDiffSection() {
+			return m, m.handleOpenInEditor()
+		}
+		return m, nil
+	case "E":
 		if m.CommitMode {
 			return m, nil
 		}
