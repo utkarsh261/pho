@@ -255,12 +255,15 @@ type PRDetailModel struct {
 
 	// Open-in-editor state (editor.go). editorReq is the in-flight HEAD
 	// lookup; pendingEditor waits on a checkout started from the prompt.
-	editorSeq       uint64
-	editorReq       uint64
-	editorTarget    editorTarget
-	editorPrompt    string
-	pendingEditor   *editorTarget
-	editorLaunching bool
+	editorSeq    uint64
+	editorReq    uint64
+	editorTarget editorTarget
+	editorPrompt string
+	editorNotice string
+	// editorCanCheckout: the prompt offers b (PR mode, before any checkout).
+	editorCanCheckout bool
+	pendingEditor     *editorTarget
+	editorLaunching   bool
 
 	// Edit title/body state
 	editPrompt  string // "Edit: [t]itle or [b]ody?" when waiting for choice
@@ -1123,7 +1126,7 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 
 	case checkoutResultMsg:
 		m.checkoutInFlight = false
-		editorCmd := m.resumeEditorAfterCheckout(msg.err == nil)
+		editorCmd := m.resumeEditorAfterCheckout(msg.err == nil, msg.stashed)
 		if msg.err != nil {
 			m.checkoutErr = msg.err.Error()
 			return m, tea.Batch(spinCmd, composeCmd, tea.Tick(3*time.Second, func(time.Time) tea.Msg {

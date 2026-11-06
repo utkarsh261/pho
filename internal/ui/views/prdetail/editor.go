@@ -29,6 +29,7 @@ type localHeadMsg struct {
 	branch        string
 	err           error
 	afterCheckout bool
+	notice        string // shown after the editor exits, e.g. a stash warning
 }
 
 type editorExitedMsg struct {
@@ -45,10 +46,13 @@ func (m *PRDetailModel) editorWantSHA() string {
 
 // handleOpenInEditor starts opening the diff line under the cursor in $EDITOR.
 // It first checks that the local checkout is on the commit being viewed.
+// A new press supersedes any earlier lookup or pending checkout, whose
+// result may never arrive if the user left the view meanwhile.
 func (m *PRDetailModel) handleOpenInEditor() tea.Cmd {
-	if m.editorReq != 0 || m.editorLaunching || m.pendingEditor != nil || m.isAnyActionInProgress() {
+	if m.editorLaunching || m.isAnyActionInProgress() {
 		return nil
 	}
+	m.pendingEditor = nil
 	if m.Repo.LocalPath == "" {
 		m.diffNotice = "Not a local repo · can't open in editor"
 		return nil
@@ -58,12 +62,20 @@ func (m *PRDetailModel) handleOpenInEditor() tea.Cmd {
 		m.diffNotice = notice
 		return nil
 	}
-	return m.lookupLocalHead(t, false)
+	return m.lookupLocalHead(t, false, "")
 }
 
 func (m *PRDetailModel) editorTargetAtCursor() (editorTarget, string, bool) {
+	if m.DiffLoading {
+		return editorTarget{}, "Diff still loading", false
+	}
 	if m.Diff == nil || len(m.navigableLines) == 0 {
 		return editorTarget{}, "No diff line to open", false
+	}
+	// Line numbers come from m.Diff; they only match the head we check
+	// against if the diff was loaded for it.
+	if !m.CommitMode && m.Diff.HeadSHA != "" && m.Summary.HeadRefOID != "" && m.Diff.HeadSHA != m.Summary.HeadRefOID {
+		return editorTarget{}, "Diff is out of date · R: refresh", false
 	}
 	m.ensureDiffCursor()
 	if !m.validDiffCursor() {
@@ -110,7 +122,7 @@ func newLineNear(h *model.DiffHunk, li int) int {
 	return max(h.NewStart, 1)
 }
 
-func (m *PRDetailModel) lookupLocalHead(t editorTarget, afterCheckout bool) tea.Cmd {
+func (m *PRDetailModel) lookupLocalHead(t editorTarget, afterCheckout bool, notice string) tea.Cmd {
 	m.editorSeq++
 	m.editorReq = m.editorSeq
 	m.editorTarget = t
@@ -118,30 +130,40 @@ func (m *PRDetailModel) lookupLocalHead(t editorTarget, afterCheckout bool) tea.
 	return func() tea.Msg {
 		sha, err := gitOutput(t.repoPath, "rev-parse", "HEAD")
 		if err != nil {
-			return localHeadMsg{seq: seq, target: t, err: err, afterCheckout: afterCheckout}
+			return localHeadMsg{seq: seq, target: t, err: err, afterCheckout: afterCheckout, notice: notice}
 		}
 		branch, _ := gitOutput(t.repoPath, "branch", "--show-current")
-		return localHeadMsg{seq: seq, target: t, sha: sha, branch: branch, afterCheckout: afterCheckout}
+		return localHeadMsg{seq: seq, target: t, sha: sha, branch: branch, afterCheckout: afterCheckout, notice: notice}
 	}
 }
 
 func (m *PRDetailModel) handleLocalHead(msg localHeadMsg) tea.Cmd {
-	// A newer press, a tab switch or a reloaded head makes this result stale.
-	if msg.seq != m.editorReq || msg.target != m.editorTarget ||
-		msg.target.repoPath != m.Repo.LocalPath || msg.target.wantSHA != m.editorWantSHA() {
+	// A newer press or a tab switch makes this result stale.
+	if msg.seq != m.editorReq {
 		return nil
 	}
 	m.editorReq = 0
+	// The head was reloaded under the lookup, or the user has since started
+	// something else (compose, merge, …) that the editor must not cover.
+	if msg.target.wantSHA != m.editorWantSHA() || !m.isInDiffSection() ||
+		m.compose.active || m.isAnyActionInProgress() {
+		return nil
+	}
 	if msg.err != nil {
 		m.diffNotice = "Not a git repo · can't open in editor"
 		return nil
 	}
 	// Without a known head SHA there is nothing to compare against.
 	if msg.target.wantSHA == "" || msg.sha == msg.target.wantSHA {
-		return m.launchEditor(msg.target, "")
+		return m.launchEditor(msg.target, msg.notice)
 	}
+	// Line numbers are from the PR head, so opening an older or diverged
+	// local branch would land on the wrong code. Let the user decide.
+	m.editorTarget = msg.target
+	m.editorNotice = msg.notice
 	if msg.afterCheckout {
-		return m.launchEditor(msg.target, "Opened, but local HEAD still differs from PR head")
+		m.editorPrompt = "Checked out, but local HEAD still differs from PR head (git pull?) · o: open anyway · esc"
+		return nil
 	}
 	if m.CommitMode {
 		m.editorPrompt = "Local HEAD differs from this commit · o: open anyway · esc"
@@ -151,16 +173,21 @@ func (m *PRDetailModel) handleLocalHead(msg localHeadMsg) tea.Cmd {
 	if at == "" {
 		at = shortSHA(msg.sha)
 	}
+	m.editorCanCheckout = true
 	m.editorPrompt = fmt.Sprintf("Local HEAD (%s) differs from PR head · b: checkout & open · o: open anyway · esc", at)
 	return nil
 }
 
 func (m *PRDetailModel) handleEditorPromptKey(msg tea.KeyMsg) tea.Cmd {
 	t := m.editorTarget
+	notice := m.editorNotice
+	canCheckout := m.editorCanCheckout
 	m.editorPrompt = ""
+	m.editorNotice = ""
+	m.editorCanCheckout = false
 	switch msg.String() {
 	case "b":
-		if m.CommitMode {
+		if !canCheckout {
 			return nil
 		}
 		// The prompt is cleared first: it counts as an action in progress,
@@ -171,12 +198,12 @@ func (m *PRDetailModel) handleEditorPromptKey(msg tea.KeyMsg) tea.Cmd {
 		}
 		return cmd
 	case "o":
-		return m.launchEditor(t, "")
+		return m.launchEditor(t, notice)
 	}
 	return nil
 }
 
-func (m *PRDetailModel) resumeEditorAfterCheckout(ok bool) tea.Cmd {
+func (m *PRDetailModel) resumeEditorAfterCheckout(ok, stashed bool) tea.Cmd {
 	if m.pendingEditor == nil {
 		return nil
 	}
@@ -185,12 +212,21 @@ func (m *PRDetailModel) resumeEditorAfterCheckout(ok bool) tea.Cmd {
 	if !ok {
 		return nil
 	}
-	return m.lookupLocalHead(t, true)
+	// The checkout status line is gone by the time the editor exits, so
+	// repeat the stash warning then.
+	notice := ""
+	if stashed {
+		notice = "Your local changes were stashed for the checkout · git stash pop to restore"
+	}
+	return m.lookupLocalHead(t, true, notice)
 }
 
 func (m *PRDetailModel) cancelEditorLookup() {
 	m.editorReq = 0
 	m.editorPrompt = ""
+	m.editorNotice = ""
+	m.editorCanCheckout = false
+	m.pendingEditor = nil
 }
 
 func (m *PRDetailModel) launchEditor(t editorTarget, notice string) tea.Cmd {
@@ -227,8 +263,16 @@ func (m *PRDetailModel) handleEditorExited(msg editorExitedMsg) {
 func resolveEditor(getenv func(string) string) ([]string, error) {
 	for _, k := range []string{"VISUAL", "EDITOR"} {
 		v := getenv(k)
-		if strings.TrimSpace(v) == "" {
+		v = strings.TrimSpace(v)
+		if v == "" {
 			continue
+		}
+		// An unquoted path with spaces that names a real program is taken
+		// whole, as pho did before it split $EDITOR into words.
+		if strings.ContainsAny(v, " \t") {
+			if _, err := exec.LookPath(v); err == nil {
+				return []string{v}, nil
+			}
 		}
 		argv, err := splitShellWords(v)
 		if err != nil {

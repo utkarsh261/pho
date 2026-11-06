@@ -188,10 +188,12 @@ func TestOpenInEditorHeadMatchLaunches(t *testing.T) {
 	if msg.target.relPath != "a.go" || msg.target.line != 1 {
 		t.Fatalf("target = %+v, want a.go:1", msg.target)
 	}
-	if pressE(m) != nil {
-		t.Fatal("a second e while the lookup is in flight must be ignored")
+	// A second press supersedes the first; only the newest result launches.
+	newer := runLookup(t, pressE(m))
+	if cmd := m.handleLocalHead(msg); cmd != nil || m.editorLaunching {
+		t.Fatal("the superseded result must not launch")
 	}
-	if cmd := m.handleLocalHead(msg); cmd == nil || !m.editorLaunching {
+	if cmd := m.handleLocalHead(newer); cmd == nil || !m.editorLaunching {
 		t.Fatal("matching HEAD should launch the editor")
 	}
 	if pressE(m) != nil {
@@ -341,25 +343,38 @@ func TestOpenInEditorCheckoutFromPrompt(t *testing.T) {
 		t.Fatal("failed checkout should drop the pending editor")
 	}
 
-	// Retry; checkout succeeds but HEAD still differs.
+	// Retry; checkout succeeds (stashing) but HEAD still differs, e.g. the
+	// local branch is behind origin.
+	m.Update(checkoutClearMsg{})
 	m.handleLocalHead(runLookup(t, pressE(m)))
 	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}})
 	m.checkoutInFlight = false
-	lookup := m.resumeEditorAfterCheckout(true)
+	lookup := m.resumeEditorAfterCheckout(true, true)
 	if m.pendingEditor != nil {
 		t.Fatal("pending editor should be consumed")
 	}
 	msg := runLookup(t, lookup)
-	if !msg.afterCheckout {
-		t.Fatal("lookup after checkout should be marked")
+	if !msg.afterCheckout || !strings.Contains(msg.notice, "stashed") {
+		t.Fatalf("lookup after checkout = %+v", msg)
 	}
-	if cmd := m.handleLocalHead(msg); cmd == nil || !m.editorLaunching {
-		t.Fatal("after checkout the editor opens even if HEAD differs")
+	if cmd := m.handleLocalHead(msg); cmd != nil || m.editorLaunching {
+		t.Fatal("HEAD still differing after checkout must prompt, not open old code")
 	}
-	m.Update(checkoutClearMsg{})
-	m.handleEditorExited(editorExitedMsg{notice: "Opened, but local HEAD still differs from PR head"})
-	if !strings.Contains(m.StatusHint(), "still differs") {
-		t.Fatalf("hint = %q", m.StatusHint())
+	hint := m.StatusHint()
+	if !strings.Contains(hint, "still differs") || strings.Contains(hint, "b:") {
+		t.Fatalf("hint = %q", hint)
+	}
+	_, cmd = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}})
+	if cmd != nil || m.checkoutInFlight {
+		t.Fatal("b must not check out again from the after-checkout prompt")
+	}
+	m.handleLocalHead(runLookup(t, m.lookupLocalHead(msg.target, true, msg.notice)))
+	if _, cmd = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'o'}}); cmd == nil || !m.editorLaunching {
+		t.Fatal("o should open anyway")
+	}
+	m.handleEditorExited(editorExitedMsg{notice: msg.notice})
+	if !strings.Contains(m.StatusHint(), "stash pop") {
+		t.Fatalf("stash warning should show after the editor exits, hint = %q", m.StatusHint())
 	}
 }
 
@@ -395,5 +410,115 @@ func TestOpenInEditorMissingFile(t *testing.T) {
 	}
 	if !strings.Contains(m.StatusHint(), "a.go not in local checkout") {
 		t.Fatalf("hint = %q", m.StatusHint())
+	}
+}
+
+func TestOpenInEditorStaleHeadDoesNotWedge(t *testing.T) {
+	t.Parallel()
+	dir, sha := makeEditorRepo(t)
+	m := makeEditorModel(t, sha)
+	m.Repo.LocalPath = dir
+	msg := runLookup(t, pressE(m))
+	m.Summary.HeadRefOID = "0000000"
+	m.Diff.HeadSHA = ""
+	m.handleLocalHead(msg)
+	if m.editorReq != 0 {
+		t.Fatal("a dropped result must still finish the request")
+	}
+	if pressE(m) == nil {
+		t.Fatal("e must keep working after a dropped result")
+	}
+}
+
+func TestOpenInEditorLostResultDoesNotWedge(t *testing.T) {
+	t.Parallel()
+	m := makeEditorModel(t, "abc")
+	m.Repo.LocalPath = "/repo"
+	pressE(m) // result never delivered, e.g. the user left the view
+	tgt := editorTarget{relPath: "a.go"}
+	m.pendingEditor = &tgt // checkout result lost too
+	if pressE(m) == nil || m.pendingEditor != nil {
+		t.Fatal("a new press should replace the lost request")
+	}
+}
+
+func TestOpenInEditorPromptOutranksErrors(t *testing.T) {
+	t.Parallel()
+	m := makeEditorModel(t, "abc")
+	m.checkoutErr = "old checkout error"
+	m.mergeErr = "old merge error"
+	m.editorPrompt = "Local HEAD (main) differs from PR head · b: checkout & open · o: open anyway · esc"
+	if got := m.StatusHint(); got != m.editorPrompt {
+		t.Fatalf("hint = %q, want the prompt", got)
+	}
+}
+
+func TestOpenInEditorTabSwitchDropsPendingCheckout(t *testing.T) {
+	t.Parallel()
+	dir, sha := makeEditorRepo(t)
+	m := makeEditorModel(t, sha)
+	m.Repo.LocalPath = dir
+	tgt, _, _ := m.editorTargetAtCursor()
+	m.pendingEditor = &tgt
+	m.checkoutInFlight = true
+	m.switchTab(TabDescription)
+	if m.pendingEditor != nil {
+		t.Fatal("leaving the diff should drop the pending open")
+	}
+	if cmd := m.resumeEditorAfterCheckout(true, false); cmd != nil {
+		t.Fatal("no editor should open after the checkout")
+	}
+}
+
+func TestOpenInEditorDroppedWhenOtherActionStarted(t *testing.T) {
+	t.Parallel()
+	dir, sha := makeEditorRepo(t)
+	for name, start := range map[string]func(m *PRDetailModel){
+		"compose": func(m *PRDetailModel) { m.compose.Open(composeModeNew, commentEntry{}, 0) },
+		"merge":   func(m *PRDetailModel) { m.mergeStep = mergeStepSelectMethod },
+	} {
+		m := makeEditorModel(t, sha)
+		m.Repo.LocalPath = dir
+		msg := runLookup(t, pressE(m))
+		start(m)
+		if cmd := m.handleLocalHead(msg); cmd != nil || m.editorLaunching || m.editorPrompt != "" {
+			t.Fatalf("%s: editor must not open over another action", name)
+		}
+	}
+}
+
+func TestOpenInEditorRefusesOutdatedDiff(t *testing.T) {
+	t.Parallel()
+	m := makeEditorModel(t, "new")
+	m.Repo.LocalPath = "/repo"
+	m.Diff.HeadSHA = "old"
+	if pressE(m) != nil || !strings.Contains(m.StatusHint(), "out of date") {
+		t.Fatalf("hint = %q", m.StatusHint())
+	}
+	m.Diff.HeadSHA = "new"
+	m.DiffLoading = true
+	if pressE(m) != nil || !strings.Contains(m.StatusHint(), "still loading") {
+		t.Fatalf("hint = %q", m.StatusHint())
+	}
+}
+
+func TestResolveEditorUnquotedPathWithSpaces(t *testing.T) {
+	t.Parallel()
+	dir := filepath.Join(t.TempDir(), "My Editor")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(dir, "ed")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got, err := resolveEditor(func(k string) string {
+		if k == "EDITOR" {
+			return bin
+		}
+		return ""
+	})
+	if err != nil || !reflect.DeepEqual(got, []string{bin}) {
+		t.Fatalf("got %q, %v; want the whole path", got, err)
 	}
 }
