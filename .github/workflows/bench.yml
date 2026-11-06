@@ -10,9 +10,7 @@ concurrency:
   group: bench-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
 
 jobs:
   bench:
@@ -20,6 +18,9 @@ jobs:
     # numbers are reported, never enforced
     continue-on-error: true
     timeout-minutes: 45
+    permissions:
+      contents: read
+      pull-requests: write
     env:
       GOMAXPROCS: "2"
       COUNT: "6"
@@ -28,6 +29,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # the PR's code runs in this job; keep the token out of .git/config
+          persist-credentials: false
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -57,11 +60,33 @@ jobs:
             gh pr comment "$PR" --body-file body.md
           fi
 
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bench-out
+          path: |
+            bench-out/*.txt
+            bench-out/head.json
+
+  # Only this job can write to the repo, and it runs no benchmark code.
+  history:
+    needs: bench
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: bench-out
+          path: ${{ runner.temp }}/bench-out
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Record history
-        if: github.event_name == 'push'
         run: |
           sha=$(git rev-parse --short HEAD)
-          cp bench-out/head.json "$RUNNER_TEMP/$sha.json"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if git fetch origin bench-data; then
@@ -70,13 +95,7 @@ jobs:
             git switch --orphan bench-data
           fi
           mkdir -p runs
-          cp "$RUNNER_TEMP/$sha.json" "runs/$(date -u +%Y%m%dT%H%M%SZ)-$sha.json"
+          cp "$RUNNER_TEMP/bench-out/head.json" "runs/$(date -u +%Y%m%dT%H%M%SZ)-$sha.json"
           git add runs
           git commit -m "Benchmarks for $sha"
           git push origin bench-data
-
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: bench-out
-          path: bench-out/*.txt

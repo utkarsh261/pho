@@ -41,5 +41,6 @@ bench-live repo="utkarsh261/pho-large-diff-scratch" pr="1" runs="5":
 
 # CPU profile one benchmark and open it in pprof, e.g. just profile FrameScroll ./internal/ui/app
 profile name pkg="./internal/ui/app":
+    mkdir -p bench-out
     go test -run '^$' -bench '{{name}}' -benchtime 2s -cpuprofile bench-out/cpu.pprof -o bench-out/profile.test {{pkg}}
     go tool pprof -http=: bench-out/profile.test bench-out/cpu.pprof
