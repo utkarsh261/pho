@@ -168,5 +168,17 @@ just test-race  # go test -race -count=1 ./...
 just vet        # go vet ./...
 ```
 
+### Benchmarks
+
+```
+just bench-quick           # micro benchmarks, about 30s
+just bench                 # everything: frames, launches, scaling, heap, soak
+just bench-compare main    # this tree against main, interleaved runs
+just bench-live            # `pho pr` against real GitHub, cold and warm
+just profile FrameScroll   # CPU profile one benchmark in pprof
+```
+
+Reports land in `bench-out/report.md`. Frame benchmarks time each keypress to a settled frame; launch benchmarks run the real program against an in-process GitHub (`internal/testutil/fakegh`) at local, 40ms and 250ms round trips. Every PR gets the comparison against main as a comment; it never fails the build. Set `PHO_CPUPROFILE`, `PHO_MEMPROFILE` or `PHO_TRACE` to a path to profile a real session.
+
 ## Why
 So that i can build it exactly how i want a tool which i use on a regular basis to be. 

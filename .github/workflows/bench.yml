@@ -1,0 +1,101 @@
+name: Bench
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: bench-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    # numbers are reported, never enforced
+    continue-on-error: true
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      GOMAXPROCS: "2"
+      COUNT: "6"
+      BENCHTIME: 300ms
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # the PR's code runs in this job; keep the token out of .git/config
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Compare with base
+        if: github.event_name == 'pull_request'
+        run: scripts/bench/compare.sh --base origin/${{ github.base_ref }}
+
+      - name: Benchmark main
+        if: github.event_name == 'push'
+        run: scripts/bench/compare.sh
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          marker='<!-- pho-bench -->'
+          { echo "$marker"; head -c 60000 bench-out/report.md; } > body.md
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+            --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -1)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@body.md >/dev/null
+          else
+            gh pr comment "$PR" --body-file body.md
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bench-out
+          path: |
+            bench-out/*.txt
+            bench-out/head.json
+
+  # Only this job can write to the repo, and it runs no benchmark code.
+  history:
+    needs: bench
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: bench-out
+          path: ${{ runner.temp }}/bench-out
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Record history
+        run: |
+          sha=$(git rev-parse --short HEAD)
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git fetch origin bench-data; then
+            git switch bench-data
+          else
+            git switch --orphan bench-data
+          fi
+          mkdir -p runs
+          cp "$RUNNER_TEMP/bench-out/head.json" "runs/$(date -u +%Y%m%dT%H%M%SZ)-$sha.json"
+          git add runs
+          git commit -m "Benchmarks for $sha"
+          git push origin bench-data
