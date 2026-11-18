@@ -39,6 +39,9 @@ type rawConfig struct {
 		Pin     []string `toml:"pin"`
 		Exclude []string `toml:"exclude"`
 	} `toml:"repos"`
+	Hosts struct {
+		Aliases map[string]string `toml:"aliases"`
+	} `toml:"hosts"`
 	Dashboard struct {
 		DefaultTab  string `toml:"default_tab"`
 		RecentHours int    `toml:"recent_hours"`
@@ -84,6 +87,11 @@ type Config struct {
 	Repos struct {
 		Pin     []string
 		Exclude []string
+	}
+	Hosts struct {
+		// Aliases maps a remote's host (e.g. an SSH config alias) to the
+		// GitHub host pho should talk to; keys and values are lowercase.
+		Aliases map[string]string
 	}
 	Dashboard struct {
 		DefaultTab  string
@@ -274,6 +282,7 @@ func Load(path string) (Config, error) {
 	cfg.Discovery.ExcludeDirs = raw.Discovery.ExcludeDirs
 	cfg.Repos.Pin = raw.Repos.Pin
 	cfg.Repos.Exclude = raw.Repos.Exclude
+	cfg.Hosts.Aliases = normalizeAliases(raw.Hosts.Aliases)
 	cfg.Dashboard.DefaultTab = raw.Dashboard.DefaultTab
 	cfg.Dashboard.RecentHours = raw.Dashboard.RecentHours
 	cfg.Dashboard.MaxPRs = raw.Dashboard.MaxPRs
@@ -318,4 +327,17 @@ func Load(path string) (Config, error) {
 	cfg.Logging.File = expandTilde(cfg.Logging.File)
 
 	return cfg, nil
+}
+
+func normalizeAliases(raw map[string]string) map[string]string {
+	out := make(map[string]string, len(raw))
+	for alias, host := range raw {
+		alias = strings.ToLower(strings.TrimSpace(alias))
+		host = strings.ToLower(strings.TrimSpace(host))
+		if alias == "" || host == "" {
+			continue
+		}
+		out[alias] = host
+	}
+	return out
 }

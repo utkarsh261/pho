@@ -373,6 +373,9 @@ func queryGraphQL[T any](c *Client, ctx context.Context, host string, build func
 	resp, err := doGraphQLQuery[T](c, ctx, profile, query, vars)
 	if err != nil {
 		c.log.Error("graphql request failed", "host", host, "graphql_url", profile.GraphQLURL, "err", err)
+		if !c.hasHost(host) {
+			err = fmt.Errorf("gh is not logged in to %s (for an SSH alias, map it under [hosts.aliases] in the pho config): %w", host, err)
+		}
 		var zero graphQLResponse[T]
 		return zero, err
 	}
@@ -440,6 +443,13 @@ func doGraphQLQuery[T any](c *Client, ctx context.Context, profile githubpkg.Git
 		return out, fmt.Errorf("decode GraphQL response: %w", err)
 	}
 	return out, nil
+}
+
+func (c *Client) hasHost(host string) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	_, ok := c.hosts[host]
+	return ok
 }
 
 func (c *Client) profileForHost(host string) githubpkg.GitHubHostProfile {

@@ -214,3 +214,98 @@ func writeRepo(t *testing.T, path, remote string, modTime time.Time) {
 		t.Fatalf("chtimes config: %v", err)
 	}
 }
+
+func TestResolveHost(t *testing.T) {
+	t.Parallel()
+
+	sshConfig := map[string]string{
+		"work.github.com": "github.com",
+		"gh443":           "ssh.github.com",
+		"ghe-alias":       "ghe.acme.com",
+	}
+	tests := []struct {
+		name string
+		host string
+		ssh  bool
+		want string
+	}{
+		{"github.com untouched", "github.com", true, "github.com"},
+		{"known enterprise host untouched", "ghe.acme.com", true, "ghe.acme.com"},
+		{"ssh alias", "work.github.com", true, "github.com"},
+		{"ssh alias to enterprise", "ghe-alias", true, "ghe.acme.com"},
+		{"ssh over 443", "gh443", true, "github.com"},
+		{"ssh.github.com remote", "ssh.github.com", true, "github.com"},
+		{"https is never an ssh alias", "work.github.com", false, "work.github.com"},
+		{"config alias wins", "mapped.example", false, "github.com"},
+		{"unknown alias kept", "nowhere", true, "nowhere"},
+		{"option-like host not passed to ssh", "-oproxycommand=x", true, "-oproxycommand=x"},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			svc := New(Config{
+				KnownHosts:  []string{"ghe.acme.com"},
+				HostAliases: map[string]string{"mapped.example": "github.com"},
+			})
+			svc.SSHHostname = func(_ context.Context, alias string) string {
+				if alias[0] == '-' {
+					t.Fatalf("ssh called with %q", alias)
+				}
+				if h, ok := sshConfig[alias]; ok {
+					return h
+				}
+				return alias
+			}
+			if got := svc.resolveHost(context.Background(), tt.host, tt.ssh); got != tt.want {
+				t.Fatalf("resolveHost(%q, ssh=%v) = %q, want %q", tt.host, tt.ssh, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestResolveHost_AsksSSHOncePerAlias(t *testing.T) {
+	svc := New(Config{})
+	calls := 0
+	svc.SSHHostname = func(context.Context, string) string { calls++; return "github.com" }
+	for range 3 {
+		svc.resolveHost(context.Background(), "work.github.com", true)
+	}
+	if calls != 1 {
+		t.Fatalf("ssh asked %d times, want 1", calls)
+	}
+}
+
+func TestIsSSHRemote(t *testing.T) {
+	t.Parallel()
+	for raw, want := range map[string]bool{
+		"git@work.github.com:org/repo.git":       true,
+		"ssh://git@work.github.com/org/repo.git": true,
+		"git+ssh://work.github.com/org/repo.git": true,
+		"https://github.com/org/repo.git":        false,
+		"git://github.com/org/repo.git":          false,
+	} {
+		if got := isSSHRemote(raw); got != want {
+			t.Errorf("isSSHRemote(%q) = %v, want %v", raw, got, want)
+		}
+	}
+}
+
+func TestDiscover_ResolvesSSHAlias(t *testing.T) {
+	root := t.TempDir()
+	writeRepo(t, root, "git@work.github.com:Org/Repo.git", time.Date(2024, 4, 1, 10, 0, 0, 0, time.UTC))
+
+	svc := New(Config{})
+	svc.SSHHostname = func(context.Context, string) string { return "github.com" }
+	repos, err := svc.Discover(context.Background(), root)
+	if err != nil {
+		t.Fatalf("Discover() error = %v", err)
+	}
+	if len(repos) != 1 {
+		t.Fatalf("got %d repos, want 1", len(repos))
+	}
+	got := repos[0]
+	if got.Host != "github.com" || got.ID != "github.com/org/repo" || got.RemoteURL != "git@work.github.com:Org/Repo.git" {
+		t.Fatalf("repo = host %q id %q remote %q", got.Host, got.ID, got.RemoteURL)
+	}
+}
