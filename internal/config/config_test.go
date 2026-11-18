@@ -478,3 +478,23 @@ func TestLoad_UpdatesCheck(t *testing.T) {
 		}
 	})
 }
+
+func TestLoad_HostAliases(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	toml := `
+[hosts.aliases]
+"Work.GitHub.com" = " GitHub.com "
+"empty" = ""
+`
+	if err := os.WriteFile(path, []byte(toml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	want := map[string]string{"work.github.com": "github.com"}
+	if len(cfg.Hosts.Aliases) != len(want) || cfg.Hosts.Aliases["work.github.com"] != "github.com" {
+		t.Fatalf("Hosts.Aliases = %v, want %v", cfg.Hosts.Aliases, want)
+	}
+}

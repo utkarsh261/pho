@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -28,6 +29,10 @@ type DiscoveryService interface {
 type Config struct {
 	Pin     []string
 	Exclude []string
+	// KnownHosts are the hosts gh is logged in to; remotes on them are used as-is.
+	KnownHosts []string
+	// HostAliases maps a remote host to the GitHub host to use instead.
+	HostAliases map[string]string
 }
 
 type Service struct {
@@ -36,13 +41,34 @@ type Service struct {
 	exclude map[string]struct{}
 	cache   map[string][]domain.Repository
 	Log     *pholog.Logger
+
+	knownHosts  map[string]struct{}
+	hostAliases map[string]string
+	hostMu      sync.Mutex
+	sshHosts    map[string]string
+	// SSHHostname returns ssh's HostName for alias, or "" if unknown.
+	SSHHostname func(ctx context.Context, alias string) string
 }
 
 func New(cfg Config) *Service {
+	known := map[string]struct{}{"github.com": {}}
+	for _, h := range cfg.KnownHosts {
+		if h = strings.ToLower(strings.TrimSpace(h)); h != "" {
+			known[h] = struct{}{}
+		}
+	}
+	aliases := make(map[string]string, len(cfg.HostAliases))
+	for alias, host := range cfg.HostAliases {
+		aliases[strings.ToLower(alias)] = strings.ToLower(host)
+	}
 	return &Service{
-		pinned:  normalizeRepoSet(cfg.Pin),
-		exclude: normalizeRepoSet(cfg.Exclude),
-		cache:   make(map[string][]domain.Repository),
+		pinned:      normalizeRepoSet(cfg.Pin),
+		exclude:     normalizeRepoSet(cfg.Exclude),
+		cache:       make(map[string][]domain.Repository),
+		knownHosts:  known,
+		hostAliases: aliases,
+		sshHosts:    make(map[string]string),
+		SSHHostname: sshHostname,
 	}
 }
 
@@ -108,6 +134,11 @@ func (s *Service) scan(ctx context.Context, root string) ([]candidate, error) {
 		repo, ok, err := repoFromPath(dir)
 		if err != nil || !ok {
 			continue // skip unreadable or non-GitHub repos
+		}
+		if host := s.resolveHost(ctx, repo.Host, isSSHRemote(repo.RemoteURL)); host != repo.Host {
+			s.log().Debug("remote host resolved", "remote_host", repo.Host, "host", host, "path", repo.LocalPath)
+			repo.Host = host
+			repo.ID = host + "/" + repo.FullName
 		}
 		key := repo.FullName
 		if _, excluded := s.exclude[key]; excluded {
@@ -502,6 +533,80 @@ func parseRemoteURL(raw string) (host, owner, name string, ok bool) {
 	}
 
 	return "", "", "", false
+}
+
+// resolveHost maps a remote's host to the GitHub host behind it, so a remote
+// like git@work.github.com:org/repo (an ~/.ssh/config alias) reaches the API
+// on github.com.
+func (s *Service) resolveHost(ctx context.Context, host string, ssh bool) string {
+	if mapped, ok := s.hostAliases[host]; ok {
+		return mapped
+	}
+	if _, ok := s.knownHosts[host]; ok || !ssh {
+		return host
+	}
+
+	s.hostMu.Lock()
+	defer s.hostMu.Unlock()
+	if resolved, ok := s.sshHosts[host]; ok {
+		return resolved
+	}
+	resolved := host
+	if s.SSHHostname != nil && validSSHHost(host) {
+		if h := strings.ToLower(strings.TrimSpace(s.SSHHostname(ctx, host))); h != "" {
+			resolved = h
+		}
+	}
+	// GitHub's SSH-over-443 endpoint; the API still lives on github.com.
+	if resolved == "ssh.github.com" {
+		resolved = "github.com"
+	}
+	s.sshHosts[host] = resolved
+	return resolved
+}
+
+func isSSHRemote(raw string) bool {
+	raw = strings.TrimSpace(raw)
+	scheme, _, ok := strings.Cut(raw, "://")
+	if !ok {
+		return strings.Contains(raw, ":") // SCP-like syntax always uses ssh
+	}
+	switch strings.ToLower(scheme) {
+	case "ssh", "git+ssh", "ssh+git":
+		return true
+	}
+	return false
+}
+
+// validSSHHost rejects anything ssh could read as an option or that no
+// ~/.ssh/config Host pattern would name; the value comes from a repo's config.
+func validSSHHost(host string) bool {
+	if host == "" || host[0] == '-' {
+		return false
+	}
+	for _, r := range host {
+		if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '.' || r == '-' || r == '_') {
+			return false
+		}
+	}
+	return true
+}
+
+// sshHostname asks ssh how it would expand alias; ssh -G prints the resolved
+// config without connecting.
+func sshHostname(ctx context.Context, alias string) string {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "ssh", "-G", alias).Output()
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if v, ok := strings.CutPrefix(line, "hostname "); ok {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
 }
 
 func splitRemotePath(host, p string) (string, string, string, bool) {

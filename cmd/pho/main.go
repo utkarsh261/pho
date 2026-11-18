@@ -383,9 +383,15 @@ func buildModel(l launch) *app.Model {
 	cacheDone()
 
 	wireDone := l.logger.Timer("service wiring")
+	knownHosts := make([]string, 0, len(l.profiles))
+	for _, p := range l.profiles {
+		knownHosts = append(knownHosts, p.Host)
+	}
 	discoverySvc := discovery.New(discovery.Config{
-		Pin:     l.cfg.Repos.Pin,
-		Exclude: l.cfg.Repos.Exclude,
+		Pin:         l.cfg.Repos.Pin,
+		Exclude:     l.cfg.Repos.Exclude,
+		KnownHosts:  knownHosts,
+		HostAliases: l.cfg.Hosts.Aliases,
 	})
 	discoverySvc.Log = l.logger
 	dashboardSvc := dashboard.NewService(coordinator, ghClient)

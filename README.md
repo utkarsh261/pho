@@ -53,7 +53,7 @@ echo 'export PATH="$(go env GOPATH)/bin:$PATH"' >> ~/.zshrc
 ## Requirements
 
 - Git
-- [GitHub CLI (`gh`)](https://cli.github.com), logged in with `gh auth login`. pho reuses its token, including for GitHub Enterprise hosts.
+- [GitHub CLI (`gh`)](https://cli.github.com), logged in with `gh auth login`. pho reuses its token, including for GitHub Enterprise hosts. Remotes that use an `~/.ssh/config` alias (`git@work.github.com:org/repo`) resolve to the real host through `ssh -G`.
 - Go 1.25+, only if you install with `go install` or build from source
 
 ## Usage
@@ -96,6 +96,9 @@ pho reads `$XDG_CONFIG_HOME/pho/config.toml`, which defaults to `~/.config/pho/c
 [repos]
 pin = []                   # "owner/repo" entries to list first
 exclude = []               # "owner/repo" entries to hide
+
+[hosts.aliases]            # remote host = GitHub host, for remotes ssh can't explain
+# "work.github.com" = "github.com"
 
 [dashboard]
 max_prs = 300              # open PRs the All tab loads at most
