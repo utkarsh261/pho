@@ -47,6 +47,9 @@ type Context struct {
 	// HasLastReview is set when the viewer has reviewed the PR, so s can
 	// show the changes since. Only meaningful when View == PRDetail.
 	HasLastReview bool
+	// Custom lists the config's [[keybindings]]; not shown in commit detail,
+	// where they don't run.
+	Custom []Binding
 }
 
 // Model is the keymap overlay state.
@@ -294,14 +297,21 @@ func (m Model) contentLinesPlain(innerW int) []string {
 
 // BuildBindings returns contextual binding groups for the given context.
 func BuildBindings(ctx Context) []Group {
+	var groups []Group
 	switch ctx.View {
 	case domain.PrimaryViewPRDetail:
-		return buildPRDetailBindings(ctx)
+		groups = buildPRDetailBindings(ctx)
 	case domain.PrimaryViewCommitDetail:
 		return buildCommitDetailBindings()
 	default:
-		return buildDashboardBindings(ctx)
+		groups = buildDashboardBindings(ctx)
 	}
+	// First: the box clips at the bottom on short terminals, and these are
+	// keys the user set up and came to look for.
+	if len(ctx.Custom) > 0 {
+		groups = append([]Group{{Name: "Custom", Bindings: ctx.Custom}}, groups...)
+	}
+	return groups
 }
 
 func buildDashboardBindings(ctx Context) []Group {

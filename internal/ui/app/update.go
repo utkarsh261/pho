@@ -140,12 +140,14 @@ func (m *Model) updateNotice() string {
 }
 
 // notice joins the announcement and the update notice. An upgrade's result
-// goes first, so a narrow status bar cuts the announcement instead.
+// goes first, so a narrow status bar cuts the announcement instead. A
+// custom key's answer goes before both: it replies to the last key.
 func (m *Model) notice() string {
 	parts := []string{m.announcement(), m.updateNotice()}
 	if m.updateResult != "" {
 		parts[0], parts[1] = parts[1], parts[0]
 	}
+	parts = append([]string{m.customNotice}, parts...)
 	var out []string
 	for _, p := range parts {
 		if p != "" {

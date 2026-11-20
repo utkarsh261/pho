@@ -90,6 +90,21 @@ func New(opts Options) *Server {
 // Repos are the repositories the server knows, for building a discovery root.
 func (s *Server) Repos() []domain.Repository { return s.repos }
 
+// PRs are the open PRs the server serves for repo.
+func (s *Server) PRs(repo string) []domain.PullRequestSummary {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]domain.PullRequestSummary(nil), s.prs[repo]...)
+}
+
+// EditPRs changes the PRs served for repo, e.g. to give them hostile
+// branch names.
+func (s *Server) EditPRs(repo string, edit func(prs []domain.PullRequestSummary)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	edit(s.prs[repo])
+}
+
 // Profile is an authenticated host pointing at this server.
 func (s *Server) Profile() githubpkg.GitHubHostProfile {
 	return githubpkg.GitHubHostProfile{
@@ -316,6 +331,7 @@ func (s *Server) previewFor(repo string, number int) any {
 	for _, p := range s.prs[repo] {
 		if p.Number == number {
 			out["title"], out["headRefName"], out["headRefOid"], out["baseRefName"] = p.Title, p.HeadRefName, p.HeadRefOID, p.BaseRefName
+			out["author"] = map[string]any{"login": p.Author}
 		}
 	}
 	return map[string]any{"repository": map[string]any{"nameWithOwner": repo, "pullRequest": out}}

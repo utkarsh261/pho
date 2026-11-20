@@ -5,6 +5,10 @@ import (
 	"github.com/utkarsh261/pho/internal/application/cmds"
 )
 
+// CustomKey asks the root model to run the command bound to Key, if any. Only
+// sent for an unbound character in normal mode.
+type CustomKey struct{ Key string }
+
 // handleKey routes keyboard input within the PR detail view.
 func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 	m.diffNotice = ""
@@ -505,6 +509,13 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 			return m, nil
 		}
 		m.scrollHalfPageUp()
+	default:
+		if msg.Type == tea.KeyRunes && len(msg.Runes) == 1 && !msg.Alt && !msg.Paste &&
+			!m.CommitMode && !m.editorLaunching && !m.isAnyActionInProgress() {
+			m.LastKey = ""
+			key := msg.String()
+			return m, func() tea.Msg { return CustomKey{Key: key} }
+		}
 	}
 	if msg.String() != "g" {
 		m.LastKey = ""

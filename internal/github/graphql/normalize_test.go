@@ -97,14 +97,15 @@ func TestNormalizePreviewResponse_Fixture(t *testing.T) {
 	}
 }
 
-func TestNormalizePreviewPreservesHeadRefOID(t *testing.T) {
+func TestNormalizePreviewPreservesRefs(t *testing.T) {
 	t.Parallel()
 	node := model.PullRequestNode{
-		Number:     42,
-		State:      "OPEN",
-		CreatedAt:  "2026-07-30T12:00:00Z",
-		UpdatedAt:  "2026-07-31T12:00:00Z",
-		HeadRefOid: "def456",
+		Number:      42,
+		State:       "OPEN",
+		CreatedAt:   "2026-07-30T12:00:00Z",
+		UpdatedAt:   "2026-07-31T12:00:00Z",
+		HeadRefOid:  "def456",
+		BaseRefName: "main",
 	}
 	snapshot, err := normalizePreviewNode(testRepo(), 42, node)
 	if err != nil {
@@ -112,6 +113,9 @@ func TestNormalizePreviewPreservesHeadRefOID(t *testing.T) {
 	}
 	if snapshot.HeadRefOID != "def456" {
 		t.Fatalf("HeadRefOID=%q, want def456", snapshot.HeadRefOID)
+	}
+	if snapshot.BaseRefName != "main" {
+		t.Fatalf("BaseRefName=%q, want main", snapshot.BaseRefName)
 	}
 }
 

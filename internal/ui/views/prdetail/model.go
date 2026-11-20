@@ -571,6 +571,9 @@ func (m *PRDetailModel) Update(msg tea.Msg) (*PRDetailModel, tea.Cmd) {
 		if m.Summary.HeadRefName == "" {
 			m.Summary.HeadRefName = msg.Detail.HeadRefName
 		}
+		if m.Summary.BaseRefName == "" {
+			m.Summary.BaseRefName = msg.Detail.BaseRefName
+		}
 		m.commentEntriesDirty = true
 		m.reconcileLabels(msg.RequestID)
 

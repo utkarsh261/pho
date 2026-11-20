@@ -118,6 +118,8 @@ func (m *Model) SetActiveRepo(repo string) {
 	m.activeRepo = repo
 }
 
+func (m Model) Query() string { return m.query }
+
 func (m *Model) SetTheme(th *theme.Theme) {
 	m.theme = th
 }

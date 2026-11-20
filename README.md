@@ -21,6 +21,7 @@
 - **CI logs** - `Enter` on a GitHub Actions check shows the end of its job log with error lines highlighted; `n`/`N` jumps between errors and `r` re-runs the job.
 - **Diff navigation** - Line-by-line cursor, `gg`/`G`, `Ctrl+d`/`Ctrl+u`, visual mode for selecting ranges.
 - **Open in your editor** - `e` on a diff line opens the file at that line in `$VISUAL`/`$EDITOR`. If your local checkout isn't on the PR's head commit, pho offers to check out the branch first.
+- **Custom commands** - Bind a key to your own shell command, filled in with the PR's branch, number, clone path and more. See [Custom commands](#custom-commands).
 - **Inline reviews** - Draft inline comments on diff lines, edit, discard, and batch-submit with a review event. Just like Github web UI.
 - **Comments & approvals** - Post top-level comments, review comments, or approve directly.
 - **PR actions** - Edit title/body (`E`), merge (with method selection), close/reopen, and checkout the branch locally.
@@ -129,7 +130,53 @@ level = "info"             # debug, info, warn or error
 [updates]
 whats_new = true           # mention a new version in the status bar after an upgrade
 check = true               # look for a newer release once a day
+
+# Run your own command on a key; see Custom commands below.
+# [[keybindings]]
+# key = "w"
+# command = "git worktree add ../wt/pr-{{.PrNumber}} {{.HeadRefName}}"
 ```
+
+## Custom commands
+
+Bind a key to a shell command in the config. Pressing it on the dashboard runs it for the selected PR; in a PR's detail view, for that PR.
+
+```toml
+[[keybindings]]
+key = "w"
+name = "worktree"   # shown in the ? keymap; the command is shown if left out
+command = "git fetch origin {{.HeadRefName}} && git worktree add ../wt/pr-{{.PrNumber}} FETCH_HEAD"
+
+[[keybindings]]
+key = "i"
+command = "lazygit"
+
+[[keybindings]]
+key = "P"
+name = "tmux window"
+command = "tmux new-window -c {{.RepoPath}} -n pr-{{.PrNumber}}"
+```
+
+`{{.Name}}` fills in a value from the PR:
+
+| Field | Example | Notes |
+|-------|---------|-------|
+| `RepoName` | `owner/repo` | |
+| `RepoPath` | `/home/me/src/repo` | The local clone. A command that uses it doesn't run for a repo pho found no clone of. |
+| `PrNumber` | `123` | |
+| `HeadRefName` | `feature/login` | The PR's branch |
+| `BaseRefName` | `main` | The branch it merges into |
+| `HeadSHA` | `9bb7485…` | The head commit |
+| `Author` | `octocat` | |
+| `URL` | `https://github.com/owner/repo/pull/123` | |
+
+- The key is one character and can't be one pho already uses. Free letters today: `f i p u w A B F I P Q V X Y`, the digits `0 5-9`, and most punctuation. A clash or a typo in a field name stops pho at startup with a message saying which.
+- Values come quoted for the shell, so a branch named `x; rm -rf ~` stays one harmless word. Don't put quotes around `{{…}}` yourself.
+- The command runs with `sh -c` in the repo's clone (or pho's directory without one) and gets the terminal until it exits, so interactive tools such as `lazygit` or `nvim` work. Output printed just before exit is cleared when pho redraws; end with `; read` to keep it on screen.
+- A non-zero exit shows in the status bar.
+- Keys typed into the palette, search, a comment or a prompt stay text and never run a command.
+
+Coming from gh-dash: the fields match its PR fields, plus `HeadSHA` and `URL`. `RepoPath` needs no `repoPaths` map, since pho already knows where each repo is cloned.
 
 ## What's new
 

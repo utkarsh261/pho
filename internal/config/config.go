@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/utkarsh261/pho/internal/customcmd"
 )
 
 // duration is a time.Duration that can be decoded from a TOML string like "5m".
@@ -77,6 +79,11 @@ type rawConfig struct {
 		WhatsNew *bool `toml:"whats_new"`
 		Check    *bool `toml:"check"`
 	} `toml:"updates"`
+	Keybindings []struct {
+		Key     string `toml:"key"`
+		Name    string `toml:"name"`
+		Command string `toml:"command"`
+	} `toml:"keybindings"`
 }
 
 type Config struct {
@@ -131,7 +138,8 @@ type Config struct {
 		WhatsNew bool
 		Check    bool
 	}
-	Paths Paths
+	Keybindings []customcmd.Binding
+	Paths       Paths
 }
 
 type Paths struct {
@@ -309,6 +317,15 @@ func Load(path string) (Config, error) {
 	cfg.Updates.Check = def.Updates.Check
 	if raw.Updates.Check != nil {
 		cfg.Updates.Check = *raw.Updates.Check
+	}
+	bindings := make([]customcmd.Binding, len(raw.Keybindings))
+	for i, b := range raw.Keybindings {
+		bindings[i] = customcmd.Binding{Key: b.Key, Name: b.Name, Command: b.Command}
+	}
+	if cfg.Keybindings, err = customcmd.Parse(bindings); err != nil {
+		def.Cache.Dir = paths.CacheDir
+		def.Logging.File = paths.LogFile
+		return def, fmt.Errorf("config: %s: %w", resolved, err)
 	}
 
 	// Fill zero-value fields with defaults.

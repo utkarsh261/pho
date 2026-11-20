@@ -193,6 +193,7 @@ func normalizePreviewNode(repo domain.Repository, number int, node model.PullReq
 		MergeState:     node.MergeState,
 		HeadRefName:    node.HeadRefName,
 		HeadRefOID:     node.HeadRefOid,
+		BaseRefName:    node.BaseRefName,
 		LatestActivity: previewLatestActivity(repo, node.Number, node.TimelineItems.Nodes),
 	}
 	if len(node.Files.Nodes) > 0 {

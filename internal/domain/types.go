@@ -341,6 +341,7 @@ type PRPreviewSnapshot struct {
 	MergeState     string
 	HeadRefName    string
 	HeadRefOID     string
+	BaseRefName    string
 	Comments       []PreviewComment
 }
 
