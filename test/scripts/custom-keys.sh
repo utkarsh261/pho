@@ -2,7 +2,7 @@
 # End-to-end check of [[keybindings]] custom commands in the real pho binary,
 # against real GitHub, driven through tmux by the run-pho driver.
 #
-#   scripts/e2e/custom-keys.sh [owner/repo]
+#   test/scripts/custom-keys.sh [owner/repo]
 #
 # Needs gh logged in, tmux and go. The repo (default
 # utkarsh261/pho-large-diff-scratch) must have open PRs; nothing on GitHub is
