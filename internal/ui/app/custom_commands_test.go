@@ -192,6 +192,21 @@ func TestCustomKeyInPRDetail(t *testing.T) {
 	}
 }
 
+// `pho pr N` starts from a bare {repo, number}; until the PR loads, its
+// fields would render as ''.
+func TestCustomKeyWaitsForPRToLoad(t *testing.T) {
+	t.Parallel()
+	m, runs := openCustomPRDetail(t, testutil.Repo("acme/alpha"))
+	m.prDetail.Summary = domain.PullRequestSummary{Repo: "acme/alpha", Number: 42}
+	_, _ = m.Update(prdetail.CustomKey{Key: "w"})
+	if len(*runs) != 0 {
+		t.Fatalf("ran before the PR loaded: %v", *runs)
+	}
+	if hint := m.prDetail.StatusHint(); !strings.Contains(hint, "PR still loading") {
+		t.Errorf("hint = %q", hint)
+	}
+}
+
 func TestCustomKeyPRDetailKeyPath(t *testing.T) {
 	t.Parallel()
 	m, runs := openCustomPRDetail(t, testutil.Repo("acme/alpha"))

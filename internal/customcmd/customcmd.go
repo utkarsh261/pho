@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"reflect"
 	"strings"
 	"text/template"
+	"text/template/parse"
 	"unicode"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -50,17 +52,21 @@ type Binding struct {
 	usesRepoPath bool
 }
 
-// Label is how the keymap overlay shows the binding.
+// Label is how the keymap overlay shows the binding, on one line.
 func (b Binding) Label() string {
-	if b.Name != "" {
-		return b.Name
+	s := b.Name
+	if strings.TrimSpace(s) == "" {
+		s = b.Command
 	}
-	return strings.TrimSpace(b.Command)
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // UsesRepoPath reports whether the command refers to {{.RepoPath}}, so it
 // can't run for a repo without a local checkout.
 func (b Binding) UsesRepoPath() bool { return b.usesRepoPath }
+
+// docsURL is where config errors point; Homebrew installs have no docs.
+const docsURL = "https://github.com/utkarsh261/pho/blob/main/docs/custom-commands.md"
 
 // Parse checks the bindings and compiles their templates. Errors name the
 // offending key so a bad config fails at startup, not on a key press.
@@ -70,7 +76,7 @@ func Parse(in []Binding) ([]Binding, error) {
 	for _, b := range in {
 		b, err := parseOne(b, seen)
 		if err != nil {
-			return nil, fmt.Errorf("%w (see README: Custom commands)", err)
+			return nil, fmt.Errorf("%w (see %s)", err, docsURL)
 		}
 		out = append(out, b)
 	}
@@ -88,21 +94,192 @@ func parseOne(b Binding, seen map[string]bool) (Binding, error) {
 	if strings.TrimSpace(b.Command) == "" {
 		return b, fmt.Errorf("keybinding %q: command is empty", b.Key)
 	}
-	t, err := template.New(b.Key).Option("missingkey=error").Parse(b.Command)
+	t, err := template.New(b.Key).Parse(b.Command)
 	if err != nil {
 		return b, fmt.Errorf("keybinding %q: %w", b.Key, err)
 	}
+	// Checked on the parse tree rather than by rendering, so functions
+	// such as slice aren't run on made-up values.
+	fields := map[string]bool{}
+	var badFunc string
+	if len(t.Templates()) > 1 {
+		badFunc = "define"
+	}
+	walk(t.Tree.Root, func(n parse.Node) {
+		fieldsOf(n, fields)
+		if _, ok := n.(*parse.TemplateNode); ok && badFunc == "" {
+			badFunc = "template"
+		}
+		if id, ok := n.(*parse.IdentifierNode); ok && !allowedFuncs[id.Ident] && badFunc == "" {
+			badFunc = id.Ident
+		}
+	})
+	if badFunc != "" {
+		return b, fmt.Errorf("keybinding %q: function %s is not supported; use %s", b.Key, badFunc, allowedFuncList)
+	}
+	for f := range fields {
+		if !dataFields[f] {
+			return b, fmt.Errorf("keybinding %q: unknown field {{.%s}}", b.Key, f)
+		}
+	}
+	if f, ok := quotedField(t.Tree.Root, outside); ok {
+		return b, fmt.Errorf("keybinding %q: {{.%s}} is inside quotes; pho quotes values itself, so drop the quotes around it", b.Key, f)
+	}
 	b.tmpl = t
-	// A zero Data catches unknown fields such as {{.PRNumber}}.
-	if _, err := b.Render(Data{}); err != nil {
-		return b, fmt.Errorf("keybinding %q: %w", b.Key, err)
-	}
-	const probe = "\x00repo-path\x00"
-	var buf bytes.Buffer
-	if err := t.Execute(&buf, Data{RepoPath: probe}); err == nil {
-		b.usesRepoPath = strings.Contains(buf.String(), probe)
-	}
+	b.usesRepoPath = fields["RepoPath"]
 	return b, nil
+}
+
+// allowedFuncs leave values as they are. printf, html, js and urlquery are
+// out: they re-print an already quoted value and can break its quotes.
+const allowedFuncList = "and or not eq ne lt le gt ge len slice"
+
+var allowedFuncs = setOf(allowedFuncList)
+
+var dataFields = func() map[string]bool {
+	m := map[string]bool{}
+	t := reflect.TypeFor[Data]()
+	for i := range t.NumField() {
+		m[t.Field(i).Name] = true
+	}
+	return m
+}()
+
+func walk(n parse.Node, visit func(parse.Node)) {
+	if n == nil || reflect.ValueOf(n).IsNil() {
+		return
+	}
+	visit(n)
+	switch n := n.(type) {
+	case *parse.ListNode:
+		for _, c := range n.Nodes {
+			walk(c, visit)
+		}
+	case *parse.ActionNode:
+		walk(n.Pipe, visit)
+	case *parse.PipeNode:
+		for _, c := range n.Cmds {
+			walk(c, visit)
+		}
+	case *parse.CommandNode:
+		for _, c := range n.Args {
+			walk(c, visit)
+		}
+	case *parse.ChainNode:
+		walk(n.Node, visit)
+	case *parse.IfNode:
+		walkBranch(&n.BranchNode, visit)
+	case *parse.RangeNode:
+		walkBranch(&n.BranchNode, visit)
+	case *parse.WithNode:
+		walkBranch(&n.BranchNode, visit)
+	case *parse.TemplateNode:
+		walk(n.Pipe, visit)
+	}
+}
+
+func walkBranch(b *parse.BranchNode, visit func(parse.Node)) {
+	walk(b.Pipe, visit)
+	walk(b.List, visit)
+	walk(b.ElseList, visit)
+}
+
+// fieldsOf adds the Data fields n refers to: .X, $.X, or .X.Y (which then
+// fails as unknown, since no field has fields).
+func fieldsOf(n parse.Node, into map[string]bool) {
+	switch n := n.(type) {
+	case *parse.FieldNode:
+		into[strings.Join(n.Ident, ".")] = true
+	case *parse.VariableNode:
+		if len(n.Ident) > 1 && n.Ident[0] == "$" {
+			into[strings.Join(n.Ident[1:], ".")] = true
+		}
+	}
+}
+
+type quoteState int
+
+const (
+	outside quoteState = iota
+	inSingle
+	inDouble
+)
+
+// quotedField finds a string field used inside the command's own quotes,
+// where Quote's output wouldn't protect it: $(…) still runs inside "…",
+// and a ' in the value ends '…'. PrNumber is only digits, so it may be.
+func quotedField(list *parse.ListNode, st quoteState) (string, bool) {
+	if list == nil {
+		return "", false
+	}
+	for _, n := range list.Nodes {
+		var pipe *parse.PipeNode
+		var branch *parse.BranchNode
+		switch n := n.(type) {
+		case *parse.TextNode:
+			st = advance(st, n.Text)
+			continue
+		case *parse.ActionNode:
+			pipe = n.Pipe
+		case *parse.IfNode:
+			branch = &n.BranchNode
+		case *parse.RangeNode:
+			branch = &n.BranchNode
+		case *parse.WithNode:
+			branch = &n.BranchNode
+		}
+		if branch != nil {
+			pipe = branch.Pipe
+		}
+		if st != outside && pipe != nil && branch == nil {
+			fields := map[string]bool{}
+			walk(pipe, func(n parse.Node) { fieldsOf(n, fields) })
+			for f := range fields {
+				if f != "PrNumber" {
+					return f, true
+				}
+			}
+		}
+		if branch != nil {
+			if f, ok := quotedField(branch.List, st); ok {
+				return f, true
+			}
+			if f, ok := quotedField(branch.ElseList, st); ok {
+				return f, true
+			}
+		}
+	}
+	return "", false
+}
+
+// advance tracks sh quoting through literal text.
+func advance(st quoteState, text []byte) quoteState {
+	for i := 0; i < len(text); i++ {
+		c := text[i]
+		switch st {
+		case outside:
+			switch c {
+			case '\\':
+				i++
+			case '\'':
+				st = inSingle
+			case '"':
+				st = inDouble
+			}
+		case inSingle:
+			if c == '\'' {
+				st = outside
+			}
+		case inDouble:
+			switch c {
+			case '\\':
+				i++
+			case '"':
+				st = outside
+			}
+		}
+	}
+	return st
 }
 
 func checkKey(key string) error {
@@ -132,19 +309,33 @@ func freeKeys() string {
 	return strings.Join(free, " ")
 }
 
-// Render fills the template. String fields are shell-quoted, so a branch
-// name from a PR author can't inject commands.
+// shellWord prints shell-quoted, so a branch name from a PR author can't
+// inject commands, but if, eq and slice see the raw value.
+type shellWord string
+
+func (w shellWord) String() string { return Quote(string(w)) }
+
+// words mirrors Data with its strings as shellWords.
+type words struct {
+	RepoName    shellWord
+	RepoPath    shellWord
+	PrNumber    int
+	HeadRefName shellWord
+	BaseRefName shellWord
+	HeadSHA     shellWord
+	Author      shellWord
+	URL         shellWord
+}
+
+// Render fills the template; printed string fields come out shell-quoted.
 func (b Binding) Render(d Data) (string, error) {
-	q := d
-	q.RepoName = Quote(d.RepoName)
-	q.RepoPath = Quote(d.RepoPath)
-	q.HeadRefName = Quote(d.HeadRefName)
-	q.BaseRefName = Quote(d.BaseRefName)
-	q.HeadSHA = Quote(d.HeadSHA)
-	q.Author = Quote(d.Author)
-	q.URL = Quote(d.URL)
 	var buf bytes.Buffer
-	if err := b.tmpl.Execute(&buf, q); err != nil {
+	err := b.tmpl.Execute(&buf, words{
+		RepoName: shellWord(d.RepoName), RepoPath: shellWord(d.RepoPath), PrNumber: d.PrNumber,
+		HeadRefName: shellWord(d.HeadRefName), BaseRefName: shellWord(d.BaseRefName),
+		HeadSHA: shellWord(d.HeadSHA), Author: shellWord(d.Author), URL: shellWord(d.URL),
+	})
+	if err != nil {
 		return "", err
 	}
 	return buf.String(), nil

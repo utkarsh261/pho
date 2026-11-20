@@ -46,6 +46,11 @@ func (m *Model) runCustomInPRDetail(key string) tea.Cmd {
 	if !ok || m.currentView() != domain.PrimaryViewPRDetail || m.prDetail == nil {
 		return nil
 	}
+	// A `pho pr N` summary is bare until the PR loads; every PR has a head.
+	if m.prDetail.Summary.HeadRefName == "" {
+		m.setCustomNotice("PR still loading")
+		return nil
+	}
 	return m.runCustom(b, m.prDetail.Repo, m.prDetail.Summary)
 }
 

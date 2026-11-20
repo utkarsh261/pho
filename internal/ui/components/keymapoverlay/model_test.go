@@ -4,13 +4,61 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/utkarsh261/pho/internal/domain"
 	"github.com/utkarsh261/pho/internal/ui/theme"
 	"github.com/utkarsh261/pho/internal/ui/views/prdetail"
 )
+
+// Labels are user text now, so truncation must not split a rune or
+// overrun the width with wide characters.
+func TestTruncateRunesAndWidth(t *testing.T) {
+	for _, tc := range []struct {
+		in    string
+		width int
+	}{
+		{"åååååååååå", 5},
+		{"日本語のブランチ名", 7},
+		{"ascii label that is long", 10},
+		{"emoji 🚀🚀🚀🚀", 9},
+	} {
+		got := truncate(tc.in, tc.width)
+		if !utf8.ValidString(got) {
+			t.Errorf("truncate(%q, %d) = %q: invalid UTF-8", tc.in, tc.width, got)
+		}
+		if w := lipgloss.Width(got); w > tc.width {
+			t.Errorf("truncate(%q, %d) = %q: width %d", tc.in, tc.width, got, w)
+		}
+		if !strings.HasSuffix(got, "…") {
+			t.Errorf("truncate(%q, %d) = %q: no ellipsis", tc.in, tc.width, got)
+		}
+	}
+}
+
+// A long custom label stays on its row; the box keeps its shape.
+func TestCustomLabelKeepsBoxShape(t *testing.T) {
+	m := NewModel()
+	m.SetSize(100, 40)
+	m.Groups = BuildBindings(Context{View: domain.PrimaryViewDashboard, Custom: []Binding{
+		{Key: "w", Description: strings.Repeat("ö", 200)},
+	}})
+	m.Visible = true
+	width := 0
+	for _, l := range strings.Split(m.View(), "\n") {
+		if !strings.Contains(l, "│") {
+			continue
+		}
+		if width == 0 {
+			width = lipgloss.Width(l)
+		} else if w := lipgloss.Width(l); w != width {
+			t.Fatalf("row width %d, want %d: %q", w, width, l)
+		}
+	}
+}
 
 func TestModel_ToggleVisible(t *testing.T) {
 	m := NewModel()

@@ -551,13 +551,8 @@ func truncate(text string, width int) string {
 	if width <= 0 {
 		return ""
 	}
-	if lipgloss.Width(text) <= width {
-		return text
-	}
-	if width <= 1 {
-		return text[:width]
-	}
-	return text[:width-1] + "…"
+	// By display width and whole runes: custom labels are user text.
+	return ansi.Truncate(text, width, "…")
 }
 
 func maxInt(a, b int) int {

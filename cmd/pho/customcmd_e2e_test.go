@@ -264,6 +264,35 @@ func TestE2ECustomKeyPRDetail(t *testing.T) {
 	e.waitText(from, "pkg/mod4/file4.go")
 }
 
+// Template functions work on the raw values in a real run.
+func TestE2ECustomKeyTemplateFunctions(t *testing.T) {
+	e := startCustom(t, customSetup{toml: "[[keybindings]]\nkey = \"w\"\ncommand = '''" +
+		`{ echo {{slice .HeadSHA 0 7}}; echo {{if eq .BaseRefName "main"}}onmain{{else}}stacked{{end}}; echo {{.PrNumber}}; } > OUT.tmp && mv OUT.tmp OUT` +
+		"'''\n"})
+	e.press("w")
+	lines := strings.Split(strings.TrimSpace(e.waitFile(e.out)), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("output %q", lines)
+	}
+	n, _ := strconv.Atoi(lines[2])
+	for _, r := range e.srv.Repos() {
+		for _, pr := range e.srv.PRs(r.FullName) {
+			if pr.Number != n || !strings.HasPrefix(pr.HeadRefOID, lines[0]) {
+				continue
+			}
+			want := "stacked"
+			if pr.BaseRefName == "main" {
+				want = "onmain"
+			}
+			if len(lines[0]) != 7 || lines[1] != want {
+				t.Fatalf("got %q, want sha prefix of 7 and %q", lines, want)
+			}
+			return
+		}
+	}
+	t.Fatalf("no PR #%d with head %s…", n, lines[0])
+}
+
 // E3: each key runs its own command and nothing else.
 func TestE2ECustomKeyTwoBindings(t *testing.T) {
 	e := startCustom(t, customSetup{toml: "[[keybindings]]\nkey = \"w\"\ncommand = \"echo w > OUT-w\"\n" +
@@ -455,6 +484,8 @@ func TestE2ECustomKeyBadConfig(t *testing.T) {
 		{"modifier", "[[keybindings]]\nkey = \"ctrl+x\"\ncommand = \"true\"\n", `"ctrl+x": key must be a single character`},
 		{"unknown field", "[[keybindings]]\nkey = \"w\"\ncommand = \"echo {{.PRNumber}}\"\n", "PRNumber"},
 		{"no command", "[[keybindings]]\nkey = \"w\"\n", "command is empty"},
+		{"quoted field", "[[keybindings]]\nkey = \"w\"\ncommand = 'echo \"{{.HeadRefName}}\"'\n", "{{.HeadRefName}} is inside quotes"},
+		{"printf", "[[keybindings]]\nkey = \"w\"\ncommand = 'echo {{printf \"%.3s\" .HeadRefName}}'\n", "function printf is not supported"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "config.toml")

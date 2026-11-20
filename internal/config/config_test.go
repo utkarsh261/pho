@@ -551,26 +551,50 @@ command = "gh pr view {{.PrNumber}}"
 		}
 	})
 
-	t.Run("README examples", func(t *testing.T) {
-		readme, err := os.ReadFile(filepath.Join("..", "..", "README.md"))
+	// The documented examples must load as written.
+	for _, doc := range []struct{ file, after string }{
+		{"docs/custom-commands.md", "# Custom commands"},
+		{"README.md", "## Custom commands"},
+	} {
+		t.Run(doc.file+" example", func(t *testing.T) {
+			text, err := os.ReadFile(filepath.Join("..", "..", doc.file))
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, section, ok := strings.Cut(string(text), doc.after)
+			if !ok {
+				t.Fatalf("%s has no %q", doc.file, doc.after)
+			}
+			_, block, ok := strings.Cut(section, "```toml\n")
+			if !ok {
+				t.Fatal("no toml example")
+			}
+			block, _, _ = strings.Cut(block, "```")
+			cfg, err := config.Load(write(t, block))
+			if err != nil {
+				t.Fatalf("example doesn't load: %v", err)
+			}
+			if len(cfg.Keybindings) == 0 {
+				t.Fatal("example has no keybindings")
+			}
+		})
+	}
+
+	t.Run("docs template examples", func(t *testing.T) {
+		text, err := os.ReadFile(filepath.Join("..", "..", "docs", "custom-commands.md"))
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, section, ok := strings.Cut(string(readme), "## Custom commands")
+		_, section, _ := strings.Cut(string(text), "## Template functions")
+		_, block, ok := strings.Cut(section, "```\n")
 		if !ok {
-			t.Fatal("README has no Custom commands section")
-		}
-		_, block, ok := strings.Cut(section, "```toml\n")
-		if !ok {
-			t.Fatal("Custom commands section has no toml example")
+			t.Fatal("no template examples")
 		}
 		block, _, _ = strings.Cut(block, "```")
-		cfg, err := config.Load(write(t, block))
-		if err != nil {
-			t.Fatalf("README example doesn't load: %v", err)
-		}
-		if len(cfg.Keybindings) == 0 {
-			t.Fatal("README example has no keybindings")
+		for i, line := range strings.Split(strings.TrimSpace(block), "\n") {
+			if _, err := customcmd.Parse([]customcmd.Binding{{Key: "w", Command: line}}); err != nil {
+				t.Errorf("example %d %q: %v", i, line, err)
+			}
 		}
 	})
 

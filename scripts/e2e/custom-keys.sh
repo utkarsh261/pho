@@ -74,7 +74,7 @@ command = \"exit 3\"
 [[keybindings]]
 key = \"u\"
 name = \"worktree\"
-command = \"git fetch -q origin {{.HeadRefName}} && git worktree add -q ../wt-{{.PrNumber}} FETCH_HEAD && echo done > $OUT/worktree\"
+command = \"git fetch origin pull/{{.PrNumber}}/head && git worktree add ../wt/pr-{{.PrNumber}} FETCH_HEAD && echo done > $OUT/worktree\"
 ")
 
 # Field values must match what GitHub says about that PR.
@@ -118,6 +118,12 @@ command = "true"' 'key must be a single character'
 bad field '[[keybindings]]
 key = "w"
 command = "echo {{.PRNumber}}"' 'PRNumber'
+bad quoted '[[keybindings]]
+key = "w"
+command = "echo \"{{.HeadRefName}}\""' '{{.HeadRefName}} is inside quotes'
+bad function '[[keybindings]]
+key = "w"
+command = "echo {{html .Author}}"' 'function html is not supported'
 
 # 2. Dashboard: the selected PR's fields, run from the repo dir.
 $D start $S dash --config "$GOOD" >/dev/null
@@ -181,9 +187,9 @@ check_fields "$CLONE"
 pass "PR detail #$PR: fields match GitHub"
 $D keys $S u
 wait_file "$OUT/worktree"
-git -C "$CLONE" worktree list | grep -q "wt-$PR" || fail "no wt-$PR worktree"
-[ -n "$(ls -A "$PHO_RUN_DIR/repos/wt-$PR")" ] || fail "worktree is empty"
-[ "$(git -C "$PHO_RUN_DIR/repos/wt-$PR" rev-parse HEAD)" = "$(gh pr view "$PR" -R "$REPO" --json headRefOid --jq .headRefOid)" ] ||
+git -C "$CLONE" worktree list | grep -q "wt/pr-$PR" || fail "no wt/pr-$PR worktree"
+[ -n "$(ls -A "$PHO_RUN_DIR/repos/wt/pr-$PR")" ] || fail "worktree is empty"
+[ "$(git -C "$PHO_RUN_DIR/repos/wt/pr-$PR" rev-parse HEAD)" = "$(gh pr view "$PR" -R "$REPO" --json headRefOid --jq .headRefOid)" ] ||
 	fail "worktree not at the PR head"
 $D wait $S "Files " 10 >/dev/null
 snap worktree-back
@@ -231,5 +237,5 @@ $D wait $S "Edit: [t]itle or [b]ody?" 5 >/dev/null
 $D keys $S Escape
 pass "no keybindings: overlay unchanged, E still prompts"
 
-git -C "$CLONE" worktree remove --force "../wt-$PR"
+git -C "$CLONE" worktree remove --force "../wt/pr-$PR"
 echo "all custom key checks passed; screens in $SCREENS"

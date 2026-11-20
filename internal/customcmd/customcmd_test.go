@@ -35,6 +35,22 @@ func TestParse(t *testing.T) {
 		{name: "empty command", in: []Binding{{Key: "w", Command: "  "}}, wantErr: []string{`"w"`, "command is empty"}},
 		{name: "unknown field", in: []Binding{{Key: "w", Command: "echo {{.Nope}}"}}, wantErr: []string{`"w"`, "Nope"}},
 		{name: "unclosed action", in: []Binding{{Key: "w", Command: "echo {{.PrNumber"}}, wantErr: []string{`"w"`}},
+		// Inside the user's own quotes, $(…) or a ' in a value would escape.
+		{name: "field in double quotes", in: []Binding{{Key: "w", Command: `echo "{{.HeadRefName}}"`}}, wantErr: []string{`"w"`, "HeadRefName", "inside quotes"}},
+		{name: "field in single quotes", in: []Binding{{Key: "w", Command: `echo '{{.Author}}'`}}, wantErr: []string{"Author", "inside quotes"}},
+		{name: "field in quotes in an if", in: []Binding{{Key: "w", Command: `echo "{{if .BaseRefName}}{{.BaseRefName}}{{end}}"`}}, wantErr: []string{"inside quotes"}},
+		{name: "piped field in quotes", in: []Binding{{Key: "w", Command: `echo "{{slice .HeadSHA 0 7}}"`}}, wantErr: []string{"HeadSHA", "inside quotes"}},
+		{name: "quotes closed before field", in: []Binding{{Key: "w", Command: `echo "a" 'b' {{.HeadRefName}}`}}},
+		{name: "escaped quote is not a quote", in: []Binding{{Key: "w", Command: `echo \"{{.HeadRefName}}\"`}}},
+		{name: "number in quotes is fine", in: []Binding{{Key: "w", Command: `tmux new-window -n "pr-{{.PrNumber}}"`}}},
+		// These re-print a quoted value, which can undo the quoting.
+		{name: "html", in: []Binding{{Key: "w", Command: `echo {{html .HeadRefName}}`}}, wantErr: []string{"html", "not supported"}},
+		{name: "printf", in: []Binding{{Key: "w", Command: `echo {{printf "%.3s" .HeadRefName}}`}}, wantErr: []string{"printf", "not supported"}},
+		{name: "piped urlquery", in: []Binding{{Key: "w", Command: `echo {{.HeadRefName | urlquery}}`}}, wantErr: []string{"urlquery", "not supported"}},
+		// A defined template would hide a field from the quote check.
+		{name: "define", in: []Binding{{Key: "w", Command: `{{define "x"}}{{.HeadRefName}}{{end}}echo "{{template "x" .}}"`}}, wantErr: []string{"not supported"}},
+		{name: "allowed functions", in: []Binding{{Key: "w", Command: `{{if and (ne .BaseRefName "main") (gt (len .HeadSHA) 7)}}{{slice .HeadSHA 0 7}}{{end}}`}}},
+		{name: "slice and if load", in: []Binding{{Key: "w", Command: `git show {{slice .HeadSHA 0 7}} {{if .BaseRefName}}{{.BaseRefName}}{{end}}`}}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -51,7 +67,7 @@ func TestParse(t *testing.T) {
 			if err == nil {
 				t.Fatal("Parse succeeded, want error")
 			}
-			if !strings.Contains(err.Error(), "see README: Custom commands") {
+			if !strings.Contains(err.Error(), docsURL) {
 				t.Errorf("error %q doesn't point to the docs", err)
 			}
 			for _, s := range tt.wantErr {
@@ -131,6 +147,34 @@ func TestRenderQuotesForShell(t *testing.T) {
 	}
 }
 
+// Template functions see the raw values; only what is printed is quoted.
+func TestRenderFunctionsSeeRawValues(t *testing.T) {
+	b := mustParse(t, `{{slice .HeadSHA 0 7}} {{if .BaseRefName}}base={{.BaseRefName}}{{else}}nobase{{end}} {{if eq .Author "octo"}}me{{end}} {{slice .HeadRefName 0 4}}`)
+	got, err := b.Render(Data{HeadSHA: "0123456789abcdef", Author: "octo", HeadRefName: "it's x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `0123456 nobase me 'it'\''s'`; got != want {
+		t.Errorf("got  %q\nwant %q", got, want)
+	}
+	got, err = b.Render(Data{HeadSHA: "0123456789abcdef", BaseRefName: "main", HeadRefName: "feat"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "0123456 base=main  feat"; got != want {
+		t.Errorf("got  %q\nwant %q", got, want)
+	}
+}
+
+// A value too short for the template's slice fails on the key press, not
+// at startup.
+func TestRenderErrorAtRunTime(t *testing.T) {
+	b := mustParse(t, `git show {{slice .HeadSHA 0 7}}`)
+	if _, err := b.Render(Data{HeadSHA: "abc"}); err == nil {
+		t.Fatal("want an error slicing a short value")
+	}
+}
+
 func TestUsesRepoPath(t *testing.T) {
 	if !mustParse(t, "cd {{.RepoPath}} && lazygit").UsesRepoPath() {
 		t.Error("RepoPath use not detected")
@@ -147,16 +191,37 @@ func TestLabel(t *testing.T) {
 	if got := (Binding{Command: "  git worktree add  "}).Label(); got != "git worktree add" {
 		t.Errorf("Label = %q", got)
 	}
+	// The overlay draws one row per binding.
+	if got := (Binding{Command: "git fetch\n\tgit checkout {{.HeadRefName}}\n"}).Label(); got != "git fetch git checkout {{.HeadRefName}}" {
+		t.Errorf("Label = %q", got)
+	}
+	if got := (Binding{Name: "two\nlines", Command: "true"}).Label(); got != "two lines" {
+		t.Errorf("Label = %q", got)
+	}
 }
 
-func TestReadmeListsFreeLetters(t *testing.T) {
-	readme, err := os.ReadFile(filepath.Join("..", "..", "README.md"))
+// The docs list the free keys and allowed functions; keep them true.
+func TestDocsMatchCode(t *testing.T) {
+	doc, err := os.ReadFile(filepath.Join("..", "..", "docs", "custom-commands.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	letters := strings.TrimRight(freeKeys(), " 0123456789")
-	if want := "Free letters today: `" + letters + "`"; !strings.Contains(string(readme), want) {
-		t.Errorf("README is missing %q; update the Custom commands section", want)
+	for _, want := range []string{
+		"Free letters today: `" + letters + "`",
+		"The functions allowed are `" + allowedFuncList + "`",
+	} {
+		if !strings.Contains(string(doc), want) {
+			t.Errorf("docs/custom-commands.md is missing %q", want)
+		}
+	}
+	for f := range dataFields {
+		if !strings.Contains(string(doc), "| `"+f+"` |") {
+			t.Errorf("docs field table is missing %s", f)
+		}
+	}
+	if !strings.HasSuffix(docsURL, "/blob/main/docs/custom-commands.md") {
+		t.Errorf("errors link to %s, not the docs file", docsURL)
 	}
 }
 
