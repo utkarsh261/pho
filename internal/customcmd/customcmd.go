@@ -4,16 +4,20 @@ package customcmd
 
 import (
 	"bytes"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os/exec"
 	"reflect"
+	"regexp"
 	"strings"
 	"text/template"
 	"text/template/parse"
 	"unicode"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"mvdan.cc/sh/v3/syntax"
 )
 
 // Data is what a command template can use. docs/custom-commands.md
@@ -122,11 +126,13 @@ func parseOne(b Binding, seen map[string]bool) (Binding, error) {
 			return b, fmt.Errorf("keybinding %q: unknown field {{.%s}}", b.Key, f)
 		}
 	}
-	if f, ok := quotedField(t.Tree.Root, outside); ok {
-		return b, fmt.Errorf("keybinding %q: {{.%s}} is inside quotes; pho quotes values itself, so drop the quotes around it", b.Key, f)
-	}
 	b.tmpl = t
 	b.usesRepoPath = fields["RepoPath"]
+	// A branch the samples don't take is checked by Render at key press.
+	var pe *PlacementError
+	if _, err := b.Render(sampleData); errors.As(err, &pe) {
+		return b, fmt.Errorf("keybinding %q: %w", b.Key, err)
+	}
 	return b, nil
 }
 
@@ -197,91 +203,6 @@ func fieldsOf(n parse.Node, into map[string]bool) {
 	}
 }
 
-type quoteState int
-
-const (
-	outside quoteState = iota
-	inSingle
-	inDouble
-)
-
-// quotedField finds a string field used inside the command's own quotes,
-// where Quote's output wouldn't protect it: $(…) still runs inside "…",
-// and a ' in the value ends '…'. PrNumber is only digits, so it may be.
-func quotedField(list *parse.ListNode, st quoteState) (string, bool) {
-	if list == nil {
-		return "", false
-	}
-	for _, n := range list.Nodes {
-		var pipe *parse.PipeNode
-		var branch *parse.BranchNode
-		switch n := n.(type) {
-		case *parse.TextNode:
-			st = advance(st, n.Text)
-			continue
-		case *parse.ActionNode:
-			pipe = n.Pipe
-		case *parse.IfNode:
-			branch = &n.BranchNode
-		case *parse.RangeNode:
-			branch = &n.BranchNode
-		case *parse.WithNode:
-			branch = &n.BranchNode
-		}
-		if branch != nil {
-			pipe = branch.Pipe
-		}
-		if st != outside && pipe != nil && branch == nil {
-			fields := map[string]bool{}
-			walk(pipe, func(n parse.Node) { fieldsOf(n, fields) })
-			for f := range fields {
-				if f != "PrNumber" {
-					return f, true
-				}
-			}
-		}
-		if branch != nil {
-			if f, ok := quotedField(branch.List, st); ok {
-				return f, true
-			}
-			if f, ok := quotedField(branch.ElseList, st); ok {
-				return f, true
-			}
-		}
-	}
-	return "", false
-}
-
-// advance tracks sh quoting through literal text.
-func advance(st quoteState, text []byte) quoteState {
-	for i := 0; i < len(text); i++ {
-		c := text[i]
-		switch st {
-		case outside:
-			switch c {
-			case '\\':
-				i++
-			case '\'':
-				st = inSingle
-			case '"':
-				st = inDouble
-			}
-		case inSingle:
-			if c == '\'' {
-				st = outside
-			}
-		case inDouble:
-			switch c {
-			case '\\':
-				i++
-			case '"':
-				st = outside
-			}
-		}
-	}
-	return st
-}
-
 func checkKey(key string) error {
 	if key == "" {
 		return errors.New("keybinding key is empty")
@@ -309,11 +230,19 @@ func freeKeys() string {
 	return strings.Join(free, " ")
 }
 
-// shellWord prints shell-quoted, so a branch name from a PR author can't
-// inject commands, but if, eq and slice see the raw value.
+// shellWord prints as a marker that Render swaps for the quoted value once
+// it has checked where the marker landed; if, eq and slice see the raw value.
 type shellWord string
 
-func (w shellWord) String() string { return Quote(string(w)) }
+func (w shellWord) String() string { return "'" + markTag + hex.EncodeToString([]byte(w)) + "'" }
+
+var markTag = func() string {
+	b := make([]byte, 8)
+	_, _ = rand.Read(b)
+	return "pho" + hex.EncodeToString(b) + "-"
+}()
+
+var markRe = regexp.MustCompile("'" + markTag + "([0-9a-f]*)'")
 
 // words mirrors Data with its strings as shellWords.
 type words struct {
@@ -338,7 +267,125 @@ func (b Binding) Render(d Data) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return buf.String(), nil
+	return placeValues(buf.String(), d)
+}
+
+// sampleData names each field in its value, long enough for slice.
+var sampleData = func() Data {
+	var d Data
+	v := reflect.ValueOf(&d).Elem()
+	for i := range v.NumField() {
+		if f := v.Field(i); f.Kind() == reflect.String {
+			f.SetString(v.Type().Field(i).Name + strings.Repeat("0", 40))
+		}
+	}
+	d.PrNumber = 1
+	return d
+}()
+
+// PlacementError is a value printed where its quoting can't protect it.
+type PlacementError struct {
+	Field  string // "{{.HeadRefName}}", or "a value"
+	Reason string
+}
+
+func (e *PlacementError) Error() string {
+	return fmt.Sprintf("%s %s; pho quotes values itself, so use it as a bare word, like: git switch {{.HeadRefName}}",
+		e.Field, e.Reason)
+}
+
+// placeValues parses the command as shell and accepts a marker only as a
+// plain '…' word part. Inside "…", a heredoc or a comment, or after a
+// backslash, it isn't one, and the value's own quotes wouldn't hold there.
+func placeValues(cmd string, d Data) (string, error) {
+	marks := markRe.FindAllStringIndex(cmd, -1)
+	if len(marks) == 0 {
+		return cmd, nil
+	}
+	f, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(cmd), "")
+	if err != nil {
+		return "", &PlacementError{Field: fieldAt(cmd, marks[0], d),
+			Reason: "is in a command that isn't valid shell (" + err.Error() + ")"}
+	}
+	safe := safeMarks(f)
+	for _, m := range marks {
+		if !safe[uint(m[0])] {
+			return "", &PlacementError{Field: fieldAt(cmd, m, d),
+				Reason: "is inside quotes, a heredoc, ${…}, $((…)), [[…]] or a comment"}
+		}
+	}
+	return markRe.ReplaceAllStringFunc(cmd, func(m string) string { return Quote(decodeMark(m)) }), nil
+}
+
+// safeMarks returns the offsets of markers that are plain '…' word parts,
+// not under "…", a heredoc, backquotes, ${…}, arithmetic (which includes
+// array indexes), let or [[…]].
+func safeMarks(f *syntax.File) map[uint]bool {
+	safe := map[uint]bool{}
+	badChild := map[syntax.Node]bool{}
+	var stack []bool
+	unsafe := 0
+	syntax.Walk(f, func(n syntax.Node) bool {
+		if n == nil {
+			if stack[len(stack)-1] {
+				unsafe--
+			}
+			stack = stack[:len(stack)-1]
+			return true
+		}
+		bad := badChild[n]
+		switch n := n.(type) {
+		case *syntax.Redirect:
+			if n.Hdoc != nil {
+				badChild[n.Hdoc] = true
+			}
+		case *syntax.Assign:
+			if n.Index != nil {
+				badChild[n.Index] = true
+			}
+		case *syntax.CmdSubst:
+			bad = n.Backquotes
+		case *syntax.DblQuoted, *syntax.ParamExp, *syntax.ArithmExp, *syntax.ArithmCmd,
+			*syntax.LetClause, *syntax.TestClause:
+			bad = true
+		case *syntax.SglQuoted:
+			if unsafe == 0 && !n.Dollar && markRe.MatchString("'"+n.Value+"'") {
+				safe[n.Pos().Offset()] = true
+			}
+		}
+		if bad {
+			unsafe++
+		}
+		stack = append(stack, bad)
+		return true
+	})
+	return safe
+}
+
+func decodeMark(m string) string {
+	v, _ := hex.DecodeString(markRe.FindStringSubmatch(m)[1])
+	return string(v)
+}
+
+// fieldAt names the field whose value (or a slice of it) the marker at m
+// holds.
+func fieldAt(cmd string, m []int, d Data) string {
+	v := decodeMark(cmd[m[0]:m[1]])
+	rv := reflect.ValueOf(d)
+	name := "a value"
+	for i := range rv.NumField() {
+		f := rv.Field(i)
+		if f.Kind() != reflect.String {
+			continue
+		}
+		if f.String() == v {
+			return "{{." + rv.Type().Field(i).Name + "}}"
+		}
+		if v != "" && name == "a value" && strings.Contains(f.String(), v) {
+			name = "{{." + rv.Type().Field(i).Name + "}}"
+		}
+	}
+	return name
 }
 
 // Quote returns s as one POSIX shell word, leaving it bare when that is

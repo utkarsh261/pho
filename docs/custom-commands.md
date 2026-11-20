@@ -37,7 +37,8 @@ command = "tmux new-window -c {{.RepoPath}} -n pr-{{.PrNumber}}"
 
 Values arrive already quoted for the shell, so a branch named `x; rm -rf ~` or `$(curl …)` stays one harmless word. Branch names and authors come from whoever opened the PR, so this matters.
 
-- Don't put quotes around a field: `"{{.HeadRefName}}"` or `'{{.HeadRefName}}'`. Inside your own quotes pho's quoting can't protect the value, so pho refuses such a command at startup. `{{.PrNumber}}` is only digits and may sit inside quotes.
+- Use each field as a bare word, like `git switch {{.HeadRefName}}`. Don't put quotes around it (`"{{.HeadRefName}}"`, `'{{.HeadRefName}}'`), and don't use it in a heredoc, `${…}`, `$((…))`, `[[…]]`, `let`, an array index, backquotes or a comment. There pho's quoting can't protect the value, so pho refuses the command: at startup, or on the key press if only some PRs take that path (say, inside an `{{if}}`). `{{.PrNumber}}` is only digits and may go anywhere.
+- pho can only make sure the shell sees a value as plain text. A command that runs its arguments as code again, such as `eval`, `sh -c`, `ssh host …`, `tmux new-window …` or `declare -i`, can still run a value. Keep fields out of those, or pass them in another way, e.g. `tmux new-window -e BRANCH={{.HeadRefName}} 'git switch "$BRANCH"'`.
 - A value can still start with `-`, and quoting doesn't stop a program reading it as an option. Use `pull/{{.PrNumber}}/head` or `{{.HeadSHA}}` to refer to the PR in git, or put `--end-of-options` (git) or `--` before branch names.
 - For git, `pull/{{.PrNumber}}/head` is also the ref that works for PRs from forks; `origin {{.HeadRefName}}` only finds branches pushed to your own remote.
 
@@ -68,7 +69,7 @@ The `?` keymap lists your keys first, under Custom.
 
 ## Errors
 
-pho checks every binding at startup and stops with a message naming the key and the problem: a built-in or repeated key, a key longer than one character, an empty command, an unknown field such as `{{.PRNumber}}`, a field inside quotes, or an unsupported function.
+pho checks every binding at startup and stops with a message naming the key and the problem: a built-in or repeated key, a key longer than one character, an empty command, an unknown field such as `{{.PRNumber}}`, a field inside quotes or another place quoting can't protect, or an unsupported function.
 
 ## Coming from gh-dash
 

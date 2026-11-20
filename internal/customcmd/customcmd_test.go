@@ -1,6 +1,7 @@
 package customcmd
 
 import (
+	"errors"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -43,6 +44,29 @@ func TestParse(t *testing.T) {
 		{name: "quotes closed before field", in: []Binding{{Key: "w", Command: `echo "a" 'b' {{.HeadRefName}}`}}},
 		{name: "escaped quote is not a quote", in: []Binding{{Key: "w", Command: `echo \"{{.HeadRefName}}\"`}}},
 		{name: "number in quotes is fine", in: []Binding{{Key: "w", Command: `tmux new-window -n "pr-{{.PrNumber}}"`}}},
+		// Ways around a check of the template's text; the rendered command
+		// is what gets checked.
+		{name: "with dot in quotes", in: []Binding{{Key: "w", Command: `echo "{{with .HeadRefName}}{{.}}{{end}}"`}}, wantErr: []string{"HeadRefName", "inside quotes"}},
+		{name: "variable in quotes", in: []Binding{{Key: "w", Command: `{{$b := .HeadRefName}}echo "{{$b}}"`}}, wantErr: []string{"HeadRefName", "inside quotes"}},
+		{name: "heredoc", in: []Binding{{Key: "w", Command: "cat <<EOF\n{{.HeadRefName}}\nEOF"}}, wantErr: []string{"HeadRefName", "heredoc"}},
+		{name: "quoted heredoc", in: []Binding{{Key: "w", Command: "cat <<'EOF'\n{{.HeadRefName}}\nEOF"}}, wantErr: []string{"HeadRefName"}},
+		{name: "quote opened in an if", in: []Binding{{Key: "w", Command: `echo {{if .URL}}"{{end}}{{.HeadRefName}}{{if .URL}}"{{end}}`}}, wantErr: []string{"HeadRefName", "inside quotes"}},
+		{name: "after a backslash", in: []Binding{{Key: "w", Command: `echo \{{.HeadRefName}}`}}, wantErr: []string{"HeadRefName"}},
+		{name: "after a dollar", in: []Binding{{Key: "w", Command: `echo ${{.HeadRefName}}`}}, wantErr: []string{"HeadRefName"}},
+		{name: "in a comment", in: []Binding{{Key: "w", Command: `echo hi # {{.HeadRefName}}`}}, wantErr: []string{"HeadRefName"}},
+		{name: "in backquotes", in: []Binding{{Key: "w", Command: "echo `echo {{.HeadRefName}}`"}}, wantErr: []string{"HeadRefName"}},
+		{name: "in quoted command substitution", in: []Binding{{Key: "w", Command: `echo "$(echo {{.HeadRefName}})"`}}, wantErr: []string{"HeadRefName"}},
+		{name: "in a parameter default", in: []Binding{{Key: "w", Command: `echo ${X:-{{.HeadRefName}}}`}}, wantErr: []string{"HeadRefName"}},
+		{name: "in arithmetic", in: []Binding{{Key: "w", Command: `echo $(( {{.HeadRefName}} ))`}}, wantErr: []string{"HeadRefName"}},
+		{name: "in [[ ]]", in: []Binding{{Key: "w", Command: `[[ {{.HeadRefName}} -eq 1 ]]`}}, wantErr: []string{"HeadRefName"}},
+		{name: "in let", in: []Binding{{Key: "w", Command: `let x={{.HeadRefName}}`}}, wantErr: []string{"HeadRefName"}},
+		{name: "in an array index", in: []Binding{{Key: "w", Command: `a[{{.HeadRefName}}]=1`}}, wantErr: []string{"HeadRefName"}},
+		{name: "invalid shell", in: []Binding{{Key: "w", Command: `echo {{.HeadRefName}} )`}}, wantErr: []string{"HeadRefName", "isn't valid shell"}},
+		{name: "invalid shell without fields is left to sh", in: []Binding{{Key: "w", Command: `echo {{.PrNumber}} )`}}},
+		{name: "unquoted command substitution", in: []Binding{{Key: "w", Command: `cd $(git rev-parse --show-toplevel) && echo {{.HeadRefName}} $(echo {{.Author}})`}}},
+		{name: "assignment and pipe", in: []Binding{{Key: "w", Command: `B={{.HeadRefName}}; echo "$B" {{.Author}} | cat`}}},
+		{name: "env handoff from the docs", in: []Binding{{Key: "w", Command: `tmux new-window -e BRANCH={{.HeadRefName}} 'git switch "$BRANCH"'`}}},
+		{name: "glued to text", in: []Binding{{Key: "w", Command: `git worktree add ../wt-{{.HeadRefName}} {{.HeadSHA}}`}}},
 		// These re-print a quoted value, which can undo the quoting.
 		{name: "html", in: []Binding{{Key: "w", Command: `echo {{html .HeadRefName}}`}}, wantErr: []string{"html", "not supported"}},
 		{name: "printf", in: []Binding{{Key: "w", Command: `echo {{printf "%.3s" .HeadRefName}}`}}, wantErr: []string{"printf", "not supported"}},
@@ -143,6 +167,75 @@ func TestRenderQuotesForShell(t *testing.T) {
 		}
 		if _, err := os.Stat(filepath.Join(dir, "PWNED")); err == nil {
 			t.Errorf("value %q ran a command", v)
+		}
+	}
+}
+
+// A branch the startup samples don't take is still checked on the key press.
+func TestRenderChecksPlacementWithRealValues(t *testing.T) {
+	b := mustParse(t, `{{if eq .BaseRefName "main"}}echo "{{.HeadRefName}}"{{else}}echo {{.HeadRefName}}{{end}}`)
+	if _, err := b.Render(Data{BaseRefName: "dev", HeadRefName: "x"}); err != nil {
+		t.Fatalf("safe branch: %v", err)
+	}
+	_, err := b.Render(Data{BaseRefName: "main", HeadRefName: "x$(id)"})
+	var pe *PlacementError
+	if !errors.As(err, &pe) || pe.Field != "{{.HeadRefName}}" {
+		t.Fatalf("got %v, want a PlacementError naming HeadRefName", err)
+	}
+}
+
+// Whatever shape a command takes, a hostile value must not run: pho either
+// refuses the command or the shell gets the value as plain text.
+func TestHostileValuesNeverRun(t *testing.T) {
+	shapes := []string{
+		`echo {{.HeadRefName}}`,
+		`echo "{{with .HeadRefName}}{{.}}{{end}}"`,
+		`{{$b := .HeadRefName}}echo "{{$b}}"`,
+		"cat <<EOF\n{{.HeadRefName}}\nEOF",
+		`echo {{if .URL}}"{{end}}{{.HeadRefName}}{{if .URL}}"{{end}}`,
+		`echo \{{.HeadRefName}}`,
+		`echo ${{.HeadRefName}}`,
+		`echo '{{.HeadRefName}}'`,
+		`echo $(echo {{.HeadRefName}})`,
+		"echo `echo {{.HeadRefName}}`",
+		`echo "$(echo {{.HeadRefName}})"`,
+		`echo ${X:-{{.HeadRefName}}}`,
+		`echo $(( {{.HeadRefName}} ))`,
+		`a[{{.HeadRefName}}]=1; echo`,
+		`B={{.HeadRefName}}; echo "$B"`,
+		`for x in {{.HeadRefName}}; do echo "$x"; done`,
+		`case {{.HeadRefName}} in *) echo;; esac`,
+		`f() { echo {{.HeadRefName}}; }; f | cat`,
+		`echo a{{.HeadRefName}}b{{slice .HeadRefName 1}}c`,
+		`test {{.HeadRefName}} = x; echo`,
+	}
+	values := []string{
+		"$(touch PWNED)", "`touch PWNED`", "';touch PWNED;'", `";touch PWNED;"`,
+		"a[$(touch PWNED)]", "x\ntouch PWNED", `\';touch PWNED;#`, "x$(touch PWNED)'\"`",
+	}
+	shells := []string{"sh"}
+	if _, err := exec.LookPath("bash"); err == nil {
+		shells = append(shells, "bash")
+	}
+	for _, shape := range shapes {
+		bs, err := Parse([]Binding{{Key: "w", Command: shape}})
+		if err != nil {
+			continue // refused at startup
+		}
+		for _, v := range values {
+			cmd, err := bs[0].Render(Data{HeadRefName: v, URL: "u"})
+			if err != nil {
+				continue // refused on the key press
+			}
+			for _, sh := range shells {
+				dir := t.TempDir()
+				c := exec.Command(sh, "-c", cmd)
+				c.Dir = dir
+				_ = c.Run()
+				if _, err := os.Stat(filepath.Join(dir, "PWNED")); err == nil {
+					t.Errorf("%s ran %q from shape %q (command %q)", sh, v, shape, cmd)
+				}
+			}
 		}
 	}
 }

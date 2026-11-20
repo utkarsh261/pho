@@ -321,6 +321,25 @@ func TestE2ECustomKeyHostileBranch(t *testing.T) {
 	}
 }
 
+// A quoted field on a path the startup check doesn't take is refused on the
+// key press, and nothing runs.
+func TestE2ECustomKeyRefusedOnKeyPress(t *testing.T) {
+	e := startCustom(t, customSetup{
+		toml: "[[keybindings]]\nkey = \"w\"\ncommand = '''" +
+			`{{if eq .BaseRefName "trap"}}echo "{{.HeadRefName}}" > OUT{{else}}echo {{.HeadRefName}} > OUT{{end}}` + "'''\n",
+		editPRs: func(prs []domain.PullRequestSummary) {
+			for i := range prs {
+				prs[i].BaseRefName = "trap"
+				prs[i].HeadRefName = "feature/x$(touch PWNED)"
+			}
+		},
+	})
+	from := e.mark()
+	e.press("w")
+	e.waitText(from, "Custom command w: {{.HeadRefName}} is inside quotes")
+	e.noFile(e.out)
+}
+
 // E5, E6: a failing command leaves pho running and says so.
 func TestE2ECustomKeyFailure(t *testing.T) {
 	for _, tc := range []struct{ name, command, want string }{
@@ -485,6 +504,8 @@ func TestE2ECustomKeyBadConfig(t *testing.T) {
 		{"unknown field", "[[keybindings]]\nkey = \"w\"\ncommand = \"echo {{.PRNumber}}\"\n", "PRNumber"},
 		{"no command", "[[keybindings]]\nkey = \"w\"\n", "command is empty"},
 		{"quoted field", "[[keybindings]]\nkey = \"w\"\ncommand = 'echo \"{{.HeadRefName}}\"'\n", "{{.HeadRefName}} is inside quotes"},
+		{"variable in quotes", "[[keybindings]]\nkey = \"w\"\ncommand = '{{$b := .HeadRefName}}echo \"{{$b}}\"'\n", "{{.HeadRefName}} is inside quotes"},
+		{"heredoc", "[[keybindings]]\nkey = \"w\"\ncommand = \"\"\"\ncat <<EOF\n{{.HeadRefName}}\nEOF\"\"\"\n", "{{.HeadRefName}} is inside quotes, a heredoc"},
 		{"printf", "[[keybindings]]\nkey = \"w\"\ncommand = 'echo {{printf \"%.3s\" .HeadRefName}}'\n", "function printf is not supported"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

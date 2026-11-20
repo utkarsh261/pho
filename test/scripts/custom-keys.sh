@@ -121,6 +121,12 @@ command = "echo {{.PRNumber}}"' 'PRNumber'
 bad quoted '[[keybindings]]
 key = "w"
 command = "echo \"{{.HeadRefName}}\""' '{{.HeadRefName}} is inside quotes'
+bad heredoc '[[keybindings]]
+key = "w"
+command = """
+cat <<EOF
+{{with .HeadRefName}}{{.}}{{end}}
+EOF"""' '{{.HeadRefName}} is inside quotes, a heredoc'
 bad function '[[keybindings]]
 key = "w"
 command = "echo {{html .Author}}"' 'function html is not supported'
