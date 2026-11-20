@@ -193,7 +193,7 @@ func TestCustomKeyInPRDetail(t *testing.T) {
 }
 
 // `pho pr N` starts from a bare {repo, number}; until the PR loads, its
-// fields would render as ''.
+// fields would render as empty strings.
 func TestCustomKeyWaitsForPRToLoad(t *testing.T) {
 	t.Parallel()
 	m, runs := openCustomPRDetail(t, testutil.Repo("acme/alpha"))

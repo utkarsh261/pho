@@ -16,8 +16,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// Data is what a command template can use. README's "Custom commands"
-// section documents these fields; keep the two in step.
+// Data is what a command template can use. docs/custom-commands.md
+// documents these fields; keep the two in step.
 type Data struct {
 	RepoName    string
 	RepoPath    string
