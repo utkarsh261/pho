@@ -1,6 +1,6 @@
 # Custom commands
 
-Bind a key to your own shell command in pho's config (`~/.config/pho/config.toml`). On the dashboard the key runs the command for the selected PR; in a PR's detail view, for that PR.
+Bind a key to your own shell command in pho's config (`~/.config/pho/config.toml`). On the dashboard the key runs the command for the selected PR; in a PR's detail view (including an open CI log), for that PR.
 
 ```toml
 [[keybindings]]
@@ -37,8 +37,8 @@ command = "tmux new-window -c {{.RepoPath}} -n pr-{{.PrNumber}}"
 
 Values arrive already quoted for the shell, so a branch named `x; rm -rf ~` or `$(curl …)` stays one harmless word. Branch names and authors come from whoever opened the PR, so this matters.
 
-- Use each field as a bare word, like `git switch {{.HeadRefName}}`. Don't put quotes around it (`"{{.HeadRefName}}"`, `'{{.HeadRefName}}'`), and don't use it in a heredoc, `${…}`, `$((…))`, `[[…]]`, `let`, an array index, backquotes or a comment. There pho's quoting can't protect the value, so pho refuses the command: at startup, or on the key press if only some PRs take that path (say, inside an `{{if}}`). `{{.PrNumber}}` is only digits and may go anywhere.
-- pho can only make sure the shell sees a value as plain text. A command that runs its arguments as code again, such as `eval`, `sh -c`, `ssh host …`, `tmux new-window …` or `declare -i`, can still run a value. Keep fields out of those, or pass them in another way, e.g. `tmux new-window -e BRANCH={{.HeadRefName}} 'git switch "$BRANCH"'`.
+- Use each field as a bare word, like `git switch {{.HeadRefName}}`. Don't put quotes around it (`"{{.HeadRefName}}"`, `'{{.HeadRefName}}'`), and don't use it in a heredoc, `${…}`, arithmetic (`$((…))`, `((…))`, `for ((…))`, `let`, an array index), `[[…]]`, backquotes or a comment. There pho's quoting can't protect the value, so pho refuses the command: at startup, or on the key press if only some PRs take that path (say, inside an `{{if}}`). `{{.PrNumber}}` is only digits and may go anywhere.
+- pho can only make sure the shell sees a value as plain text. A command that runs its arguments as code again, such as `eval`, `sh -c`, `ssh host …` or `tmux new-window …`, can still run a value. So can bash builtins that take a variable name (`read`, `declare`, `printf -v`, `unset`), which evaluate an array index in it. Keep fields out of those, or pass them in another way, e.g. `tmux new-window -e BRANCH={{.HeadRefName}} 'git switch "$BRANCH"'`.
 - A value can still start with `-`, and quoting doesn't stop a program reading it as an option. Use `pull/{{.PrNumber}}/head` or `{{.HeadSHA}}` to refer to the PR in git, or put `--end-of-options` (git) or `--` before branch names.
 - For git, `pull/{{.PrNumber}}/head` is also the ref that works for PRs from forks; `origin {{.HeadRefName}}` only finds branches pushed to your own remote.
 
@@ -57,7 +57,7 @@ The functions allowed are `and or not eq ne lt le gt ge len slice`. Others such 
 
 A key is one character that pho doesn't already use. Free letters today: `f i p u w A B F I P Q V X Y`, the digits `0 5-9`, and most punctuation. A clash is refused at startup with the list of free keys.
 
-Keys typed into the palette, search, a comment, visual mode or a prompt stay text and never run a command. In a PR opened with `pho pr N`, keys wait until the PR has loaded.
+Keys typed into the palette, search, a comment (also while it posts or shows an error), visual mode or a prompt stay text and never run a command. In a PR opened with `pho pr N`, keys wait until the PR has loaded.
 
 The `?` keymap lists your keys first, under Custom.
 

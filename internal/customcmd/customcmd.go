@@ -346,7 +346,7 @@ func safeMarks(f *syntax.File) map[uint]bool {
 		case *syntax.CmdSubst:
 			bad = n.Backquotes
 		case *syntax.DblQuoted, *syntax.ParamExp, *syntax.ArithmExp, *syntax.ArithmCmd,
-			*syntax.LetClause, *syntax.TestClause:
+			*syntax.CStyleLoop, *syntax.LetClause, *syntax.TestClause:
 			bad = true
 		case *syntax.SglQuoted:
 			if unsafe == 0 && !n.Dollar && markRe.MatchString("'"+n.Value+"'") {

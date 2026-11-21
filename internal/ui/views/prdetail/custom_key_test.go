@@ -6,6 +6,8 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/utkarsh261/pho/internal/domain"
 )
 
 // customKeyIn runs cmd, and any batch inside it, looking for a CustomKey.
@@ -60,6 +62,16 @@ func TestCustomKeyInertOutsideNormalMode(t *testing.T) {
 		{"search", func(m *PRDetailModel) { m.searchActive = true }},
 		{"visual", func(m *PRDetailModel) { m.visual.Active = true }},
 		{"compose", func(m *PRDetailModel) { m.compose.Open(composeModeNew, commentEntry{}, 0) }},
+		{"compose posting", func(m *PRDetailModel) {
+			m.compose.Open(composeModeNew, commentEntry{}, 0)
+			m.compose.status = composeStatusPosting
+		}},
+		// The box shows the error and still takes text.
+		{"compose error", func(m *PRDetailModel) {
+			m.compose.Open(composeModeNew, commentEntry{}, 0)
+			m.compose.status = composeStatusError
+			m.compose.errMsg = "boom"
+		}},
 		{"edit prompt", func(m *PRDetailModel) { m.editPrompt = "Edit: [t]itle or [b]ody?" }},
 		{"editor prompt", func(m *PRDetailModel) { m.editorPrompt = "Check out branch? (y/n)" }},
 		{"close confirm", func(m *PRDetailModel) { m.closeStep = closeStepConfirm; m.closeTarget = "CLOSE" }},
@@ -88,5 +100,23 @@ func TestCustomKeyNotSentForSpecialKeys(t *testing.T) {
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyF5})
 	if _, ok := customKeyIn(cmd); ok {
 		t.Fatal("special key reached the custom key path")
+	}
+}
+
+// The CI log keeps its own keys but passes free ones on, as the keymap
+// overlay shown there promises.
+func TestCustomKeyFiresInCILog(t *testing.T) {
+	t.Parallel()
+	m := openLog(t, newCILogModel(&ciLogPRService{log: domain.JobLog{Lines: []string{"x"}}}))
+	_, cmd := pressRune(m, 'w')
+	if k, ok := customKeyIn(cmd); !ok || k.Key != "w" {
+		t.Fatalf("got %+v, %v; want CustomKey w", k, ok)
+	}
+	if !m.ciLog.active {
+		t.Error("custom key closed the CI log")
+	}
+	_, cmd = pressRune(m, 'j')
+	if _, ok := customKeyIn(cmd); ok {
+		t.Error("the log's own j reached the custom key path")
 	}
 }

@@ -409,6 +409,8 @@ func (m *PRDetailModel) handleCILogKey(msg tea.KeyMsg) (cmd tea.Cmd, handled boo
 		if url := m.ciLog.check.URL; url != "" {
 			return func() tea.Msg { return OpenBrowserCI{URL: url} }, true
 		}
+	default:
+		return m.customKey(msg), true
 	}
 	return nil, true
 }
