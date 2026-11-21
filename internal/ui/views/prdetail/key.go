@@ -5,6 +5,22 @@ import (
 	"github.com/utkarsh261/pho/internal/application/cmds"
 )
 
+// CustomKey asks the root model to run the command bound to Key, if any. Only
+// sent for an unbound character in normal mode or the CI log.
+type CustomKey struct{ Key string }
+
+// customKey is the CustomKey request for msg, or nil while the key belongs
+// to something else: an open compose box (even one posting or showing an
+// error, which still takes text), commit mode or a running action.
+func (m *PRDetailModel) customKey(msg tea.KeyMsg) tea.Cmd {
+	if msg.Type != tea.KeyRunes || len(msg.Runes) != 1 || msg.Alt || msg.Paste ||
+		m.CommitMode || m.editorLaunching || m.compose.active || m.isAnyActionInProgress() {
+		return nil
+	}
+	key := msg.String()
+	return func() tea.Msg { return CustomKey{Key: key} }
+}
+
 // handleKey routes keyboard input within the PR detail view.
 func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 	m.diffNotice = ""
@@ -505,6 +521,11 @@ func (m *PRDetailModel) handleKey(msg tea.KeyMsg) (*PRDetailModel, tea.Cmd) {
 			return m, nil
 		}
 		m.scrollHalfPageUp()
+	default:
+		if cmd := m.customKey(msg); cmd != nil {
+			m.LastKey = ""
+			return m, cmd
+		}
 	}
 	if msg.String() != "g" {
 		m.LastKey = ""

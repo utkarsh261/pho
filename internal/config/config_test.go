@@ -3,10 +3,12 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/utkarsh261/pho/internal/config"
+	"github.com/utkarsh261/pho/internal/customcmd"
 )
 
 // unsetEnv clears an environment variable and restores the original value
@@ -497,4 +499,112 @@ func TestLoad_HostAliases(t *testing.T) {
 	if len(cfg.Hosts.Aliases) != len(want) || cfg.Hosts.Aliases["work.github.com"] != "github.com" {
 		t.Fatalf("Hosts.Aliases = %v, want %v", cfg.Hosts.Aliases, want)
 	}
+}
+
+func TestLoad_Keybindings(t *testing.T) {
+	write := func(t *testing.T, body string) string {
+		t.Helper()
+		path := filepath.Join(t.TempDir(), "config.toml")
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+
+	t.Run("loads", func(t *testing.T) {
+		cfg, err := config.Load(write(t, `
+[[keybindings]]
+key = "w"
+name = "worktree"
+command = "git worktree add ../wt/pr-{{.PrNumber}} {{.HeadRefName}}"
+
+[[keybindings]]
+key = "P"
+command = "gh pr view {{.PrNumber}}"
+`))
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if len(cfg.Keybindings) != 2 {
+			t.Fatalf("Keybindings = %d, want 2", len(cfg.Keybindings))
+		}
+		b := cfg.Keybindings[0]
+		if b.Key != "w" || b.Name != "worktree" || b.Label() != "worktree" {
+			t.Errorf("first binding = %+v", b)
+		}
+		if got, err := cfg.Keybindings[1].Render(customcmd.Data{PrNumber: 9}); err != nil || got != "gh pr view 9" {
+			t.Errorf("Render = %q, %v", got, err)
+		}
+	})
+
+	t.Run("clash fails", func(t *testing.T) {
+		_, err := config.Load(write(t, "[[keybindings]]\nkey = \"e\"\ncommand = \"true\"\n"))
+		if err == nil || !strings.Contains(err.Error(), `"e"`) {
+			t.Fatalf("Load error = %v, want one naming \"e\"", err)
+		}
+	})
+
+	t.Run("bad field fails", func(t *testing.T) {
+		_, err := config.Load(write(t, "[[keybindings]]\nkey = \"w\"\ncommand = \"echo {{.PRNumber}}\"\n"))
+		if err == nil || !strings.Contains(err.Error(), "PRNumber") {
+			t.Fatalf("Load error = %v, want one naming PRNumber", err)
+		}
+	})
+
+	// The documented examples must load as written.
+	for _, doc := range []struct{ file, after string }{
+		{"docs/custom-commands.md", "# Custom commands"},
+		{"README.md", "## Custom commands"},
+	} {
+		t.Run(doc.file+" example", func(t *testing.T) {
+			text, err := os.ReadFile(filepath.Join("..", "..", doc.file))
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, section, ok := strings.Cut(string(text), doc.after)
+			if !ok {
+				t.Fatalf("%s has no %q", doc.file, doc.after)
+			}
+			_, block, ok := strings.Cut(section, "```toml\n")
+			if !ok {
+				t.Fatal("no toml example")
+			}
+			block, _, _ = strings.Cut(block, "```")
+			cfg, err := config.Load(write(t, block))
+			if err != nil {
+				t.Fatalf("example doesn't load: %v", err)
+			}
+			if len(cfg.Keybindings) == 0 {
+				t.Fatal("example has no keybindings")
+			}
+		})
+	}
+
+	t.Run("docs template examples", func(t *testing.T) {
+		text, err := os.ReadFile(filepath.Join("..", "..", "docs", "custom-commands.md"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, section, _ := strings.Cut(string(text), "## Template functions")
+		_, block, ok := strings.Cut(section, "```\n")
+		if !ok {
+			t.Fatal("no template examples")
+		}
+		block, _, _ = strings.Cut(block, "```")
+		for i, line := range strings.Split(strings.TrimSpace(block), "\n") {
+			if _, err := customcmd.Parse([]customcmd.Binding{{Key: "w", Command: line}}); err != nil {
+				t.Errorf("example %d %q: %v", i, line, err)
+			}
+		}
+	})
+
+	t.Run("absent", func(t *testing.T) {
+		cfg, err := config.Load(write(t, "[ui]\ntheme = \"pho-default\"\n"))
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if len(cfg.Keybindings) != 0 {
+			t.Fatalf("Keybindings = %v, want none", cfg.Keybindings)
+		}
+	})
 }

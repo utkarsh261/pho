@@ -15,6 +15,7 @@ import (
 
 	"github.com/utkarsh261/pho/internal/application/cmds"
 	achdashboard "github.com/utkarsh261/pho/internal/application/dashboard"
+	"github.com/utkarsh261/pho/internal/customcmd"
 	"github.com/utkarsh261/pho/internal/domain"
 	pholog "github.com/utkarsh261/pho/internal/log"
 	"github.com/utkarsh261/pho/internal/release"
@@ -98,6 +99,11 @@ type Dependencies struct {
 	FetchLatest     func(ctx context.Context) (release.Release, error)
 	// RunUpdate is nil unless pho was installed with Homebrew.
 	RunUpdate func() tea.Cmd
+
+	// Keybindings are the config's custom commands. RunCustom runs one;
+	// nil means customcmd.Exec.
+	Keybindings []customcmd.Binding
+	RunCustom   func(key, command, dir string) tea.Cmd
 }
 
 type Model struct {
@@ -141,6 +147,9 @@ type Model struct {
 	updateTarget       string
 	updateResult       string
 	updated            bool
+
+	// customNotice answers a custom key on the dashboard until the next key.
+	customNotice string
 
 	focus         domain.FocusTarget
 	previousFocus domain.FocusTarget
@@ -396,6 +405,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.handleBackToPRDetail()
 	case prdetail.ToggleKeymapOverlayMsg:
 		return m, m.toggleKeymapOverlay()
+	case prdetail.CustomKey:
+		return m, m.runCustomInPRDetail(msg.Key)
+	case customcmd.FinishedMsg:
+		m.handleCustomFinished(msg)
+		return m, nil
 	case prdetail.OpenBrowserCommit:
 		return m, func() tea.Msg {
 			url := fmt.Sprintf("https://%s/%s/commit/%s", msg.Repo.Host, msg.Repo.FullName, msg.SHA)
@@ -724,6 +738,10 @@ func (m *Model) Layout() layout.LayoutState {
 }
 
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.customNotice != "" {
+		m.customNotice = ""
+		m.syncStatus()
+	}
 	// Keymap overlay takes priority when visible. Its Direct keys close it
 	// and run straight away.
 	if m.keymapOverlay.Visible {
@@ -807,6 +825,12 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.forwardKey(msg)
 	}
 
+	if m.focus != domain.FocusCmdPalette {
+		if b, ok := m.customBinding(msg); ok {
+			return m, m.runCustomOnDashboard(b)
+		}
+	}
+
 	result := keymap.Dispatch(m.focus, msg)
 	if isRootAction(result.Action) {
 		return m, m.handleRootAction(result.Action)
@@ -861,8 +885,9 @@ func (m *Model) toggleKeymapOverlay() tea.Cmd {
 		return nil // ? from PR detail can arrive after T opened the picker
 	}
 	ctx := keymapoverlay.Context{
-		View:  m.currentView(),
-		Focus: m.focus,
+		View:   m.currentView(),
+		Focus:  m.focus,
+		Custom: m.customOverlayBindings(),
 	}
 	if m.currentView() == domain.PrimaryViewPRDetail && m.prDetail != nil {
 		ctx.Tab = m.prDetail.ActiveTab()

@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -126,6 +125,7 @@ type launchRun struct {
 	dir      string
 	prNumber int
 	root     string
+	input    *os.File // pho's stdin; nil means an idle pipe
 }
 
 func isolate(tb testing.TB, dir string) {
@@ -157,7 +157,17 @@ func (r launchRun) start(tb testing.TB, marker string) (*tea.Program, *screen, c
 		logger:   pholog.New(cfg.Logging.File, "info"),
 		state:    state.NewStore(cfg.Paths.StateFile),
 	})
-	in, _ := io.Pipe()
+	// A real file, as a terminal is: a command run with tea.ExecProcess
+	// inherits it, and exec only waits on stdin copying for non-files.
+	in := r.input
+	if in == nil {
+		pr, pw, err := os.Pipe()
+		if err != nil {
+			tb.Fatal(err)
+		}
+		tb.Cleanup(func() { pr.Close(); pw.Close() })
+		in = pr
+	}
 	p := tea.NewProgram(model, tea.WithInput(in), tea.WithOutput(scr), tea.WithoutSignalHandler())
 	done := make(chan struct{})
 	go func() {

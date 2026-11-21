@@ -452,6 +452,7 @@ func buildModel(l launch) *app.Model {
 		LastUpdateCheck: l.saved.LastUpdateCheck,
 		FetchLatest:     (&release.Client{}).Latest,
 		RunUpdate:       brewUpdater(),
+		Keybindings:     l.cfg.Keybindings,
 	}
 	model := app.NewModel(deps)
 

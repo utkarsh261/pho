@@ -99,6 +99,7 @@ func TestPRDetailLoadedBackfillsEmptySummary(t *testing.T) {
 		Author:      "octocat",
 		State:       domain.PRStateOpen,
 		HeadRefName: "fix/login",
+		BaseRefName: "main",
 	}
 
 	m := NewModel(domain.PullRequestSummary{Repo: "owner/repo", Number: 7}, domain.Repository{FullName: "owner/repo"}, nil)
@@ -117,6 +118,9 @@ func TestPRDetailLoadedBackfillsEmptySummary(t *testing.T) {
 	}
 	if m.Summary.HeadRefName != "fix/login" {
 		t.Errorf("expected empty summary head ref backfilled, got %q", m.Summary.HeadRefName)
+	}
+	if m.Summary.BaseRefName != "main" {
+		t.Errorf("expected empty summary base ref backfilled, got %q", m.Summary.BaseRefName)
 	}
 
 	m = NewModel(domain.PullRequestSummary{Repo: "owner/repo", Number: 7, Title: "Local title", Author: "me", State: domain.PRStateClosed}, domain.Repository{FullName: "owner/repo"}, nil)
