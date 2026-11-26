@@ -53,6 +53,12 @@ type loadInvolvingCall struct {
 	force  bool
 }
 
+type loadSearchTabCall struct {
+	repo  domain.Repository
+	tab   domain.DashboardTab
+	force bool
+}
+
 type loadPreviewCall struct {
 	repo   string
 	number int
@@ -65,6 +71,7 @@ type stubDashboardService struct {
 
 	loadRepoCalls       []loadRepoCall
 	loadInvolvingCalls  []loadInvolvingCall
+	loadSearchTabCalls  []loadSearchTabCall
 	loadPreviewCalls    []loadPreviewCall
 	invalidateRepoCalls []domain.Repository
 	invalidatePRCalls   []string
@@ -72,6 +79,10 @@ type stubDashboardService struct {
 	// openPages maps a cursor to the open-PR page returned for it.
 	openPages          map[string]stubOpenPage
 	loadOpenPagesCalls []string
+
+	// searchTabs maps repo full name then tab id to the PRs the tab finds.
+	searchTabs   map[string]map[domain.DashboardTab][]domain.PullRequestSummary
+	searchTabErr error
 }
 
 type stubOpenPage struct {
@@ -111,6 +122,15 @@ func (s *stubDashboardService) LoadRepo(ctx context.Context, repo domain.Reposit
 func (s *stubDashboardService) LoadInvolving(ctx context.Context, repo domain.Repository, viewer string, force bool) (domain.InvolvingSnapshot, error) {
 	s.loadInvolvingCalls = append(s.loadInvolvingCalls, loadInvolvingCall{repo: repo, viewer: viewer, force: force})
 	return domain.InvolvingSnapshot{Repo: repo, FetchedAt: fixedNow()}, nil
+}
+
+func (s *stubDashboardService) LoadSearchTab(ctx context.Context, repo domain.Repository, tab domain.SearchTab, force bool) (domain.SearchTabSnapshot, error) {
+	s.loadSearchTabCalls = append(s.loadSearchTabCalls, loadSearchTabCall{repo: repo, tab: tab.ID, force: force})
+	if s.searchTabErr != nil {
+		return domain.SearchTabSnapshot{}, s.searchTabErr
+	}
+	prs := s.searchTabs[repo.FullName][tab.ID]
+	return domain.SearchTabSnapshot{Repo: repo, PRs: prs, TotalCount: len(prs), FetchedAt: fixedNow()}, nil
 }
 
 func (s *stubDashboardService) LoadPreview(ctx context.Context, repo string, number int, force bool) (domain.PRPreviewSnapshot, error) {
@@ -496,6 +516,11 @@ func TestWindowSizeMsgRecalculatesLayout(t *testing.T) {
 }
 
 func newTestModel(repos []domain.Repository, dashboards map[string]domain.DashboardSnapshot) *Model {
+	return newTestModelWith(repos, dashboards, nil)
+}
+
+// newTestModelWith is newTestModel with a chance to adjust the dependencies.
+func newTestModelWith(repos []domain.Repository, dashboards map[string]domain.DashboardSnapshot, opt func(*Dependencies)) *Model {
 	if dashboards == nil {
 		dashboards = make(map[string]domain.DashboardSnapshot)
 	}
@@ -510,6 +535,9 @@ func newTestModel(repos []domain.Repository, dashboards map[string]domain.Dashbo
 		Root:      ".",
 		Host:      "github.com",
 		Now:       fixedNow,
+	}
+	if opt != nil {
+		opt(&deps)
 	}
 	model := NewModel(deps)
 	model.state.Session.ViewerByHost["github.com"] = "octocat"

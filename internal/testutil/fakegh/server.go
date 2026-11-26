@@ -53,9 +53,10 @@ type Server struct {
 	prs     map[string][]domain.PullRequestSummary
 	preview map[string]any
 
-	mu    sync.Mutex
-	rng   *rand.Rand
-	count map[string]int
+	mu       sync.Mutex
+	rng      *rand.Rand
+	count    map[string]int
+	searches []string
 }
 
 func New(opts Options) *Server {
@@ -173,6 +174,29 @@ func (s *Server) Summary() string {
 	return strings.Join(parts, " ")
 }
 
+// Searches returns every search query received, oldest first.
+func (s *Server) Searches() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.searches...)
+}
+
+// searchAuthors finds author: qualifiers; the fake honours only these.
+var searchAuthors = regexp.MustCompile(`(?:^|\s)author:(\S+)`)
+
+func filterAuthors(prs []domain.PullRequestSummary, authors [][]string) []domain.PullRequestSummary {
+	var out []domain.PullRequestSummary
+	for _, p := range prs {
+		for _, a := range authors {
+			if strings.EqualFold(p.Author, a[1]) {
+				out = append(out, p)
+				break
+			}
+		}
+	}
+	return out
+}
+
 func (s *Server) Reset() {
 	s.mu.Lock()
 	s.count = map[string]int{}
@@ -224,12 +248,19 @@ func (s *Server) graphql(w http.ResponseWriter, r *http.Request) {
 		if m != nil {
 			data = s.repoPRs(m[1]+"/"+m[2], after, false)
 		}
-	case "InvolvingPRsQuery":
+	case "InvolvingPRsQuery", "CustomTabPRsQuery":
+		q := str("query")
+		s.mu.Lock()
+		s.searches = append(s.searches, q)
+		s.mu.Unlock()
 		repo := ""
-		if m := regexp.MustCompile(`repo:(\S+)`).FindStringSubmatch(str("query")); m != nil {
+		if m := regexp.MustCompile(`repo:(\S+)`).FindStringSubmatch(q); m != nil {
 			repo = m[1]
 		}
 		prs := s.prs[repo]
+		if authors := searchAuthors.FindAllStringSubmatch(q, -1); authors != nil {
+			prs = filterAuthors(prs, authors)
+		}
 		prs = prs[:min(len(prs), 10)]
 		nodes := make([]any, len(prs))
 		for i, p := range prs {

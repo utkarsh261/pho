@@ -2,6 +2,7 @@ package graphql
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/utkarsh261/pho/internal/domain"
@@ -155,7 +156,15 @@ func buildDashboardQuery(profile githubpkg.GitHubHostProfile) string {
 }
 
 func buildInvolvingQuery(profile githubpkg.GitHubHostProfile) string {
-	return fmt.Sprintf(`query InvolvingPRsQuery($query: String!) {
+	return buildSearchPRsQuery("InvolvingPRsQuery", profile)
+}
+
+func buildCustomTabQuery(profile githubpkg.GitHubHostProfile) string {
+	return buildSearchPRsQuery("CustomTabPRsQuery", profile)
+}
+
+func buildSearchPRsQuery(op string, profile githubpkg.GitHubHostProfile) string {
+	return fmt.Sprintf(`query %s($query: String!) {
   search(type: ISSUE, query: $query, first: 100) {
     issueCount
     pageInfo {
@@ -168,7 +177,7 @@ func buildInvolvingQuery(profile githubpkg.GitHubHostProfile) string {
       }
     }
   }
-}`, pullRequestSummarySelection(profile))
+}`, op, pullRequestSummarySelection(profile))
 }
 
 func buildPreviewQuery(profile githubpkg.GitHubHostProfile) string {
@@ -201,6 +210,24 @@ func buildAllPRsQuery(profile githubpkg.GitHubHostProfile, owner, name, after st
     }
   }
 }`, owner, name, afterClause, pullRequestSummarySelection(profile))
+}
+
+// stateQualifier spots a query that already picks PR state, so pho doesn't
+// add is:open on top.
+var stateQualifier = regexp.MustCompile(`(?i)(^|\s)-?(is:(open|closed|merged|unmerged)|state:)`)
+
+// SearchTabQuery is the search a custom tab runs: the user's qualifiers
+// scoped to repo, open PRs unless the query says otherwise.
+func SearchTabQuery(repo domain.Repository, query string) string {
+	full := repoFullName(repo)
+	if full == "" {
+		full = repoOwner(repo) + "/" + repoName(repo)
+	}
+	q := "repo:" + full + " is:pr"
+	if !stateQualifier.MatchString(query) {
+		q += " is:open"
+	}
+	return strings.TrimSpace(q + " " + query)
 }
 
 func buildInvolvingSearchQuery(repo domain.Repository, viewer string) string {

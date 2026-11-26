@@ -14,6 +14,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/utkarsh261/pho/internal/customcmd"
+	"github.com/utkarsh261/pho/internal/domain"
 )
 
 // duration is a time.Duration that can be decoded from a TOML string like "5m".
@@ -45,10 +46,11 @@ type rawConfig struct {
 		Aliases map[string]string `toml:"aliases"`
 	} `toml:"hosts"`
 	Dashboard struct {
-		DefaultTab  string `toml:"default_tab"`
-		RecentHours int    `toml:"recent_hours"`
-		MaxPRs      int    `toml:"max_prs"`
-		GroupStacks *bool  `toml:"group_stacks"`
+		DefaultTab  string   `toml:"default_tab"`
+		RecentHours int      `toml:"recent_hours"`
+		MaxPRs      int      `toml:"max_prs"`
+		GroupStacks *bool    `toml:"group_stacks"`
+		Tabs        []rawTab `toml:"tabs"`
 	} `toml:"dashboard"`
 	Cache struct {
 		Dir            string   `toml:"dir"`
@@ -105,6 +107,7 @@ type Config struct {
 		RecentHours int
 		MaxPRs      int  // cap on open PRs the All tab loads
 		GroupStacks bool // list stacked PRs together, top of the stack first
+		Tabs        []domain.SearchTab
 	}
 	Cache struct {
 		Dir            string
@@ -317,6 +320,11 @@ func Load(path string) (Config, error) {
 	cfg.Updates.Check = def.Updates.Check
 	if raw.Updates.Check != nil {
 		cfg.Updates.Check = *raw.Updates.Check
+	}
+	if cfg.Dashboard.Tabs, err = parseTabs(raw.Dashboard.Tabs); err != nil {
+		def.Cache.Dir = paths.CacheDir
+		def.Logging.File = paths.LogFile
+		return def, fmt.Errorf("config: %s: %w", resolved, err)
 	}
 	bindings := make([]customcmd.Binding, len(raw.Keybindings))
 	for i, b := range raw.Keybindings {

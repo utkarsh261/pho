@@ -27,6 +27,7 @@ type fakeGitHubClient struct {
 	FetchPreviewFn      func(ctx context.Context, repo domain.Repository, number int) (domain.PRPreviewSnapshot, error)
 	FetchDashboardPRsFn func(ctx context.Context, repo domain.Repository) ([]domain.PullRequestSummary, int, bool, string, error)
 	FetchInvolvingPRsFn func(ctx context.Context, repo domain.Repository, viewer string) ([]domain.PullRequestSummary, int, bool, error)
+	FetchSearchPRsFn    func(ctx context.Context, repo domain.Repository, query string) ([]domain.PullRequestSummary, int, bool, error)
 	FetchViewerFn       func(ctx context.Context, host string) (string, error)
 	FetchCommitsFn      func(ctx context.Context, repo domain.Repository, number int) ([]domain.Commit, error)
 }
@@ -50,6 +51,13 @@ func (f *fakeGitHubClient) FetchInvolvingPRs(ctx context.Context, repo domain.Re
 		return nil, 0, false, fmt.Errorf("unexpected FetchInvolvingPRs(%s,%s)", repo.FullName, viewer)
 	}
 	return f.FetchInvolvingPRsFn(ctx, repo, viewer)
+}
+
+func (f *fakeGitHubClient) FetchSearchPRs(ctx context.Context, repo domain.Repository, query string) ([]domain.PullRequestSummary, int, bool, error) {
+	if f.FetchSearchPRsFn == nil {
+		return nil, 0, false, fmt.Errorf("unexpected FetchSearchPRs(%s,%s)", repo.FullName, query)
+	}
+	return f.FetchSearchPRsFn(ctx, repo, query)
 }
 
 func (f *fakeGitHubClient) FetchPreview(ctx context.Context, repo domain.Repository, number int) (domain.PRPreviewSnapshot, error) {

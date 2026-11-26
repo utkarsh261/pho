@@ -19,6 +19,10 @@ type tabSnapshot struct {
 	Truncated  bool
 	// Scanned is how many open PRs a filtered tab was classified from.
 	Scanned int
+	// Loading and Err describe a custom tab's search; built-in tabs leave
+	// them unset.
+	Loading bool
+	Err     string
 }
 
 // PageStatus is the lazy-loading state of the All tab.
@@ -39,6 +43,9 @@ type PRListPanelModel struct {
 	theme   *theme.Theme
 	lastKey string
 	stacks  domain.StackIndex
+
+	order  []domain.DashboardTab // nil means the built-in tabs
+	custom map[domain.DashboardTab]domain.SearchTab
 }
 
 func NewPRListPanelModel() *PRListPanelModel {
@@ -70,6 +77,27 @@ func (m *PRListPanelModel) SetTabSnapshot(tab domain.DashboardTab, prs []domain.
 		Truncated:  truncated,
 	}
 	m.ensureVisible()
+}
+
+// SetCustomTabs appends the user's search tabs after the built-in ones.
+func (m *PRListPanelModel) SetCustomTabs(tabs []domain.SearchTab) {
+	m.order = append([]domain.DashboardTab(nil), domain.BuiltinTabs...)
+	m.custom = make(map[domain.DashboardTab]domain.SearchTab, len(tabs))
+	for _, t := range tabs {
+		m.order = append(m.order, t.ID)
+		m.custom[t.ID] = t
+	}
+}
+
+// SetTabStatus marks a custom tab as loading or failed, keeping its PRs.
+func (m *PRListPanelModel) SetTabStatus(tab domain.DashboardTab, loading bool, errMsg string) {
+	if m.Tabs == nil {
+		m.Tabs = make(map[domain.DashboardTab]tabSnapshot)
+	}
+	snap := m.Tabs[tab]
+	snap.Loading = loading
+	snap.Err = errMsg
+	m.Tabs[tab] = snap
 }
 
 // SetStacks sets the stacks drawn as rails between list rows.
@@ -158,7 +186,7 @@ func (m *PRListPanelModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "h", "left":
-			next := nextTab(m.Active, -1)
+			next := m.nextTab(m.Active, -1)
 			if next != m.Active {
 				m.Active = next
 				m.Cursor = 0
@@ -167,7 +195,7 @@ func (m *PRListPanelModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, changeTabCmd(next)
 			}
 		case "l", "right":
-			next := nextTab(m.Active, 1)
+			next := m.nextTab(m.Active, 1)
 			if next != m.Active {
 				m.Active = next
 				m.Cursor = 0
@@ -204,6 +232,11 @@ func (m *PRListPanelModel) View() string {
 	rows := m.visibleRows()
 	if len(rows) == 0 {
 		empty := "  No pull requests here"
+		if snap := m.currentSnapshot(); snap.Err != "" {
+			empty = "  Couldn't load: " + snap.Err + " · R to retry"
+		} else if snap.Loading {
+			empty = "  Loading…"
+		}
 		if m.theme != nil {
 			empty = m.theme.MutedTxt.Render(empty)
 		}
@@ -484,10 +517,11 @@ func (m *PRListPanelModel) stateGlyph(pr domain.PullRequestSummary) string {
 }
 
 func (m *PRListPanelModel) renderTabBar() string {
-	parts := make([]string, 0, len(dashboardTabOrder))
-	for _, tab := range dashboardTabOrder {
+	order := m.tabOrder()
+	parts := make([]string, 0, len(order))
+	for _, tab := range order {
 		count := len(m.currentSnapshotFor(tab).PRs)
-		label := fmt.Sprintf("%s(%d)", tabLabel(tab), count)
+		label := fmt.Sprintf("%s(%d)", m.tabLabel(tab), count)
 		if tab == m.Active {
 			label = "[" + label + "]"
 		}
@@ -523,17 +557,18 @@ func (m *PRListPanelModel) renderTabBarThemed() string {
 
 func (m *PRListPanelModel) renderTabBarTier(tier tabBarTier) string {
 	th := m.theme
+	order := m.tabOrder()
 	if tier == tabBarSingle {
-		idx := max(indexOfTab(m.Active), 0)
-		active := th.TabActive.Render(fmt.Sprintf("%s %d", tabShortLabel(m.Active), m.tabCount(m.Active)))
-		pos := th.FaintTxt.Render(fmt.Sprintf("%d/%d", idx+1, len(dashboardTabOrder)))
+		idx := max(m.indexOfTab(m.Active), 0)
+		active := th.TabActive.Render(fmt.Sprintf("%s %d", m.tabShortLabel(m.Active), m.tabCount(m.Active)))
+		pos := th.FaintTxt.Render(fmt.Sprintf("%d/%d", idx+1, len(order)))
 		return th.FaintTxt.Render("‹") + active + th.FaintTxt.Render("›") + " " + pos
 	}
-	parts := make([]string, 0, 2*len(dashboardTabOrder))
-	for i, tab := range dashboardTabOrder {
-		label := tabLabel(tab)
+	parts := make([]string, 0, 2*len(order))
+	for i, tab := range order {
+		label := m.tabLabel(tab)
 		if tier != tabBarFull {
-			label = tabShortLabel(tab)
+			label = m.tabShortLabel(tab)
 		}
 		count := m.tabCount(tab)
 		if tab == m.Active {
@@ -543,7 +578,7 @@ func (m *PRListPanelModel) renderTabBarTier(tier tabBarTier) string {
 		} else {
 			parts = append(parts, th.TabInactive.Render(label+" "+th.FaintTxt.Render(fmt.Sprint(count))))
 		}
-		if i < len(dashboardTabOrder)-1 {
+		if i < len(order)-1 {
 			parts = append(parts, " ")
 		}
 	}
@@ -613,7 +648,11 @@ func (m *PRListPanelModel) footerLine() string {
 		// Filtered tabs are classified from the loaded open PRs only.
 		line = fmt.Sprintf("%d from newest %d of %d open", len(snap.PRs), max(snap.Scanned, len(snap.PRs)), total)
 	default:
-		line = fmt.Sprintf("Showing %d of %d open PRs", len(snap.PRs), total)
+		if m.Active.IsCustom() {
+			line = fmt.Sprintf("Showing %d of %d PRs", len(snap.PRs), total)
+		} else {
+			line = fmt.Sprintf("Showing %d of %d open PRs", len(snap.PRs), total)
+		}
 	}
 	if m.theme != nil {
 		return " " + m.theme.MutedTxt.Render(line)

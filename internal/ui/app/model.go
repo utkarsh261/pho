@@ -59,6 +59,10 @@ type Dependencies struct {
 	MaxDashboardPRs int
 	// NoStackGrouping keeps stacked PRs in plain recency order.
 	NoStackGrouping bool
+	// SearchTabs are the config's custom tabs, shown after the built-ins.
+	SearchTabs []domain.SearchTab
+	// DefaultTab is the tab shown at startup; empty means My PRs.
+	DefaultTab domain.DashboardTab
 	// DiffLimits controls which diff files start collapsed; zero fields use
 	// pho's defaults.
 	DiffLimits prdetail.DiffLimits
@@ -245,7 +249,7 @@ func NewModel(deps Dependencies) *Model {
 				CursorIndex:   0,
 			},
 			Dashboard: domain.DashboardState{
-				ActiveTab:      domain.TabMyPRs,
+				ActiveTab:      currentTabOrDefault(deps.DefaultTab),
 				PRsByTab:       make(map[domain.DashboardTab][]domain.PullRequestSummary),
 				LastRefreshAt:  make(map[domain.DashboardTab]time.Time),
 				FreshnessByTab: make(map[domain.DashboardTab]domain.Freshness),
@@ -268,6 +272,10 @@ func NewModel(deps Dependencies) *Model {
 	}
 
 	m.syncPanels()
+	if len(deps.SearchTabs) > 0 {
+		m.prList.SetCustomTabs(deps.SearchTabs)
+	}
+	m.prList.Active = m.state.Dashboard.ActiveTab
 	m.syncStatus()
 	m.syncPaletteStats()
 	return m
@@ -976,6 +984,8 @@ func (m *Model) applyMessage(msg tea.Msg) tea.Cmd {
 		return m.handleDashboardLoaded(msg)
 	case cmds.InvolvingLoaded:
 		return m.handleInvolvingLoaded(msg)
+	case cmds.SearchTabLoaded:
+		return m.handleSearchTabLoaded(msg)
 	case cmds.PreviewLoaded:
 		return m.handlePreviewLoaded(msg)
 	case cmds.SearchIndexRebuilt:
@@ -1265,7 +1275,7 @@ func (m *Model) handleChangeTabMsg(msg dashboard.ChangeTabMsg) tea.Cmd {
 	m.state.Dashboard.SelectedIndex = 0
 	m.resetPreviewState()
 	m.syncStatus()
-	return batch(m.syncCurrentSelection(), m.maybeLoadMoreOpenPRs())
+	return batch(m.syncCurrentSelection(), m.maybeLoadMoreOpenPRs(), m.loadActiveSearchTabCmd(false))
 }
 
 func (m *Model) handlePreviewFetchMsg(msg dashboard.PreviewFetchMsg) tea.Cmd {
@@ -1455,7 +1465,7 @@ func (m *Model) refreshSelectedRepo(force bool) tea.Cmd {
 	// Trigger status bar update to show loading spinner
 	m.syncStatus()
 
-	return batch(m.loadRepoCmds(repo, force)...)
+	return batch(append(m.loadRepoCmds(repo, force), m.loadActiveSearchTabCmd(force))...)
 }
 
 func (m *Model) selectRepoByFullName(fullName string, force bool) tea.Cmd {
@@ -1491,6 +1501,7 @@ func (m *Model) selectRepoAt(index int, repo domain.Repository, force bool) tea.
 	m.prList.Scroll = 0
 	m.state.Dashboard.SelectedIndex = 0
 	m.resetDashboardsForRepo()
+	m.clearSearchTabs()
 	m.openPages.reset(repo.FullName)
 	m.prList.Paging = dashboard.PageStatus{}
 	m.resetPreviewState()
@@ -1506,6 +1517,7 @@ func (m *Model) selectRepoAt(index int, repo domain.Repository, force bool) tea.
 	// Always use cache first (force=false). The stale-while-revalidate
 	// mechanism will schedule a background refresh if data is stale.
 	cmdsOut = append(cmdsOut, m.loadRepoCmds(repo, false)...)
+	cmdsOut = append(cmdsOut, m.loadActiveSearchTabCmd(false))
 	return batch(cmdsOut...)
 }
 

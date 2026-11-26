@@ -311,6 +311,17 @@ func (c *Client) FetchInvolvingPRs(ctx context.Context, repo domain.Repository, 
 	return summaries, total, truncated, nil
 }
 
+// FetchSearchPRs runs a custom tab's search; query is already repo-scoped
+// (see SearchTabQuery).
+func (c *Client) FetchSearchPRs(ctx context.Context, repo domain.Repository, query string) ([]domain.PullRequestSummary, int, bool, error) {
+	c.log.Debug("fetch search tab", "repo", repo.FullName, "host", repo.Host, "query", query)
+	resp, err := queryGraphQL[model.InvolvingData](c, ctx, repo.Host, buildCustomTabQuery, map[string]any{"query": query})
+	if err != nil {
+		return nil, 0, false, err
+	}
+	return normalizeInvolvingResponse(repo, resp.Data)
+}
+
 // FetchAllPRs loads one page of all PRs (any state) for the jump index.
 func (c *Client) FetchAllPRs(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error) {
 	c.log.Debug("fetch all prs", "repo", repo.FullName, "host", repo.Host, "cursor", cursor)

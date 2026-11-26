@@ -13,14 +13,6 @@ import (
 
 const timeLayout = "2006-01-02 15:04 MST"
 
-var dashboardTabOrder = []domain.DashboardTab{
-	domain.TabMyPRs,
-	domain.TabNeedsReview,
-	domain.TabInvolving,
-	domain.TabAll,
-	domain.TabRecent,
-}
-
 type SelectRepoMsg struct {
 	Index int
 	Repo  domain.Repository
@@ -52,7 +44,7 @@ type PreviewLoadedMsg struct {
 	Preview domain.PRPreviewSnapshot
 }
 
-func tabLabel(tab domain.DashboardTab) string {
+func builtinTabLabel(tab domain.DashboardTab) string {
 	switch tab {
 	case domain.TabMyPRs:
 		return "My PRs"
@@ -69,8 +61,31 @@ func tabLabel(tab domain.DashboardTab) string {
 	}
 }
 
+func (m *PRListPanelModel) tabOrder() []domain.DashboardTab {
+	if m.order == nil {
+		return domain.BuiltinTabs
+	}
+	return m.order
+}
+
+func (m *PRListPanelModel) tabLabel(tab domain.DashboardTab) string {
+	if t, ok := m.custom[tab]; ok {
+		return t.Name
+	}
+	return builtinTabLabel(tab)
+}
+
 // tabShortLabel is used when the full tab labels don't fit the panel.
-func tabShortLabel(tab domain.DashboardTab) string {
+func (m *PRListPanelModel) tabShortLabel(tab domain.DashboardTab) string {
+	if t, ok := m.custom[tab]; ok {
+		if t.Short != "" {
+			return t.Short
+		}
+		if len([]rune(t.Name)) > 8 {
+			return truncateRunes(t.Name, 7) + "…"
+		}
+		return t.Name
+	}
 	switch tab {
 	case domain.TabMyPRs:
 		return "Mine"
@@ -79,27 +94,22 @@ func tabShortLabel(tab domain.DashboardTab) string {
 	case domain.TabInvolving:
 		return "Involved"
 	default:
-		return tabLabel(tab)
+		return builtinTabLabel(tab)
 	}
 }
 
-func nextTab(tab domain.DashboardTab, delta int) domain.DashboardTab {
-	if len(dashboardTabOrder) == 0 {
-		return tab
-	}
-	idx := indexOfTab(tab)
-	if idx < 0 {
-		idx = 0
-	}
-	n := (idx + delta) % len(dashboardTabOrder)
+func (m *PRListPanelModel) nextTab(tab domain.DashboardTab, delta int) domain.DashboardTab {
+	order := m.tabOrder()
+	idx := max(m.indexOfTab(tab), 0)
+	n := (idx + delta) % len(order)
 	if n < 0 {
-		n += len(dashboardTabOrder)
+		n += len(order)
 	}
-	return dashboardTabOrder[n]
+	return order[n]
 }
 
-func indexOfTab(tab domain.DashboardTab) int {
-	for i, candidate := range dashboardTabOrder {
+func (m *PRListPanelModel) indexOfTab(tab domain.DashboardTab) int {
+	for i, candidate := range m.tabOrder() {
 		if candidate == tab {
 			return i
 		}
