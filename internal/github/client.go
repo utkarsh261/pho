@@ -15,6 +15,8 @@ type GitHubClient interface {
 	// Returns summaries, hasNextPage, endCursor, error.
 	FetchOpenPRsPage(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
 	FetchInvolvingPRs(ctx context.Context, repo domain.Repository, viewer string) ([]domain.PullRequestSummary, int, bool, error)
+	// FetchSearchPRs runs a repo-scoped PR search for a custom tab.
+	FetchSearchPRs(ctx context.Context, repo domain.Repository, query string) ([]domain.PullRequestSummary, int, bool, error)
 	FetchPreview(ctx context.Context, repo domain.Repository, number int) (domain.PRPreviewSnapshot, error)
 	FetchCommits(ctx context.Context, repo domain.Repository, number int) ([]domain.Commit, error)
 	PostComment(ctx context.Context, host, pullRequestID, body string) error

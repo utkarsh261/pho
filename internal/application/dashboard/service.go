@@ -2,15 +2,19 @@ package dashboard
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/utkarsh261/pho/internal/cache"
 	"github.com/utkarsh261/pho/internal/domain"
 	githubclient "github.com/utkarsh261/pho/internal/github"
+	"github.com/utkarsh261/pho/internal/github/graphql"
 	pholog "github.com/utkarsh261/pho/internal/log"
 )
 
@@ -19,6 +23,7 @@ const (
 	cacheTTL                 = 2 * time.Minute
 	cacheKindDashboardPRs    = "dashboard_prs"
 	cacheKindDashboardInvolv = "dashboard_involving"
+	cacheKindDashboardTab    = "dashboard_search_tab"
 	cacheKindPreview         = "preview"
 	defaultPreviewHost       = "github.com"
 )
@@ -27,6 +32,7 @@ type DashboardService interface {
 	SelectInitialRepo(repos []domain.Repository, cwd string) (*domain.Repository, error)
 	LoadRepo(ctx context.Context, repo domain.Repository, force bool) (domain.DashboardSnapshot, error)
 	LoadInvolving(ctx context.Context, repo domain.Repository, viewer string, force bool) (domain.InvolvingSnapshot, error)
+	LoadSearchTab(ctx context.Context, repo domain.Repository, tab domain.SearchTab, force bool) (domain.SearchTabSnapshot, error)
 	LoadPreview(ctx context.Context, repo string, number int, force bool) (domain.PRPreviewSnapshot, error)
 	LoadAllPRsPage(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
 	LoadOpenPRsPage(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
@@ -40,6 +46,11 @@ type Service struct {
 	Now          func() time.Time
 	BackgroundFn func(func())
 	Log          *pholog.Logger
+	// SearchTabs are the configured custom tabs, so InvalidatePR can drop
+	// their cached results too.
+	SearchTabs []domain.SearchTab
+
+	refreshing sync.Map // cache key -> struct{}, background refreshes in flight
 }
 
 func NewService(cacheCoordinator *cache.Coordinator, client githubclient.GitHubClient) *Service {
@@ -83,7 +94,7 @@ func (s *Service) LoadRepo(ctx context.Context, repo domain.Repository, force bo
 	found := false
 	if !force {
 		_, _, found, _ = s.Cache.StaleWhileRevalidate(ctx, key, &cached, func(string) {
-			s.spawn(func() {
+			s.refresh(key, func() {
 				_, _ = s.LoadRepo(context.Background(), repo, true)
 			})
 		})
@@ -130,7 +141,7 @@ func (s *Service) LoadInvolving(ctx context.Context, repo domain.Repository, vie
 	found := false
 	if !force {
 		_, _, found, _ = s.Cache.StaleWhileRevalidate(ctx, key, &cached, func(string) {
-			s.spawn(func() {
+			s.refresh(key, func() {
 				_, _ = s.LoadInvolving(context.Background(), repo, viewer, true)
 			})
 		})
@@ -163,6 +174,50 @@ func (s *Service) LoadInvolving(ctx context.Context, repo domain.Repository, vie
 	return out, nil
 }
 
+func (s *Service) LoadSearchTab(ctx context.Context, repo domain.Repository, tab domain.SearchTab, force bool) (domain.SearchTabSnapshot, error) {
+	defer s.log().Timer("dashboard load search tab", pholog.FieldRepo, repo.FullName, "tab", tab.Name)()
+	if err := s.ensureReady(); err != nil {
+		return domain.SearchTabSnapshot{}, err
+	}
+	repo = normalizeRepository(repo)
+	query := graphql.SearchTabQuery(repo, tab.Query)
+	key := searchTabCacheKey(repo, query)
+
+	var cached domain.SearchTabSnapshot
+	found := false
+	if !force {
+		_, _, found, _ = s.Cache.StaleWhileRevalidate(ctx, key, &cached, func(string) {
+			s.refresh(key, func() {
+				_, _ = s.LoadSearchTab(context.Background(), repo, tab, true)
+			})
+		})
+		if found {
+			return cached, nil
+		}
+	}
+
+	prs, total, truncated, err := s.Client.FetchSearchPRs(ctx, repo, query)
+	if err != nil {
+		if found {
+			return cached, fmt.Errorf("refresh tab %q %s: %w", tab.Name, repo.FullName, err)
+		}
+		return domain.SearchTabSnapshot{}, err
+	}
+
+	out := domain.SearchTabSnapshot{
+		Repo:       repo,
+		PRs:        prs,
+		TotalCount: total,
+		Truncated:  truncated,
+		FetchedAt:  s.now().UTC(),
+	}
+	meta := dashboardMeta(key, repo, cacheKindDashboardTab, nil, out.FetchedAt)
+	if err := s.Cache.Write(ctx, key, out, meta); err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
 func (s *Service) LoadPreview(ctx context.Context, repo string, number int, force bool) (domain.PRPreviewSnapshot, error) {
 	if err := s.ensureReady(); err != nil {
 		return domain.PRPreviewSnapshot{}, err
@@ -182,7 +237,7 @@ func (s *Service) loadPreview(ctx context.Context, parsedRepo domain.Repository,
 	found := false
 	if !force {
 		_, _, found, _ = s.Cache.StaleWhileRevalidate(ctx, key, &cached, func(string) {
-			s.spawn(func() {
+			s.refresh(key, func() {
 				_, _ = s.loadPreview(context.Background(), parsedRepo, number, true)
 			})
 		})
@@ -250,11 +305,15 @@ func (s *Service) InvalidatePR(ctx context.Context, repo domain.Repository, numb
 	}
 	repo = normalizeRepository(repo)
 	var errs []error
-	for _, key := range []string{
+	keys := []string{
 		dashboardCacheKey(repo, "prs"),
 		dashboardCacheKey(repo, "involving"),
 		previewCacheKey(repo, number),
-	} {
+	}
+	for _, tab := range s.SearchTabs {
+		keys = append(keys, searchTabCacheKey(repo, graphql.SearchTabQuery(repo, tab.Query)))
+	}
+	for _, key := range keys {
 		if err := s.Cache.Delete(ctx, key); err != nil {
 			errs = append(errs, err)
 		}
@@ -324,6 +383,25 @@ func (s *Service) spawn(fn func()) {
 		return
 	}
 	go fn()
+}
+
+// refresh runs fn in the background unless a refresh of key is already
+// running, so flicking between tabs doesn't stack identical requests.
+func (s *Service) refresh(key string, fn func()) {
+	if _, busy := s.refreshing.LoadOrStore(key, struct{}{}); busy {
+		return
+	}
+	s.spawn(func() {
+		defer s.refreshing.Delete(key)
+		fn()
+	})
+}
+
+// searchTabCacheKey hashes the full query, so editing a tab's query never
+// serves the old query's results.
+func searchTabCacheKey(repo domain.Repository, query string) string {
+	sum := sha256.Sum256([]byte(query))
+	return dashboardCacheKey(repo, "tab:"+hex.EncodeToString(sum[:6]))
 }
 
 func dashboardCacheKey(repo domain.Repository, kind string) string {

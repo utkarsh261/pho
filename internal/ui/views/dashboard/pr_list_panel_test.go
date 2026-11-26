@@ -237,3 +237,114 @@ func TestPRListPanelVimNavigation(t *testing.T) {
 		}
 	})
 }
+
+func TestPRListPanelCustomTabs(t *testing.T) {
+	t.Parallel()
+
+	custom := []domain.SearchTab{
+		{ID: domain.CustomTabID("Team"), Name: "Team"},
+		{ID: domain.CustomTabID("Infrastructure"), Name: "Infrastructure"},
+		{ID: domain.CustomTabID("My merged"), Name: "My merged", Short: "Merged"},
+		{ID: domain.CustomTabID("Docs"), Name: "Docs"},
+		{ID: domain.CustomTabID("Bots"), Name: "Bots"},
+	}
+	m := NewPRListPanelModel()
+	m.SetTheme(theme.Default())
+	m.SetCustomTabs(custom)
+	m.SetTabSnapshot(custom[0].ID, make([]domain.PullRequestSummary, 4), 4, false)
+	m.SetActiveTab(custom[0].ID)
+
+	for _, tc := range []struct {
+		width     int
+		want, not []string
+	}{
+		{200, []string{"My PRs", "Infrastructure", "My merged", "Team 4", "Bots"}, nil},
+		{100, []string{"Mine", "Infrast…", "Merged", "Team 4", "Bots"}, []string{"Infrastructure", "My merged"}},
+		{30, []string{"Team 4", "6/10"}, []string{"Mine"}},
+	} {
+		m.SetRect(tc.width, 12)
+		bar := m.renderTabBarThemed()
+		if w := lipgloss.Width(bar); w > tc.width {
+			t.Fatalf("width %d: tab bar is %d wide", tc.width, w)
+		}
+		plain := ansi.Strip(bar)
+		for _, s := range tc.want {
+			if !strings.Contains(plain, s) {
+				t.Errorf("width %d: expected %q in %q", tc.width, s, plain)
+			}
+		}
+		for _, s := range tc.not {
+			if strings.Contains(plain, s) {
+				t.Errorf("width %d: did not expect %q in %q", tc.width, s, plain)
+			}
+		}
+	}
+
+	// h/l walk from the built-ins into the custom tabs and wrap around.
+	m.SetActiveTab(domain.TabRecent)
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	if m.Active != custom[0].ID {
+		t.Fatalf("l from Recent = %q", m.Active)
+	}
+	m.SetActiveTab(custom[4].ID)
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	if m.Active != domain.TabMyPRs {
+		t.Fatalf("l from the last tab = %q, want wrap to My PRs", m.Active)
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
+	if m.Active != custom[4].ID {
+		t.Fatalf("h from My PRs = %q", m.Active)
+	}
+}
+
+func TestPRListPanelCustomTabFooterAndStates(t *testing.T) {
+	t.Parallel()
+
+	tab := domain.CustomTabID("Team")
+	m := NewPRListPanelModel()
+	m.SetCustomTabs([]domain.SearchTab{{ID: tab, Name: "Team"}})
+	m.SetRect(80, 20)
+	m.SetActiveTab(tab)
+
+	m.SetTabStatus(tab, true, "")
+	if !strings.Contains(m.View(), "Loading…") {
+		t.Fatalf("no loading state:\n%s", m.View())
+	}
+	m.SetTabStatus(tab, false, "bad query")
+	if !strings.Contains(m.View(), "Couldn't load: bad query · R to retry") {
+		t.Fatalf("no error state:\n%s", m.View())
+	}
+
+	m.SetTabSnapshot(tab, []domain.PullRequestSummary{makePR(1, "a", "x")}, 140, true)
+	if got := m.footerLine(); got != "Showing 1 of 140 PRs" {
+		t.Fatalf("footer = %q", got)
+	}
+}
+
+// A long configured short label is capped, and the one-tab fallback always
+// fits the panel.
+func TestPRListPanelLongShortLabelFits(t *testing.T) {
+	t.Parallel()
+
+	tab := domain.SearchTab{ID: domain.CustomTabID("RC"), Name: "Release candidates", Short: "release-candidates"}
+	m := NewPRListPanelModel()
+	m.SetTheme(theme.Default())
+	m.SetCustomTabs([]domain.SearchTab{tab})
+	m.SetTabSnapshot(tab.ID, make([]domain.PullRequestSummary, 12), 12, false)
+	m.SetActiveTab(tab.ID)
+
+	m.SetRect(80, 12)
+	if plain := ansi.Strip(m.renderTabBarThemed()); !strings.Contains(plain, "release…") || strings.Contains(plain, "release-candidates") {
+		t.Errorf("short tier = %q, want the label cut to release…", plain)
+	}
+	for _, width := range []int{20, 14, 10} {
+		m.SetRect(width, 12)
+		bar := m.renderTabBarThemed()
+		if w := lipgloss.Width(bar); w > width {
+			t.Errorf("width %d: tab bar is %d wide: %q", width, w, ansi.Strip(bar))
+		}
+		if !strings.Contains(ansi.Strip(bar), "12") {
+			t.Errorf("width %d: count lost: %q", width, ansi.Strip(bar))
+		}
+	}
+}

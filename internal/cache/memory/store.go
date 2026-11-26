@@ -72,7 +72,7 @@ func groupForKind(kind string) Group {
 		return GroupPRIndex
 	case "dashboard_recent":
 		return GroupRecent
-	case "dashboard_prs", "dashboard_involving":
+	case "dashboard_prs", "dashboard_involving", "dashboard_search_tab":
 		return GroupDashboard
 	case "discovery":
 		return GroupDiscovery

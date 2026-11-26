@@ -396,6 +396,7 @@ func buildModel(l launch) *app.Model {
 	discoverySvc.Log = l.logger
 	dashboardSvc := dashboard.NewService(coordinator, ghClient)
 	dashboardSvc.Log = l.logger
+	dashboardSvc.SearchTabs = l.cfg.Dashboard.Tabs
 	searchSvc := search.New()
 	searchSvc.Log = l.logger
 
@@ -428,6 +429,7 @@ func buildModel(l launch) *app.Model {
 		MaxJumpPRs:      l.cfg.Palette.MaxPRs,
 		MaxDashboardPRs: l.cfg.Dashboard.MaxPRs,
 		NoStackGrouping: !l.cfg.Dashboard.GroupStacks,
+		SearchTabs:      l.cfg.Dashboard.Tabs,
 		DiffLimits: prdetail.DiffLimits{
 			CollapseLines:     l.cfg.Diff.CollapseLines,
 			CollapseLineWidth: l.cfg.Diff.CollapseLineWidth,
@@ -454,7 +456,13 @@ func buildModel(l launch) *app.Model {
 		RunUpdate:       brewUpdater(),
 		Keybindings:     l.cfg.Keybindings,
 	}
+	defaultTab, knownTab := config.ResolveDefaultTab(l.cfg.Dashboard.DefaultTab, l.cfg.Dashboard.Tabs)
+	deps.DefaultTab = defaultTab
 	model := app.NewModel(deps)
+	if !knownTab {
+		l.logger.Warn("unknown [dashboard] default_tab, showing My PRs", "default_tab", l.cfg.Dashboard.DefaultTab)
+		model.ReportConfigProblem(fmt.Errorf("unknown [dashboard] default_tab %q, showing My PRs", l.cfg.Dashboard.DefaultTab))
+	}
 
 	th, err := selectTheme(l.cfg.UI.Theme, l.inv.Theme)
 	model.SetTheme(th)

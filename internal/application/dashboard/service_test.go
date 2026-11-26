@@ -17,6 +17,7 @@ import (
 type fakeGitHubClient struct {
 	FetchDashboardPRsFn func(ctx context.Context, repo domain.Repository) ([]domain.PullRequestSummary, int, bool, string, error)
 	FetchInvolvingPRsFn func(ctx context.Context, repo domain.Repository, viewer string) ([]domain.PullRequestSummary, int, bool, error)
+	FetchSearchPRsFn    func(ctx context.Context, repo domain.Repository, query string) ([]domain.PullRequestSummary, int, bool, error)
 	FetchPreviewFn      func(ctx context.Context, repo domain.Repository, number int) (domain.PRPreviewSnapshot, error)
 }
 
@@ -36,6 +37,13 @@ func (f *fakeGitHubClient) FetchInvolvingPRs(ctx context.Context, repo domain.Re
 		return nil, 0, false, fmt.Errorf("unexpected FetchInvolvingPRs(%s,%s)", repo.FullName, viewer)
 	}
 	return f.FetchInvolvingPRsFn(ctx, repo, viewer)
+}
+
+func (f *fakeGitHubClient) FetchSearchPRs(ctx context.Context, repo domain.Repository, query string) ([]domain.PullRequestSummary, int, bool, error) {
+	if f.FetchSearchPRsFn == nil {
+		return nil, 0, false, fmt.Errorf("unexpected FetchSearchPRs(%s,%s)", repo.FullName, query)
+	}
+	return f.FetchSearchPRsFn(ctx, repo, query)
 }
 
 func (f *fakeGitHubClient) FetchPreview(ctx context.Context, repo domain.Repository, number int) (domain.PRPreviewSnapshot, error) {
@@ -459,5 +467,119 @@ func TestInvalidatePRKeepsOtherEntries(t *testing.T) {
 		if _, found, _ := coord.L2.Get(ctx, k, &v); !found {
 			t.Errorf("%s should be kept", k)
 		}
+	}
+}
+
+func TestLoadSearchTab(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	repo := testutil.Repo("acme/api")
+	tab := domain.SearchTab{ID: domain.CustomTabID("Team"), Name: "Team", Query: "author:alice"}
+	var queries []string
+	svc := &Service{
+		Cache: newTestCoordinator(t),
+		Client: &fakeGitHubClient{
+			FetchSearchPRsFn: func(ctx context.Context, repo domain.Repository, query string) ([]domain.PullRequestSummary, int, bool, error) {
+				queries = append(queries, query)
+				return []domain.PullRequestSummary{testutil.PR(7)}, 1, false, nil
+			},
+		},
+		Now: time.Now,
+	}
+
+	for range 2 {
+		snap, err := svc.LoadSearchTab(ctx, repo, tab, false)
+		if err != nil || len(snap.PRs) != 1 || snap.PRs[0].Number != 7 {
+			t.Fatalf("LoadSearchTab = %+v, %v", snap, err)
+		}
+	}
+	if want := []string{"repo:acme/api is:pr is:open author:alice sort:updated-desc"}; fmt.Sprint(queries) != fmt.Sprint(want) {
+		t.Fatalf("queries = %q, want %q (second load from cache)", queries, want)
+	}
+
+	// An edited query must not reuse the old query's cached results.
+	tab.Query = "author:bob"
+	if _, err := svc.LoadSearchTab(ctx, repo, tab, false); err != nil {
+		t.Fatal(err)
+	}
+	if len(queries) != 2 || queries[1] != "repo:acme/api is:pr is:open author:bob sort:updated-desc" {
+		t.Fatalf("queries after edit = %q", queries)
+	}
+}
+
+func TestStaleSearchTabRefreshesOnce(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	coord := newTestCoordinator(t)
+	repo := testutil.Repo("acme/api")
+	tab := domain.SearchTab{ID: domain.CustomTabID("Team"), Name: "Team", Query: "author:alice"}
+	key := searchTabCacheKey(repo, "repo:acme/api is:pr is:open author:alice sort:updated-desc")
+	staleAt := time.Now().Add(-3 * time.Minute)
+	stale := domain.SearchTabSnapshot{Repo: repo, PRs: []domain.PullRequestSummary{testutil.PR(1)}, FetchedAt: staleAt}
+	if err := coord.Write(ctx, key, stale, dashboardMeta(key, repo, cacheKindDashboardTab, nil, staleAt)); err != nil {
+		t.Fatal(err)
+	}
+
+	calls := 0
+	var spawned []func()
+	svc := &Service{
+		Cache: coord,
+		Client: &fakeGitHubClient{
+			FetchSearchPRsFn: func(ctx context.Context, repo domain.Repository, query string) ([]domain.PullRequestSummary, int, bool, error) {
+				calls++
+				return []domain.PullRequestSummary{testutil.PR(2)}, 1, false, nil
+			},
+		},
+		Now:          time.Now,
+		BackgroundFn: func(fn func()) { spawned = append(spawned, fn) },
+	}
+
+	// Flicking back and forth while the refresh runs must not stack refreshes.
+	for range 3 {
+		snap, err := svc.LoadSearchTab(ctx, repo, tab, false)
+		if err != nil || snap.PRs[0].Number != 1 {
+			t.Fatalf("stale load = %+v, %v", snap, err)
+		}
+	}
+	if len(spawned) != 1 || calls != 0 {
+		t.Fatalf("spawned %d refreshes, %d calls; want 1 and 0", len(spawned), calls)
+	}
+	spawned[0]()
+	if calls != 1 {
+		t.Fatalf("refresh made %d calls, want 1", calls)
+	}
+	snap, _ := svc.LoadSearchTab(ctx, repo, tab, false)
+	if snap.PRs[0].Number != 2 || len(spawned) != 1 {
+		t.Fatalf("after refresh: PR #%d, %d spawns", snap.PRs[0].Number, len(spawned))
+	}
+}
+
+func TestInvalidatePRDropsSearchTabs(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	repo := testutil.Repo("acme/api")
+	tab := domain.SearchTab{ID: domain.CustomTabID("Team"), Name: "Team", Query: "author:alice"}
+	calls := 0
+	svc := &Service{
+		Cache: newTestCoordinator(t),
+		Client: &fakeGitHubClient{
+			FetchSearchPRsFn: func(ctx context.Context, repo domain.Repository, query string) ([]domain.PullRequestSummary, int, bool, error) {
+				calls++
+				return nil, 0, false, nil
+			},
+		},
+		Now:        time.Now,
+		SearchTabs: []domain.SearchTab{tab},
+	}
+	_, _ = svc.LoadSearchTab(ctx, repo, tab, false)
+	if err := svc.InvalidatePR(ctx, repo, 1); err != nil {
+		t.Fatal(err)
+	}
+	_, _ = svc.LoadSearchTab(ctx, repo, tab, false)
+	if calls != 2 {
+		t.Fatalf("calls = %d, want 2 (cache dropped by InvalidatePR)", calls)
 	}
 }

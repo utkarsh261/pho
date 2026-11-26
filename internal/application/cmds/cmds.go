@@ -25,6 +25,7 @@ type DiscoveryService interface {
 type DashboardService interface {
 	LoadRepo(ctx context.Context, repo domain.Repository, force bool) (domain.DashboardSnapshot, error)
 	LoadInvolving(ctx context.Context, repo domain.Repository, viewer string, force bool) (domain.InvolvingSnapshot, error)
+	LoadSearchTab(ctx context.Context, repo domain.Repository, tab domain.SearchTab, force bool) (domain.SearchTabSnapshot, error)
 	LoadPreview(ctx context.Context, repo string, number int, force bool) (domain.PRPreviewSnapshot, error)
 	LoadAllPRsPage(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
 	LoadOpenPRsPage(ctx context.Context, repo domain.Repository, cursor string) ([]domain.PullRequestSummary, bool, string, error)
@@ -143,6 +144,13 @@ type InvolvingLoaded struct {
 	Snapshot  domain.InvolvingSnapshot
 	FromCache bool
 	Err       error
+}
+
+type SearchTabLoaded struct {
+	Repo     string
+	Tab      domain.DashboardTab
+	Snapshot domain.SearchTabSnapshot
+	Err      error
 }
 
 type PreviewLoaded struct {
@@ -304,6 +312,13 @@ func LoadInvolvingCmd(svc DashboardService, repo domain.Repository, viewer strin
 	return func() tea.Msg {
 		snap, err := svc.LoadInvolving(context.Background(), repo, viewer, force)
 		return InvolvingLoaded{Repo: repoKey(repo), Snapshot: snap, Err: err}
+	}
+}
+
+func LoadSearchTabCmd(svc DashboardService, repo domain.Repository, tab domain.SearchTab, force bool) tea.Cmd {
+	return func() tea.Msg {
+		snap, err := svc.LoadSearchTab(context.Background(), repo, tab, force)
+		return SearchTabLoaded{Repo: repoKey(repo), Tab: tab.ID, Snapshot: snap, Err: err}
 	}
 }
 

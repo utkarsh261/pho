@@ -50,6 +50,30 @@ const (
 	TabRecent      DashboardTab = "recent"
 )
 
+// BuiltinTabs lists the built-in dashboard tabs in display order.
+var BuiltinTabs = []DashboardTab{TabMyPRs, TabNeedsReview, TabInvolving, TabAll, TabRecent}
+
+// MaxSearchTabs caps the user-defined tabs: each is a GitHub search.
+const MaxSearchTabs = 5
+
+const customTabPrefix = "custom:"
+
+// SearchTab is a user-defined dashboard tab backed by a GitHub search.
+type SearchTab struct {
+	ID    DashboardTab
+	Name  string
+	Short string // label when the header is narrow; empty means derive from Name
+	Query string // the user's qualifiers; repo scope is added when searching
+}
+
+func CustomTabID(name string) DashboardTab {
+	return DashboardTab(customTabPrefix + strings.ToLower(strings.TrimSpace(name)))
+}
+
+func (t DashboardTab) IsCustom() bool {
+	return strings.HasPrefix(string(t), customTabPrefix)
+}
+
 type Freshness string
 
 const (
@@ -369,6 +393,14 @@ type DashboardSnapshot struct {
 }
 
 type InvolvingSnapshot struct {
+	Repo       Repository
+	PRs        []PullRequestSummary
+	TotalCount int
+	Truncated  bool
+	FetchedAt  time.Time
+}
+
+type SearchTabSnapshot struct {
 	Repo       Repository
 	PRs        []PullRequestSummary
 	TotalCount int

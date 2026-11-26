@@ -147,6 +147,23 @@ func TestLoadInvolvingCmd(t *testing.T) {
 	})
 }
 
+func TestLoadSearchTabCmd(t *testing.T) {
+	repo := repo("org/a")
+	tab := domain.SearchTab{ID: domain.CustomTabID("Team"), Name: "Team", Query: "author:alice"}
+	wantErr := errors.New("boom")
+	svc := &dashboardService{loadSearchTabFn: func(ctx context.Context, gotRepo domain.Repository, gotTab domain.SearchTab, force bool) (domain.SearchTabSnapshot, error) {
+		if gotRepo.FullName != repo.FullName || gotTab.ID != tab.ID || !force {
+			t.Fatalf("load args = %#v tab=%#v force=%v", gotRepo, gotTab, force)
+		}
+		return domain.SearchTabSnapshot{Repo: repo}, wantErr
+	}}
+
+	got := run(t, cmds.LoadSearchTabCmd(svc, repo, tab, true)).(cmds.SearchTabLoaded)
+	if got.Repo != repo.FullName || got.Tab != tab.ID || !errors.Is(got.Err, wantErr) || got.Snapshot.Repo.FullName != repo.FullName {
+		t.Fatalf("message = %#v", got)
+	}
+}
+
 func TestLoadPreviewCmd(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		svc := &dashboardService{loadPreviewFn: func(ctx context.Context, repo string, number int, force bool) (domain.PRPreviewSnapshot, error) {
@@ -457,6 +474,7 @@ type dashboardService struct {
 	loadRepoFn      func(context.Context, domain.Repository, bool) (domain.DashboardSnapshot, error)
 	loadInvolvingFn func(context.Context, domain.Repository, string, bool) (domain.InvolvingSnapshot, error)
 	loadPreviewFn   func(context.Context, string, int, bool) (domain.PRPreviewSnapshot, error)
+	loadSearchTabFn func(context.Context, domain.Repository, domain.SearchTab, bool) (domain.SearchTabSnapshot, error)
 	loadAllPRsPage  func(context.Context, domain.Repository, string) ([]domain.PullRequestSummary, bool, string, error)
 }
 
@@ -466,6 +484,10 @@ func (s *dashboardService) LoadRepo(ctx context.Context, repo domain.Repository,
 
 func (s *dashboardService) LoadInvolving(ctx context.Context, repo domain.Repository, viewer string, force bool) (domain.InvolvingSnapshot, error) {
 	return s.loadInvolvingFn(ctx, repo, viewer, force)
+}
+
+func (s *dashboardService) LoadSearchTab(ctx context.Context, repo domain.Repository, tab domain.SearchTab, force bool) (domain.SearchTabSnapshot, error) {
+	return s.loadSearchTabFn(ctx, repo, tab, force)
 }
 
 func (s *dashboardService) LoadPreview(ctx context.Context, repo string, number int, force bool) (domain.PRPreviewSnapshot, error) {

@@ -21,6 +21,7 @@
 - **CI logs** - `Enter` on a GitHub Actions check shows the end of its job log with error lines highlighted; `n`/`N` jumps between errors and `r` re-runs the job.
 - **Diff navigation** - Line-by-line cursor, `gg`/`G`, `Ctrl+d`/`Ctrl+u`, visual mode for selecting ranges.
 - **Open in your editor** - `e` on a diff line opens the file at that line in `$VISUAL`/`$EDITOR`. If your local checkout isn't on the PR's head commit, pho offers to check out the branch first.
+- **Custom tabs** - Add dashboard tabs of your own, each a GitHub search such as your team's PRs. See [Custom tabs](docs/custom-tabs.md).
 - **Custom commands** - Bind a key to your own shell command, filled in with the PR's branch, number, clone path and more. See [Custom commands](docs/custom-commands.md).
 - **Inline reviews** - Draft inline comments on diff lines, edit, discard, and batch-submit with a review event. Just like Github web UI.
 - **Comments & approvals** - Post top-level comments, review comments, or approve directly.
@@ -102,8 +103,14 @@ exclude = []               # "owner/repo" entries to hide
 # "work.github.com" = "github.com"
 
 [dashboard]
+default_tab = "my_prs"     # tab shown at startup; a built-in or a custom tab's name
 max_prs = 300              # open PRs the All tab loads at most
 group_stacks = true        # list a stack's PRs together, top of the stack first
+
+# Add a tab of your own; see docs/custom-tabs.md.
+# [[dashboard.tabs]]
+# name = "Team"
+# query = "author:alice author:bob"
 
 [palette]
 max_prs = 300              # PRs the Ctrl+P jump list holds
