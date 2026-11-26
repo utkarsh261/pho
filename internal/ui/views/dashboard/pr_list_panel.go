@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/utkarsh261/pho/internal/domain"
 	"github.com/utkarsh261/pho/internal/ui/components/stackmap"
 	"github.com/utkarsh261/pho/internal/ui/theme"
@@ -560,9 +561,24 @@ func (m *PRListPanelModel) renderTabBarTier(tier tabBarTier) string {
 	order := m.tabOrder()
 	if tier == tabBarSingle {
 		idx := max(m.indexOfTab(m.Active), 0)
-		active := th.TabActive.Render(fmt.Sprintf("%s %d", m.tabShortLabel(m.Active), m.tabCount(m.Active)))
-		pos := th.FaintTxt.Render(fmt.Sprintf("%d/%d", idx+1, len(order)))
-		return th.FaintTxt.Render("‹") + active + th.FaintTxt.Render("›") + " " + pos
+		label := m.tabShortLabel(m.Active)
+		pos := " " + th.FaintTxt.Render(fmt.Sprintf("%d/%d", idx+1, len(order)))
+		render := func(label, pos string) string {
+			active := th.TabActive.Render(fmt.Sprintf("%s %d", label, m.tabCount(m.Active)))
+			return th.FaintTxt.Render("‹") + active + th.FaintTxt.Render("›") + pos
+		}
+		// Shorten the label to fit, and drop the position if that's not enough.
+		fit := func(pos string) string {
+			over := lipgloss.Width(render(label, pos)) - m.Width
+			if over <= 0 {
+				return render(label, pos)
+			}
+			return render(ansi.Truncate(label, max(lipgloss.Width(label)-over, 1), "…"), pos)
+		}
+		if bar := fit(pos); lipgloss.Width(bar) <= m.Width {
+			return bar
+		}
+		return fit("")
 	}
 	parts := make([]string, 0, 2*len(order))
 	for i, tab := range order {

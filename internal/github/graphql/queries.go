@@ -214,7 +214,7 @@ func buildAllPRsQuery(profile githubpkg.GitHubHostProfile, owner, name, after st
 
 // stateQualifier spots a query that already picks PR state, so pho doesn't
 // add is:open on top.
-var stateQualifier = regexp.MustCompile(`(?i)(^|\s)-?(is:(open|closed|merged|unmerged)|state:)`)
+var stateQualifier = regexp.MustCompile(`(?i)(^|\s)-?(is:(open|closed|merged|unmerged)|state:|merged:|closed:)`)
 
 // SearchTabQuery is the search a custom tab runs: the user's qualifiers
 // scoped to repo, open PRs unless the query says otherwise.

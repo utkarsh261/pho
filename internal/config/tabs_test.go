@@ -55,6 +55,8 @@ query = "label:docs"
 		{"duplicate", tab("Team", "author:a") + tab("team", "author:b"), "duplicate"},
 		{"repo scope", tab("Team", "author:a repo:x/y"), "repo:"},
 		{"org scope", tab("Team", "org:acme"), "repo:"},
+		{"or", tab("Team", "label:bug OR label:urgent"), "OR, AND and parentheses"},
+		{"parens", tab("Team", "(author:a)"), "OR, AND and parentheses"},
 		{"too many", tab("a", "q") + tab("b", "q") + tab("c", "q") + tab("d", "q") + tab("e", "q") + tab("f", "q"), "at most 5"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -67,7 +69,7 @@ query = "label:docs"
 
 	// "repository:" or "labels:" text isn't a scope qualifier.
 	t.Run("lookalike qualifier", func(t *testing.T) {
-		if _, err := config.Load(writeConfig(t, tab("Team", "label:user-facing in:title myrepo:x"))); err != nil {
+		if _, err := config.Load(writeConfig(t, tab("Team", `label:user-facing in:title myrepo:x label:"needs (triage)" label:ORACLE`))); err != nil {
 			t.Fatalf("Load: %v", err)
 		}
 	})

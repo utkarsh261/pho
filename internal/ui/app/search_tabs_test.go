@@ -34,9 +34,6 @@ func setupSearchTabs(t *testing.T, defaultTab domain.DashboardTab, repos ...doma
 	svc := m.deps.Dashboard.(*stubDashboardService)
 	svc.searchTabs = found
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	// The preview's debounce tick reads the panel when it fires; firing at
-	// once lets runSearchTabCmds collect it before the model moves on.
-	m.preview.DebounceDelay = 0
 	runSearchTabCmds(m, upd(m, cmdsReposDiscovered(repos)))
 	return m, svc
 }
@@ -172,5 +169,48 @@ func TestSearchTabError(t *testing.T) {
 	}
 	if len(m.state.Jobs.InFlight) != 0 {
 		t.Fatalf("in-flight jobs left: %v", m.state.Jobs.InFlight)
+	}
+}
+
+// A tab loaded before the stacks are known is regrouped once they are.
+func TestSearchTabRegroupsWhenStacksChange(t *testing.T) {
+	t.Parallel()
+	repo := testutil.Repo("acme/web")
+	m, svc := setupSearchTabs(t, "", repo)
+	mk := func(n int, head, base string) domain.PullRequestSummary {
+		p := pr(repo.FullName, n, "layer "+head)
+		p.HeadRefName, p.BaseRefName = head, base
+		return p
+	}
+	found := []domain.PullRequestSummary{mk(3, "c", "b"), mk(9, "x", "main"), mk(2, "b", "main")}
+	svc.searchTabs[repo.FullName][teamTab.ID] = found
+	m.currentDashboard = domain.DashboardSnapshot{}
+	m.rebuildStacks(nil)
+	switchTab(m, teamTab.ID)
+	if got := tabNumbers(m, teamTab.ID); !slices.Equal(got, []int{3, 9, 2}) {
+		t.Fatalf("before stacks: %v", got)
+	}
+
+	_, _ = m.Update(cmdsDashboardLoaded(repo.FullName, dashboardSnapshot(repo, found...), false, nil))
+	if got := tabNumbers(m, teamTab.ID); !slices.Equal(got, []int{3, 2, 9}) {
+		t.Errorf("after stacks: %v, want the stack together: [3 2 9]", got)
+	}
+}
+
+// Reloading a tab keeps the cursor on the same PR when new ones arrive.
+func TestSearchTabReloadKeepsSelection(t *testing.T) {
+	t.Parallel()
+	repo := testutil.Repo("acme/web")
+	m, svc := setupSearchTabs(t, "", repo)
+	svc.searchTabs[repo.FullName][teamTab.ID] = []domain.PullRequestSummary{pr(repo.FullName, 50, "a"), pr(repo.FullName, 40, "b")}
+	switchTab(m, teamTab.ID)
+	if !m.prList.SelectNumber(40) {
+		t.Fatal("#40 not listed")
+	}
+
+	svc.searchTabs[repo.FullName][teamTab.ID] = []domain.PullRequestSummary{pr(repo.FullName, 60, "new"), pr(repo.FullName, 50, "a"), pr(repo.FullName, 40, "b")}
+	runSearchTabCmds(m, m.refreshSelectedRepo(true))
+	if sel, ok := m.currentSelectedPR(); !ok || sel.Number != 40 {
+		t.Fatalf("selected %+v after reload, want #40", sel)
 	}
 }

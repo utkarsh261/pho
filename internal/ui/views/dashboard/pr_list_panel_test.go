@@ -320,3 +320,31 @@ func TestPRListPanelCustomTabFooterAndStates(t *testing.T) {
 		t.Fatalf("footer = %q", got)
 	}
 }
+
+// A long configured short label is capped, and the one-tab fallback always
+// fits the panel.
+func TestPRListPanelLongShortLabelFits(t *testing.T) {
+	t.Parallel()
+
+	tab := domain.SearchTab{ID: domain.CustomTabID("RC"), Name: "Release candidates", Short: "release-candidates"}
+	m := NewPRListPanelModel()
+	m.SetTheme(theme.Default())
+	m.SetCustomTabs([]domain.SearchTab{tab})
+	m.SetTabSnapshot(tab.ID, make([]domain.PullRequestSummary, 12), 12, false)
+	m.SetActiveTab(tab.ID)
+
+	m.SetRect(80, 12)
+	if plain := ansi.Strip(m.renderTabBarThemed()); !strings.Contains(plain, "release…") || strings.Contains(plain, "release-candidates") {
+		t.Errorf("short tier = %q, want the label cut to release…", plain)
+	}
+	for _, width := range []int{20, 14, 10} {
+		m.SetRect(width, 12)
+		bar := m.renderTabBarThemed()
+		if w := lipgloss.Width(bar); w > width {
+			t.Errorf("width %d: tab bar is %d wide: %q", width, w, ansi.Strip(bar))
+		}
+		if !strings.Contains(ansi.Strip(bar), "12") {
+			t.Errorf("width %d: count lost: %q", width, ansi.Strip(bar))
+		}
+	}
+}

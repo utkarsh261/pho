@@ -40,6 +40,7 @@ func (m *Model) loadActiveSearchTabCmd(force bool) tea.Cmd {
 // clearSearchTabs empties every custom tab, so a repo switch never shows
 // the previous repo's results while the new ones load.
 func (m *Model) clearSearchTabs() {
+	clear(m.searchResults)
 	for _, t := range m.deps.SearchTabs {
 		delete(m.state.Dashboard.PRsByTab, t.ID)
 		delete(m.state.Dashboard.FreshnessByTab, t.ID)
@@ -66,17 +67,35 @@ func (m *Model) handleSearchTabLoaded(msg cmds.SearchTabLoaded) tea.Cmd {
 		m.clearErrors()
 	}
 
-	prs := m.groupStacks(msg.Snapshot.PRs)
-	m.state.Dashboard.PRsByTab[msg.Tab] = prs
+	prev, hadPrev := m.currentSelectedPR()
+	if m.searchResults == nil {
+		m.searchResults = map[domain.DashboardTab]domain.SearchTabSnapshot{}
+	}
+	m.searchResults[msg.Tab] = msg.Snapshot
+	m.regroupSearchTab(msg.Tab, msg.Snapshot)
 	m.state.Dashboard.LastRefreshAt[msg.Tab] = msg.Snapshot.FetchedAt
 	m.state.Dashboard.FreshnessByTab[msg.Tab] = freshnessFor(msg.Err)
-	m.prList.SetTabSnapshot(msg.Tab, prs, msg.Snapshot.TotalCount, msg.Snapshot.Truncated)
-	m.logDebug("search tab loaded", "tab", string(msg.Tab), "pr_count", len(prs))
+	m.logDebug("search tab loaded", "tab", string(msg.Tab), "pr_count", len(msg.Snapshot.PRs))
 	m.syncStatus()
 	if msg.Tab != m.state.Dashboard.ActiveTab {
 		return nil
 	}
+	m.restoreSelection(prev, hadPrev)
 	return m.syncCurrentSelection()
+}
+
+// regroupSearchTabs lists every loaded custom tab against the current
+// stacks, as regroupInvolving does for Involving.
+func (m *Model) regroupSearchTabs() {
+	for tab, snap := range m.searchResults {
+		m.regroupSearchTab(tab, snap)
+	}
+}
+
+func (m *Model) regroupSearchTab(tab domain.DashboardTab, snap domain.SearchTabSnapshot) {
+	prs := m.groupStacks(snap.PRs)
+	m.state.Dashboard.PRsByTab[tab] = prs
+	m.prList.SetTabSnapshot(tab, prs, snap.TotalCount, snap.Truncated)
 }
 
 // shortError keeps the first line of err, short enough for the list panel.

@@ -18,6 +18,19 @@ type rawTab struct {
 // selected repo, which pho always adds itself.
 var scopeQualifier = regexp.MustCompile(`(?i)(^|\s)-?(repo|org|user):`)
 
+var quoted = regexp.MustCompile(`"[^"]*"`)
+
+// usesBoolSyntax spots OR/AND and grouping outside quotes. GitHub's GraphQL
+// search reads them as plain words, so the tab would silently find nothing.
+func usesBoolSyntax(query string) bool {
+	for _, tok := range strings.Fields(quoted.ReplaceAllString(query, `""`)) {
+		if tok == "OR" || tok == "AND" || strings.HasPrefix(tok, "(") || strings.HasSuffix(tok, ")") {
+			return true
+		}
+	}
+	return false
+}
+
 func parseTabs(raw []rawTab) ([]domain.SearchTab, error) {
 	if len(raw) > domain.MaxSearchTabs {
 		return nil, fmt.Errorf("[[dashboard.tabs]]: %d tabs, at most %d allowed", len(raw), domain.MaxSearchTabs)
@@ -43,6 +56,8 @@ func parseTabs(raw []rawTab) ([]domain.SearchTab, error) {
 			return nil, fmt.Errorf("[[dashboard.tabs]] %q: name is taken by a built-in tab", name)
 		case seen[strings.ToLower(name)]:
 			return nil, fmt.Errorf("[[dashboard.tabs]] %q: duplicate name", name)
+		case usesBoolSyntax(query):
+			return nil, fmt.Errorf("[[dashboard.tabs]] %q: OR, AND and parentheses aren't supported; repeat a qualifier to match any of its values (author:a author:b)", name)
 		case scopeQualifier.MatchString(query):
 			return nil, fmt.Errorf("[[dashboard.tabs]] %q: drop repo:/org:/user:, tabs always search the selected repo", name)
 		}

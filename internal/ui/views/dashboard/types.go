@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/utkarsh261/pho/internal/domain"
 	"github.com/utkarsh261/pho/internal/ui/components/stackmap"
 )
@@ -76,15 +77,16 @@ func (m *PRListPanelModel) tabLabel(tab domain.DashboardTab) string {
 }
 
 // tabShortLabel is used when the full tab labels don't fit the panel.
+// maxShortLabel caps a custom tab's short label, in terminal cells.
+const maxShortLabel = 8
+
 func (m *PRListPanelModel) tabShortLabel(tab domain.DashboardTab) string {
 	if t, ok := m.custom[tab]; ok {
-		if t.Short != "" {
-			return t.Short
+		label := t.Short
+		if label == "" {
+			label = t.Name
 		}
-		if len([]rune(t.Name)) > 8 {
-			return truncateRunes(t.Name, 7) + "…"
-		}
-		return t.Name
+		return ansi.Truncate(label, maxShortLabel, "…")
 	}
 	switch tab {
 	case domain.TabMyPRs:

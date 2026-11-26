@@ -158,9 +158,10 @@ func (m *PreviewPanelModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, spinCmd
 		}
 		m.PendingFetch = true
-		gen := m.DebounceGeneration
+		// Copy what the tick needs: it fires on another goroutine.
+		gen, repo, number := m.DebounceGeneration, m.selectedRepo, m.selectedNumber
 		return m, tea.Batch(spinCmd, tea.Tick(m.DebounceDelay, func(time.Time) tea.Msg {
-			return PreviewFetchMsg{Repo: m.selectedRepo, Number: m.selectedNumber, Generation: gen, Force: summaryChanged || msg.Force}
+			return PreviewFetchMsg{Repo: repo, Number: number, Generation: gen, Force: summaryChanged || msg.Force}
 		}))
 	case PreviewFetchMsg:
 		m.PendingFetch = false

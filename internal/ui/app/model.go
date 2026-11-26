@@ -178,8 +178,11 @@ type Model struct {
 	currentDashboard domain.DashboardSnapshot
 	currentInvolving domain.InvolvingSnapshot
 	involvingRepo    string // the repo currentInvolving was loaded for
-	stackPicker      stackmap.Picker
-	previewBehind    bool // the cursor moved while PR detail hid the preview
+	// searchResults holds each custom tab's ungrouped results for the
+	// selected repo, so they can be regrouped when stacks change.
+	searchResults map[domain.DashboardTab]domain.SearchTabSnapshot
+	stackPicker   stackmap.Picker
+	previewBehind bool // the cursor moved while PR detail hid the preview
 	// stacks indexes the selected repo's stacked PRs.
 	stacks    domain.StackIndex
 	openPages openPRPages
@@ -1792,6 +1795,7 @@ func (m *Model) rebuildDashboardTabs() {
 	m.state.Dashboard.PRsByTab[domain.TabNeedsReview] = m.groupStacks(classified[domain.TabNeedsReview])
 	m.state.Dashboard.PRsByTab[domain.TabAll] = m.groupStacks(open)
 	m.regroupInvolving() // new pages can complete a stack that Involving shows part of
+	m.regroupSearchTabs()
 	m.state.Dashboard.TotalCount = total
 	m.state.Dashboard.Truncated = hasMore
 	for _, tab := range []domain.DashboardTab{domain.TabMyPRs, domain.TabNeedsReview, domain.TabAll} {

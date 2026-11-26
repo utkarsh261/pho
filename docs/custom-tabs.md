@@ -25,12 +25,13 @@ query = "label:docs draft:false"
 `query` takes anything GitHub's [PR search](https://docs.github.com/en/search-github/searching-on-github/searching-issues-and-pull-requests) does, such as `author:`, `label:`, `review-requested:`, `reviewed-by:` or `base:`. `@me` means you. Repeating a qualifier like `author:` matches any of them.
 
 - A tab always searches the repo selected in pho, so leave out `repo:`, `org:` and `user:`.
-- Tabs show open PRs unless the query picks a state itself (`is:merged`, `is:closed`, `state:`…).
+- Tabs show open PRs unless the query picks a state itself (`is:merged`, `is:closed`, `state:`, `merged:>2026-01-01`…).
+- `OR`, `AND` and parentheses aren't supported by GitHub's API search; repeat a qualifier instead.
 - A tab shows up to 100 PRs, newest activity first.
 
 ## Names
 
-`name` is shown in the tab bar and must differ from the built-in tabs and from other custom tabs. `short` is optional; without it, names past 8 characters are cut short when space is tight.
+`name` is shown in the tab bar and must differ from the built-in tabs and from other custom tabs. `short` is optional and is cut to 8 characters; without it, the name is cut short when space is tight.
 
 `default_tab` takes a custom tab's name or a built-in tab: `my_prs`, `needs_review`, `involving`, `all` or `recent`.
 

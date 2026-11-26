@@ -15,6 +15,8 @@ func TestSearchTabQuery(t *testing.T) {
 		{"author:@me is:merged", "repo:acme/web is:pr author:@me is:merged"},
 		{"IS:CLOSED label:x", "repo:acme/web is:pr IS:CLOSED label:x"},
 		{"state:open", "repo:acme/web is:pr state:open"},
+		{"merged:>2026-01-01 author:@me", "repo:acme/web is:pr merged:>2026-01-01 author:@me"},
+		{"closed:<2026-01-01", "repo:acme/web is:pr closed:<2026-01-01"},
 		{"-is:draft", "repo:acme/web is:pr is:open -is:draft"},
 		{"label:is:merged-later", "repo:acme/web is:pr is:open label:is:merged-later"},
 	} {
