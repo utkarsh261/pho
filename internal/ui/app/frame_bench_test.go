@@ -103,6 +103,11 @@ func BenchmarkFrameTabHop(b *testing.B) {
 // benchDashboard loads repos×perRepo PRs into the dashboard at 200x50.
 func benchDashboard(tb testing.TB, repos, perRepo int, srch SearchService) (*Model, *bench.Driver) {
 	tb.Helper()
+	return benchDashboardWith(tb, repos, perRepo, srch, nil)
+}
+
+func benchDashboardWith(tb testing.TB, repos, perRepo int, srch SearchService, opt func(*Dependencies)) (*Model, *bench.Driver) {
+	tb.Helper()
 	rs := bench.Repos(repos)
 	dash := make(map[string]domain.DashboardSnapshot, len(rs))
 	for i, r := range rs {
@@ -112,7 +117,7 @@ func benchDashboard(tb testing.TB, repos, perRepo int, srch SearchService) (*Mod
 		}
 		dash[r.FullName] = dashboardSnapshot(r, prs...)
 	}
-	m := newTestModel(rs, dash)
+	m := newTestModelWith(rs, dash, opt)
 	if srch != nil {
 		m.deps.Search = srch
 	}
