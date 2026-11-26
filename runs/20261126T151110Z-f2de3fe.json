@@ -1,0 +1,771 @@
+{
+  "benchmarks": {
+    "Build/100prs": {
+      "B/op": 118536,
+      "allocs/op": 889,
+      "ns/op": 80364
+    },
+    "Build/2000prs": {
+      "B/op": 2596452.5,
+      "allocs/op": 24795,
+      "ns/op": 2739966
+    },
+    "Build/500prs": {
+      "B/op": 637722,
+      "allocs/op": 5903,
+      "ns/op": 496556.5
+    },
+    "Build/synth-100k": {
+      "B/op": 18119304.5,
+      "allocs/op": 101065,
+      "ns/op": 26395593.5
+    },
+    "Build/ts64457": {
+      "B/op": 3649328,
+      "allocs/op": 10672,
+      "ns/op": 4720733.5
+    },
+    "Cache/Get/diff-50k": {
+      "B/op": 29992380.5,
+      "allocs/op": 226185,
+      "ns/op": 72284815.5
+    },
+    "Cache/Get/small": {
+      "B/op": 1672,
+      "allocs/op": 56,
+      "ns/op": 15479.5
+    },
+    "Cache/Put/diff-50k": {
+      "B/op": 9640220.5,
+      "allocs/op": 266,
+      "ns/op": 30022551.5
+    },
+    "Cache/Put/small": {
+      "B/op": 920,
+      "allocs/op": 18,
+      "ns/op": 61939
+    },
+    "Classify/2000prs": {
+      "B/op": 452304,
+      "allocs/op": 20,
+      "ns/op": 206448
+    },
+    "Classify/500prs": {
+      "B/op": 165584,
+      "allocs/op": 17,
+      "ns/op": 46563
+    },
+    "CommentLines/100comments": {
+      "B/op": 168673212,
+      "allocs/op": 2869244.5,
+      "ns/op": 4311289218
+    },
+    "CommentLines/30comments": {
+      "B/op": 50931084,
+      "allocs/op": 849233,
+      "ns/op": 1283526038.5
+    },
+    "FetchPRFiles/k8s142410": {
+      "B/op": 1281852.5,
+      "MB/s": 136.315,
+      "allocs/op": 273,
+      "ns/op": 1411850.5
+    },
+    "FetchPRFiles/ts64457": {
+      "B/op": 4462909,
+      "MB/s": 119.36,
+      "allocs/op": 589,
+      "ns/op": 5480718.5
+    },
+    "FrameDashboard/repos-40-prs-2000": {
+      "B/frame": 433.1,
+      "B/op": 25719967.5,
+      "allocs/op": 478931,
+      "max-µs": 3128.5,
+      "ns/op": 132929340,
+      "p50-µs": 1994.5,
+      "p95-µs": 2817.5,
+      "p99-µs": 3033,
+      "slowframes/op": 0
+    },
+    "FrameDashboard/repos-5-prs-100": {
+      "B/frame": 64.74,
+      "B/op": 23659519.5,
+      "allocs/op": 409969,
+      "max-µs": 2823.5,
+      "ns/op": 121476503,
+      "p50-µs": 1804,
+      "p95-µs": 2522,
+      "p99-µs": 2666,
+      "slowframes/op": 0
+    },
+    "FramePalette/prs-1000": {
+      "B/frame": 1926,
+      "B/op": 9807457.5,
+      "allocs/op": 141300.5,
+      "max-µs": 4407.5,
+      "ns/op": 40291948.5,
+      "p50-µs": 2764.5,
+      "p95-µs": 3617,
+      "p99-µs": 4027.5,
+      "slowframes/op": 0
+    },
+    "FramePalette/prs-20000": {
+      "B/frame": 1962,
+      "B/op": 64463416,
+      "allocs/op": 686885.5,
+      "max-µs": 32588,
+      "ns/op": 169916060,
+      "p50-µs": 10798.5,
+      "p95-µs": 30837.5,
+      "p99-µs": 32588,
+      "slowframes/op": 2.5
+    },
+    "FrameResize": {
+      "B/frame": 8155,
+      "B/op": 8396686.5,
+      "allocs/op": 133632,
+      "max-µs": 2691.5,
+      "ns/op": 34219432,
+      "p50-µs": 1065,
+      "p95-µs": 1825,
+      "p99-µs": 2302.5,
+      "slowframes/op": 0
+    },
+    "FrameScroll/synth-200k": {
+      "B/frame": 5380,
+      "B/op": 113130872,
+      "allocs/op": 1257790.5,
+      "max-µs": 9147,
+      "ns/op": 438218792.5,
+      "p50-µs": 1607.5,
+      "p95-µs": 2691,
+      "p99-µs": 8181.5,
+      "slowframes/op": 0
+    },
+    "FrameScroll/ts64457": {
+      "B/frame": 2428,
+      "B/op": 117394360,
+      "allocs/op": 1283902.5,
+      "max-µs": 3116,
+      "ns/op": 378129903.5,
+      "p50-µs": 1462.5,
+      "p95-µs": 2286,
+      "p99-µs": 2689,
+      "slowframes/op": 0
+    },
+    "FrameSearchTyping": {
+      "B/frame": 6203,
+      "B/op": 446397020,
+      "allocs/op": 3013620.5,
+      "max-µs": 58524,
+      "ns/op": 580354390,
+      "p50-µs": 3873,
+      "p95-µs": 26243,
+      "p99-µs": 58524,
+      "slowframes/op": 7.5
+    },
+    "FrameTabHop/comments-30": {
+      "B/frame": 6800,
+      "B/op": 10952989.5,
+      "allocs/op": 112003.5,
+      "max-µs": 45886,
+      "ns/op": 23730736,
+      "p50-µs": 1524.5,
+      "p95-µs": 18783.5,
+      "p99-µs": 45886,
+      "slowframes/op": 0.6923
+    },
+    "FrameTabHop/comments-300": {
+      "B/frame": 6800,
+      "B/op": 234935848,
+      "allocs/op": 5027553.5,
+      "max-µs": 482372.5,
+      "ns/op": 488359328.5,
+      "p50-µs": 2243.5,
+      "p95-µs": 482372.5,
+      "p99-µs": 482372.5,
+      "slowframes/op": 1
+    },
+    "FrameThemePreview": {
+      "B/frame": 1198,
+      "B/op": 4331539,
+      "allocs/op": 65140,
+      "max-µs": 3049,
+      "ns/op": 19797541.5,
+      "p50-µs": 2023.5,
+      "p95-µs": 2828.5,
+      "p99-µs": 3018,
+      "slowframes/op": 0
+    },
+    "Generate/synth-100k": {
+      "B/op": 7200075,
+      "allocs/op": 200002,
+      "ns/op": 5609689
+    },
+    "Generate/ts64457": {
+      "B/op": 1371744.5,
+      "allocs/op": 38104,
+      "ns/op": 963082.5
+    },
+    "Group/100prs": {
+      "B/op": 49878,
+      "allocs/op": 253,
+      "ns/op": 27835.5
+    },
+    "Group/2000prs": {
+      "B/op": 1011117.5,
+      "allocs/op": 8629,
+      "ns/op": 885132.5
+    },
+    "Group/500prs": {
+      "B/op": 251479,
+      "allocs/op": 2021,
+      "ns/op": 166403
+    },
+    "IntraLineChanges/synth-100k": {
+      "B/op": 5542401,
+      "allocs/op": 14400,
+      "ns/op": 6926177.5
+    },
+    "IntraLineChanges/ts64457": {
+      "B/op": 12488,
+      "allocs/op": 97,
+      "ns/op": 33991
+    },
+    "JSONStore/Get/diff-50k": {
+      "B/op": 16883774,
+      "allocs/op": 226133,
+      "ns/op": 66638928
+    },
+    "JSONStore/Get/small": {
+      "B/op": 248,
+      "allocs/op": 6,
+      "ns/op": 639.0999999999999
+    },
+    "JSONStore/Put/diff-50k": {
+      "B/op": 7120673,
+      "allocs/op": 219,
+      "ns/op": 10931277
+    },
+    "JSONStore/Put/small": {
+      "B/op": 328,
+      "allocs/op": 3,
+      "ns/op": 357.05
+    },
+    "LargeDiffLoad/big-100k": {
+      "B/op": 233318060,
+      "MB/s": 8.455,
+      "allocs/op": 1421350.5,
+      "anchor-ms": 5.404,
+      "diffloaded-ms": 23.509999999999998,
+      "firstview-ms": 1.623,
+      "heap-MB": 0.45705,
+      "marshal-ms": 93.505,
+      "ns/op": 680409092,
+      "parse-ms": 11.370000000000001,
+      "sqlite-ms": 310.29999999999995,
+      "unmarshal-ms": 234.35
+    },
+    "LargeDiffLoad/big-200k": {
+      "B/op": 528044668,
+      "MB/s": 8.285,
+      "allocs/op": 2837175.5,
+      "anchor-ms": 7.5135000000000005,
+      "diffloaded-ms": 44.894999999999996,
+      "firstview-ms": 1.6635,
+      "heap-MB": -1.236,
+      "marshal-ms": 182.3,
+      "ns/op": 1389146575.5,
+      "parse-ms": 30.34,
+      "sqlite-ms": 614.8,
+      "unmarshal-ms": 507.1
+    },
+    "LargeDiffLoad/big-20k": {
+      "B/op": 60758229,
+      "MB/s": 10.71,
+      "allocs/op": 288931,
+      "anchor-ms": 0.69,
+      "diffloaded-ms": 6.6795,
+      "firstview-ms": 1.5705,
+      "heap-MB": 0.2614,
+      "marshal-ms": 13.345,
+      "ns/op": 107403038,
+      "parse-ms": 2.23,
+      "sqlite-ms": 34.525000000000006,
+      "unmarshal-ms": 48.3
+    },
+    "LargeDiffLoad/small-100k": {
+      "B/op": 255289712,
+      "MB/s": 6.08,
+      "allocs/op": 1694576.5,
+      "anchor-ms": 11.34,
+      "diffloaded-ms": 29.015,
+      "firstview-ms": 1.6675,
+      "heap-MB": 7.0235,
+      "marshal-ms": 89.185,
+      "ns/op": 717359815.5,
+      "parse-ms": 14.455,
+      "sqlite-ms": 312.04999999999995,
+      "unmarshal-ms": 258.5
+    },
+    "LargeDiffLoad/small-10k": {
+      "B/op": 37088051,
+      "MB/s": 9.055,
+      "allocs/op": 174747,
+      "anchor-ms": 0.37639999999999996,
+      "diffloaded-ms": 3.3735,
+      "firstview-ms": 1.5070000000000001,
+      "heap-MB": -2.1045,
+      "marshal-ms": 5.156499999999999,
+      "ns/op": 48121954,
+      "parse-ms": 1.4605000000000001,
+      "sqlite-ms": 10.864999999999998,
+      "unmarshal-ms": 25.32
+    },
+    "LargeDiffLoad/small-50k": {
+      "B/op": 164148544,
+      "MB/s": 5.965,
+      "allocs/op": 850077,
+      "anchor-ms": 2.917,
+      "diffloaded-ms": 16.935,
+      "firstview-ms": 1.693,
+      "heap-MB": 4.609,
+      "marshal-ms": 42.31,
+      "ns/op": 365557783.5,
+      "parse-ms": 7.1055,
+      "sqlite-ms": 158.2,
+      "unmarshal-ms": 136.15
+    },
+    "LargeDiffLoad/ts64457": {
+      "B/op": 60568429,
+      "MB/s": 8.515,
+      "allocs/op": 272466.5,
+      "anchor-ms": 0.8662000000000001,
+      "diffloaded-ms": 6.231,
+      "firstview-ms": 1.6215000000000002,
+      "heap-MB": 1.3675000000000002,
+      "marshal-ms": 12.705,
+      "ns/op": 107141297.5,
+      "parse-ms": 2.3360000000000003,
+      "sqlite-ms": 35.4,
+      "unmarshal-ms": 47.775000000000006
+    },
+    "Launch/dashboard-40-repos/fast/cold": {
+      "B/op": 5208424,
+      "allocs/op": 56699.5,
+      "cache-KB": 201,
+      "ns/op": 71873829.5,
+      "requests": 4,
+      "ttff-ms": 4.9715,
+      "ttu-ms": 71.78999999999999
+    },
+    "Launch/dashboard-40-repos/fast/warm": {
+      "B/op": 4697928,
+      "allocs/op": 55005.5,
+      "cache-KB": 201,
+      "ns/op": 67709221,
+      "requests": 1,
+      "ttff-ms": 0.713,
+      "ttu-ms": 67.685
+    },
+    "Launch/dashboard-40-repos/ghes-vpn/cold": {
+      "B/op": 5375296,
+      "allocs/op": 56704.5,
+      "cache-KB": 172.8,
+      "ns/op": 288753945.5,
+      "requests": 3,
+      "ttff-ms": 5.039999999999999,
+      "ttu-ms": 288.70000000000005
+    },
+    "Launch/dashboard-40-repos/ghes-vpn/warm": {
+      "B/op": 4768264,
+      "allocs/op": 55002,
+      "cache-KB": 201,
+      "ns/op": 251574327,
+      "requests": 2,
+      "ttff-ms": 0.719,
+      "ttu-ms": 251.55
+    },
+    "Launch/dashboard-40-repos/local/cold": {
+      "B/op": 5304588,
+      "allocs/op": 57989,
+      "cache-KB": 201,
+      "ns/op": 22573837.5,
+      "requests": 4,
+      "ttff-ms": 5.000500000000001,
+      "ttu-ms": 22.515
+    },
+    "Launch/dashboard-40-repos/local/warm": {
+      "B/op": 4651984,
+      "allocs/op": 54889.5,
+      "cache-KB": 201,
+      "ns/op": 18001779.5,
+      "requests": 1,
+      "ttff-ms": 0.7155,
+      "ttu-ms": 17.935000000000002
+    },
+    "Launch/dashboard-5-repos/fast/cold": {
+      "B/op": 3732316,
+      "allocs/op": 43208,
+      "cache-KB": 184.9,
+      "ns/op": 70269337,
+      "requests": 4,
+      "ttff-ms": 3.4195,
+      "ttu-ms": 70.25
+    },
+    "Launch/dashboard-5-repos/fast/warm": {
+      "B/op": 3633588,
+      "allocs/op": 44024,
+      "cache-KB": 184.9,
+      "ns/op": 67649252.5,
+      "requests": 1,
+      "ttff-ms": 0.783,
+      "ttu-ms": 67.625
+    },
+    "Launch/dashboard-5-repos/ghes-vpn/cold": {
+      "B/op": 3789876,
+      "allocs/op": 43217.5,
+      "cache-KB": 197,
+      "ns/op": 286563369,
+      "requests": 5,
+      "ttff-ms": 3.0255,
+      "ttu-ms": 286.5
+    },
+    "Launch/dashboard-5-repos/ghes-vpn/warm": {
+      "B/op": 3597912,
+      "allocs/op": 44011,
+      "cache-KB": 190.95,
+      "ns/op": 242992876.5,
+      "requests": 1.5,
+      "ttff-ms": 0.709,
+      "ttu-ms": 243
+    },
+    "Launch/dashboard-5-repos/local/cold": {
+      "B/op": 4533044,
+      "allocs/op": 53802.5,
+      "cache-KB": 184.9,
+      "ns/op": 20979614,
+      "requests": 4,
+      "ttff-ms": 3.6505,
+      "ttu-ms": 20.905
+    },
+    "Launch/dashboard-5-repos/local/warm": {
+      "B/op": 3556356,
+      "allocs/op": 44242,
+      "cache-KB": 184.9,
+      "ns/op": 18390033,
+      "requests": 1,
+      "ttff-ms": 0.7545,
+      "ttu-ms": 18.345
+    },
+    "Launch/pr-small/fast/cold": {
+      "B/op": 5638148,
+      "allocs/op": 41763,
+      "cache-KB": 265.4,
+      "ns/op": 70098446.5,
+      "requests": 6,
+      "ttff-ms": 3.0515,
+      "ttu-ms": 70.065
+    },
+    "Launch/pr-small/fast/warm": {
+      "B/op": 6982872,
+      "allocs/op": 49777.5,
+      "cache-KB": 313.6,
+      "ns/op": 51406060,
+      "requests": 4,
+      "ttff-ms": 0.7284999999999999,
+      "ttu-ms": 51.39
+    },
+    "Launch/pr-small/ghes-vpn/cold": {
+      "B/op": 6514392,
+      "allocs/op": 46141.5,
+      "cache-KB": 265.4,
+      "ns/op": 278551156,
+      "requests": 6,
+      "ttff-ms": 3.1100000000000003,
+      "ttu-ms": 278.5
+    },
+    "Launch/pr-small/ghes-vpn/warm": {
+      "B/op": 7657208,
+      "allocs/op": 54930,
+      "cache-KB": 313.6,
+      "ns/op": 218111732,
+      "requests": 4,
+      "ttff-ms": 0.6845,
+      "ttu-ms": 218.10000000000002
+    },
+    "Launch/pr-small/local/cold": {
+      "B/op": 7051020,
+      "allocs/op": 50011,
+      "cache-KB": 263.35,
+      "ns/op": 36890720.5,
+      "requests": 6,
+      "ttff-ms": 3.418,
+      "ttu-ms": 36.870000000000005
+    },
+    "Launch/pr-small/local/warm": {
+      "B/op": 6187528,
+      "allocs/op": 47642,
+      "cache-KB": 311.6,
+      "ns/op": 18925204.5,
+      "requests": 4,
+      "ttff-ms": 0.7435,
+      "ttu-ms": 18.34
+    },
+    "Launch/pr-ts64457/fast/cold": {
+      "B/op": 30724852,
+      "allocs/op": 141335.5,
+      "cache-KB": 9757,
+      "ns/op": 86935812,
+      "requests": 6,
+      "ttff-ms": 3.1795,
+      "ttu-ms": 86.88499999999999
+    },
+    "Launch/pr-ts64457/fast/warm": {
+      "B/op": 49999108,
+      "allocs/op": 291934.5,
+      "cache-KB": 9757,
+      "ns/op": 79903383,
+      "requests": 4,
+      "ttff-ms": 0.761,
+      "ttu-ms": 79.87
+    },
+    "Launch/pr-ts64457/ghes-vpn/cold": {
+      "B/op": 31461116,
+      "allocs/op": 145390,
+      "cache-KB": 9757,
+      "ns/op": 303354244,
+      "requests": 6,
+      "ttff-ms": 3.1465,
+      "ttu-ms": 303.3
+    },
+    "Launch/pr-ts64457/ghes-vpn/warm": {
+      "B/op": 72813892,
+      "allocs/op": 314642,
+      "cache-KB": 9743,
+      "ns/op": 250889483.5,
+      "requests": 4,
+      "ttff-ms": 0.6964999999999999,
+      "ttu-ms": 250.85000000000002
+    },
+    "Launch/pr-ts64457/local/cold": {
+      "B/op": 56935976,
+      "allocs/op": 204242.5,
+      "cache-KB": 9757,
+      "ns/op": 54890609,
+      "requests": 6,
+      "ttff-ms": 3.1225,
+      "ttu-ms": 54.855000000000004
+    },
+    "Launch/pr-ts64457/local/warm": {
+      "B/op": 41558632,
+      "allocs/op": 149515,
+      "cache-KB": 9757,
+      "ns/op": 50341021,
+      "requests": 4,
+      "ttff-ms": 0.758,
+      "ttu-ms": 50.31
+    },
+    "NormalizeDashboard/decode": {
+      "B/op": 6792,
+      "allocs/op": 79,
+      "ns/op": 38601.5
+    },
+    "NormalizeDashboard/normalize": {
+      "B/op": 1392,
+      "allocs/op": 4,
+      "ns/op": 944.25
+    },
+    "NormalizePreview/decode": {
+      "B/op": 5367,
+      "allocs/op": 69,
+      "ns/op": 27331
+    },
+    "NormalizePreview/normalize": {
+      "B/op": 672,
+      "allocs/op": 3,
+      "ns/op": 531.45
+    },
+    "Parse/edgecases": {
+      "B/op": 16088,
+      "MB/s": 173.8,
+      "allocs/op": 116,
+      "ns/op": 8492.5
+    },
+    "Parse/small-50k": {
+      "B/op": 12686072,
+      "MB/s": 289.94,
+      "allocs/op": 89029,
+      "ns/op": 6875084.5
+    },
+    "Parse/synth-100k": {
+      "B/op": 19847193,
+      "MB/s": 478.845,
+      "allocs/op": 120832,
+      "ns/op": 12013583
+    },
+    "Parse/synth-200k": {
+      "B/op": 39677113.5,
+      "MB/s": 398.70500000000004,
+      "allocs/op": 241635,
+      "ns/op": 28856653.5
+    },
+    "Parse/synth-20k": {
+      "B/op": 3988184,
+      "MB/s": 539.45,
+      "allocs/op": 24186,
+      "ns/op": 2132514.5
+    },
+    "Parse/ts64457": {
+      "B/op": 4763697,
+      "MB/s": 465.47,
+      "allocs/op": 21274,
+      "ns/op": 1959741
+    },
+    "Render/cached/w120": {
+      "B/op": 0,
+      "allocs/op": 0,
+      "ns/op": 263.20000000000005
+    },
+    "Render/cached/w60": {
+      "B/op": 0,
+      "allocs/op": 0,
+      "ns/op": 260.9
+    },
+    "Render/varying/w120": {
+      "B/op": 2228296,
+      "allocs/op": 64626.5,
+      "ns/op": 5240970.5
+    },
+    "Render/varying/w60": {
+      "B/op": 1874103,
+      "allocs/op": 46677,
+      "ns/op": 4323560.5
+    },
+    "RenderLargeDiffViewport": {
+      "B/op": 227138.5,
+      "allocs/op": 4221,
+      "ns/op": 5551400.5
+    },
+    "Search/synth-100k/computeNewValue": {
+      "B/op": 4934256,
+      "allocs/op": 25,
+      "ns/op": 9091893
+    },
+    "Search/synth-100k/e": {
+      "B/op": 102115936,
+      "allocs/op": 37,
+      "ns/op": 36741812
+    },
+    "Search/ts64457/computeNewValue": {
+      "B/op": 16,
+      "allocs/op": 1,
+      "ns/op": 914745
+    },
+    "Search/ts64457/e": {
+      "B/op": 10234464,
+      "allocs/op": 27,
+      "ns/op": 3861736.5
+    },
+    "SearchPRs/1000prs/q1": {
+      "B/op": 680940.5,
+      "allocs/op": 4016,
+      "ns/op": 1119801.5
+    },
+    "SearchPRs/1000prs/q12": {
+      "B/op": 131720,
+      "allocs/op": 4008,
+      "ns/op": 530123.5
+    },
+    "SearchPRs/1000prs/q4": {
+      "B/op": 203592,
+      "allocs/op": 4013,
+      "ns/op": 594726.5
+    },
+    "SearchPRs/20000prs/q1": {
+      "B/op": 16305497,
+      "allocs/op": 80026,
+      "ns/op": 34567394.5
+    },
+    "SearchPRs/20000prs/q12": {
+      "B/op": 2610440,
+      "allocs/op": 80012,
+      "ns/op": 11212814.5
+    },
+    "SearchPRs/20000prs/q4": {
+      "B/op": 4743693,
+      "allocs/op": 80020,
+      "ns/op": 14485265.5
+    },
+    "SearchPRs/5000prs/q1": {
+      "B/op": 4128553.5,
+      "allocs/op": 20021,
+      "ns/op": 7680974
+    },
+    "SearchPRs/5000prs/q12": {
+      "B/op": 655752,
+      "allocs/op": 20010,
+      "ns/op": 2821577.5
+    },
+    "SearchPRs/5000prs/q4": {
+      "B/op": 1102924.5,
+      "allocs/op": 20016,
+      "ns/op": 3505539
+    },
+    "SearchRepos/200repos/q1": {
+      "B/op": 34392,
+      "allocs/op": 5,
+      "ns/op": 46157.5
+    },
+    "SearchRepos/200repos/q11": {
+      "B/op": 34392,
+      "allocs/op": 5,
+      "ns/op": 39927.5
+    },
+    "SearchRepos/200repos/q6": {
+      "B/op": 34392,
+      "allocs/op": 5,
+      "ns/op": 42247
+    },
+    "StaleWhileRevalidate/l1-hit-fresh": {
+      "B/op": 4584,
+      "allocs/op": 21,
+      "ns/op": 17317.5
+    },
+    "StaleWhileRevalidate/l2-hit-promote": {
+      "B/op": 5337,
+      "allocs/op": 24,
+      "ns/op": 20881.5
+    },
+    "StaleWhileRevalidate/miss": {
+      "B/op": 256,
+      "allocs/op": 6,
+      "ns/op": 332.9
+    },
+    "ViewPaint/catppuccin-mocha": {
+      "B/op": 394644,
+      "allocs/op": 4000.5,
+      "ns/op": 1060889
+    },
+    "ViewPaint/catppuccin-mocha/unpainted": {
+      "B/op": 343532,
+      "allocs/op": 3918,
+      "ns/op": 1001155
+    },
+    "ViewPaint/pho-default": {
+      "B/op": 342117.5,
+      "allocs/op": 3918,
+      "ns/op": 1003277
+    }
+  },
+  "health": {
+    "HEAP open-close-50": "samples-MB=[19.9 20.6 20.6 20.8 20.5] growth-MB=0.6",
+    "SCALING comments-render": "slope=0.85 sizes=[10 20 40 80] times=[7.773604ms 11.699469ms 23.00164ms 43.965564ms]",
+    "SCALING dashboard-load": "slope=0.63 sizes=[250 500 1000 2000] times=[2.286923ms 2.515953ms 3.62347ms 8.747897ms]",
+    "SCALING palette-match": "slope=1.00 sizes=[2500 5000 10000 20000] times=[631.69µs 1.263623ms 2.453519ms 5.048685ms]",
+    "SCALING parse": "slope=1.06 sizes=[25000 50000 100000 200000] times=[2.488056ms 5.125857ms 9.836104ms 23.1595ms]",
+    "SCALING stack-build": "slope=1.01 sizes=[250 500 1000 2000] times=[205.704µs 444.883µs 839.247µs 1.72827ms]",
+    "SOAK keys=20000": "p99-per-1k=[13.46ms 13.644ms 13.439ms 13.64ms 13.305ms 13.405ms 13.527ms 13.241ms 13.431ms 13.292ms 13.764ms 13.291ms 13.456ms 13.349ms 13.503ms 13.327ms 13.602ms 13.442ms 13.385ms 13.673ms 13.239ms] drift=0.98x"
+  }
+}
