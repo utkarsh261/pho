@@ -11,14 +11,15 @@ import (
 func TestSearchTabQuery(t *testing.T) {
 	repo := domain.Repository{Owner: "acme", Name: "web", FullName: "acme/web"}
 	for _, tc := range []struct{ query, want string }{
-		{"author:alice author:bob", "repo:acme/web is:pr is:open author:alice author:bob"},
-		{"author:@me is:merged", "repo:acme/web is:pr author:@me is:merged"},
-		{"IS:CLOSED label:x", "repo:acme/web is:pr IS:CLOSED label:x"},
-		{"state:open", "repo:acme/web is:pr state:open"},
-		{"merged:>2026-01-01 author:@me", "repo:acme/web is:pr merged:>2026-01-01 author:@me"},
-		{"closed:<2026-01-01", "repo:acme/web is:pr closed:<2026-01-01"},
-		{"-is:draft", "repo:acme/web is:pr is:open -is:draft"},
-		{"label:is:merged-later", "repo:acme/web is:pr is:open label:is:merged-later"},
+		{"author:alice author:bob", "repo:acme/web is:pr is:open author:alice author:bob sort:updated-desc"},
+		{"author:@me is:merged", "repo:acme/web is:pr author:@me is:merged sort:updated-desc"},
+		{"IS:CLOSED label:x", "repo:acme/web is:pr IS:CLOSED label:x sort:updated-desc"},
+		{"state:open", "repo:acme/web is:pr state:open sort:updated-desc"},
+		{"merged:>2026-01-01 author:@me", "repo:acme/web is:pr merged:>2026-01-01 author:@me sort:updated-desc"},
+		{"closed:<2026-01-01", "repo:acme/web is:pr closed:<2026-01-01 sort:updated-desc"},
+		{"-is:draft", "repo:acme/web is:pr is:open -is:draft sort:updated-desc"},
+		{"label:is:merged-later", "repo:acme/web is:pr is:open label:is:merged-later sort:updated-desc"},
+		{"label:x sort:created-asc", "repo:acme/web is:pr is:open label:x sort:created-asc"},
 	} {
 		if got := SearchTabQuery(repo, tc.query); got != tc.want {
 			t.Errorf("SearchTabQuery(%q) = %q, want %q", tc.query, got, tc.want)
@@ -26,7 +27,7 @@ func TestSearchTabQuery(t *testing.T) {
 	}
 
 	noFull := domain.Repository{Owner: "acme", Name: "web"}
-	if got := SearchTabQuery(noFull, "label:x"); got != "repo:acme/web is:pr is:open label:x" {
+	if got := SearchTabQuery(noFull, "label:x"); got != "repo:acme/web is:pr is:open label:x sort:updated-desc" {
 		t.Errorf("without FullName = %q", got)
 	}
 }

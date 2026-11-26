@@ -36,7 +36,7 @@ query = "label:docs"
 			t.Fatalf("Load: %v", err)
 		}
 		want := []domain.SearchTab{
-			{ID: "custom:team", Name: "Team", Query: "author:alice author:bob"},
+			{ID: "custom:team", Name: "Team", Query: "author:alice   author:bob"},
 			{ID: "custom:docs", Name: "Docs", Short: "D", Query: "label:docs"},
 		}
 		if fmt.Sprint(cfg.Dashboard.Tabs) != fmt.Sprint(want) {
@@ -57,6 +57,8 @@ query = "label:docs"
 		{"org scope", tab("Team", "org:acme"), "repo:"},
 		{"or", tab("Team", "label:bug OR label:urgent"), "OR, AND and parentheses"},
 		{"parens", tab("Team", "(author:a)"), "OR, AND and parentheses"},
+		{"issues", tab("Team", "is:issue label:bug"), "tabs list pull requests"},
+		{"issue type", tab("Team", "label:bug type:issue"), "tabs list pull requests"},
 		{"too many", tab("a", "q") + tab("b", "q") + tab("c", "q") + tab("d", "q") + tab("e", "q") + tab("f", "q"), "at most 5"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

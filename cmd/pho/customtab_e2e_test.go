@@ -49,7 +49,7 @@ func TestE2ECustomTabLoadsLazily(t *testing.T) {
 	}
 	searches := e.srv.Searches()
 	last := searches[len(searches)-1]
-	if !strings.HasPrefix(last, "repo:") || !strings.HasSuffix(last, "is:pr is:open author:alice author:bob") {
+	if !strings.HasPrefix(last, "repo:") || !strings.HasSuffix(last, "is:pr is:open author:alice author:bob sort:updated-desc") {
 		t.Errorf("search = %q", last)
 	}
 	if n := e.srv.Requests()[customTabOp]; n != 1 {

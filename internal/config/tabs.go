@@ -18,6 +18,8 @@ type rawTab struct {
 // selected repo, which pho always adds itself.
 var scopeQualifier = regexp.MustCompile(`(?i)(^|\s)-?(repo|org|user):`)
 
+var issueQualifier = regexp.MustCompile(`(?i)(^|\s)(is|type):issue(\s|$)`)
+
 var quoted = regexp.MustCompile(`"[^"]*"`)
 
 // usesBoolSyntax spots OR/AND and grouping outside quotes. GitHub's GraphQL
@@ -46,7 +48,9 @@ func parseTabs(raw []rawTab) ([]domain.SearchTab, error) {
 	tabs := make([]domain.SearchTab, 0, len(raw))
 	for i, r := range raw {
 		name := strings.TrimSpace(r.Name)
-		query := strings.Join(strings.Fields(r.Query), " ")
+		// Keep spacing inside quoted values; only fold line breaks from
+		// multi-line TOML strings.
+		query := strings.TrimSpace(strings.NewReplacer("\r", " ", "\n", " ", "\t", " ").Replace(r.Query))
 		switch {
 		case name == "":
 			return nil, fmt.Errorf("[[dashboard.tabs]] #%d: name is required", i+1)
@@ -58,6 +62,8 @@ func parseTabs(raw []rawTab) ([]domain.SearchTab, error) {
 			return nil, fmt.Errorf("[[dashboard.tabs]] %q: duplicate name", name)
 		case usesBoolSyntax(query):
 			return nil, fmt.Errorf("[[dashboard.tabs]] %q: OR, AND and parentheses aren't supported; repeat a qualifier to match any of its values (author:a author:b)", name)
+		case issueQualifier.MatchString(query):
+			return nil, fmt.Errorf("[[dashboard.tabs]] %q: tabs list pull requests; drop is:issue/type:issue", name)
 		case scopeQualifier.MatchString(query):
 			return nil, fmt.Errorf("[[dashboard.tabs]] %q: drop repo:/org:/user:, tabs always search the selected repo", name)
 		}

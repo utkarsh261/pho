@@ -494,7 +494,7 @@ func TestLoadSearchTab(t *testing.T) {
 			t.Fatalf("LoadSearchTab = %+v, %v", snap, err)
 		}
 	}
-	if want := []string{"repo:acme/api is:pr is:open author:alice"}; fmt.Sprint(queries) != fmt.Sprint(want) {
+	if want := []string{"repo:acme/api is:pr is:open author:alice sort:updated-desc"}; fmt.Sprint(queries) != fmt.Sprint(want) {
 		t.Fatalf("queries = %q, want %q (second load from cache)", queries, want)
 	}
 
@@ -503,7 +503,7 @@ func TestLoadSearchTab(t *testing.T) {
 	if _, err := svc.LoadSearchTab(ctx, repo, tab, false); err != nil {
 		t.Fatal(err)
 	}
-	if len(queries) != 2 || queries[1] != "repo:acme/api is:pr is:open author:bob" {
+	if len(queries) != 2 || queries[1] != "repo:acme/api is:pr is:open author:bob sort:updated-desc" {
 		t.Fatalf("queries after edit = %q", queries)
 	}
 }
@@ -515,7 +515,7 @@ func TestStaleSearchTabRefreshesOnce(t *testing.T) {
 	coord := newTestCoordinator(t)
 	repo := testutil.Repo("acme/api")
 	tab := domain.SearchTab{ID: domain.CustomTabID("Team"), Name: "Team", Query: "author:alice"}
-	key := searchTabCacheKey(repo, "repo:acme/api is:pr is:open author:alice")
+	key := searchTabCacheKey(repo, "repo:acme/api is:pr is:open author:alice sort:updated-desc")
 	staleAt := time.Now().Add(-3 * time.Minute)
 	stale := domain.SearchTabSnapshot{Repo: repo, PRs: []domain.PullRequestSummary{testutil.PR(1)}, FetchedAt: staleAt}
 	if err := coord.Write(ctx, key, stale, dashboardMeta(key, repo, cacheKindDashboardTab, nil, staleAt)); err != nil {

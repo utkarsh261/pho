@@ -216,6 +216,8 @@ func buildAllPRsQuery(profile githubpkg.GitHubHostProfile, owner, name, after st
 // add is:open on top.
 var stateQualifier = regexp.MustCompile(`(?i)(^|\s)-?(is:(open|closed|merged|unmerged)|state:|merged:|closed:)`)
 
+var sortQualifier = regexp.MustCompile(`(?i)(^|\s)sort:`)
+
 // SearchTabQuery is the search a custom tab runs: the user's qualifiers
 // scoped to repo, open PRs unless the query says otherwise.
 func SearchTabQuery(repo domain.Repository, query string) string {
@@ -227,7 +229,13 @@ func SearchTabQuery(repo domain.Repository, query string) string {
 	if !stateQualifier.MatchString(query) {
 		q += " is:open"
 	}
-	return strings.TrimSpace(q + " " + query)
+	q = strings.TrimSpace(q + " " + query)
+	// GitHub's default order is roughly newest-created; list by activity
+	// like the All tab unless the query sorts itself.
+	if !sortQualifier.MatchString(query) {
+		q += " sort:updated-desc"
+	}
+	return q
 }
 
 func buildInvolvingSearchQuery(repo domain.Repository, viewer string) string {
